@@ -1,11 +1,12 @@
 // ============================================================================
-// KRIPTOQUANT — CLI Entry Point (Sprint 7)
+// KRIPTOQUANT — CLI Entry Point (Sprint 9)
 // ============================================================================
 // Platformun tek giriş noktası. Her şey terminalden başlar.
 // Kullanım:
 //   npx tsx src/cli.ts fetch --coin BTCUSDT --interval 1d
-//   npx tsx src/cli.ts backtest --strategy ema-cross --coin BTCUSDT --interval 1d
+//   npx tsx src/cli.ts backtest --strategy donchian-breakout --coin BTCUSDT
 //   npx tsx src/cli.ts sweep --coin BTCUSDT --interval 1d
+//   npx tsx src/cli.ts walkforward --coin BTCUSDT --interval 1d
 // ============================================================================
 
 import { parseArgs } from 'node:util';
@@ -23,6 +24,7 @@ import { createEmaCrossStrategy } from './research/strategies/ema-cross/index.js
 import { createDonchianBreakoutStrategy } from './research/strategies/donchian-breakout/index.js';
 import { DEFAULT_SWEEP } from './research/experiments/runner.js';
 import { runSweep, printLeaderboard, printMetadata, printStrategyComparison, exportSweepCSV, exportMetadataJSON } from './research/experiments/sweep.js';
+import { runWalkForward, printWalkForwardReport, exportWalkForwardJSON, exportWalkForwardCSV } from './research/walkforward/walkforward.js';
 
 // Konfigürasyonları yükle
 import defaultConfig from '../config/default.json' with { type: 'json' };
@@ -140,6 +142,40 @@ async function commandSweep(coin: string, interval: string): Promise<void> {
 	console.log(`  🔬 Metadata  : ${metaPath}`);
 }
 
+async function commandWalkForward(strategyName: string, coin: string, interval: string): Promise<void> {
+	let candles = loadCandles(coin, interval);
+	if (candles.length === 0) {
+		log('Yerel veri bulunamadı, API\'den çekiliyor...');
+		candles = await fetchAndStore(coin, interval);
+	}
+
+	if (candles.length === 0) {
+		logError(`${coin} için veri bulunamadı.`);
+		process.exit(1);
+	}
+
+	log(`${coin} verisi yüklendi: ${candles.length} mum`);
+
+	// Strateji filtresi: "all" veya boş ise tüm stratejileri tara
+	const stratFilter = (strategyName === 'all' || strategyName === 'sma-cross') ? undefined : strategyName;
+
+	const result = runWalkForward(
+		candles, platformConfig, riskParams, coin, interval, stratFilter,
+	);
+
+	printWalkForwardReport(result);
+
+	// Export
+	const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+	const jsonPath = `results/walkforward_${coin}_${interval}_${timestamp}.json`;
+	exportWalkForwardJSON(result, jsonPath);
+	console.log(`\n  💾 JSON: ${jsonPath}`);
+
+	const csvPath = `results/walkforward_${coin}_${interval}_${timestamp}.csv`;
+	exportWalkForwardCSV(result, csvPath);
+	console.log(`  📊 CSV : ${csvPath}`);
+}
+
 // ─── Ana Giriş ──────────────────────────────────────────────────────────────
 
 function printUsage(): void {
@@ -150,19 +186,21 @@ function printUsage(): void {
 	console.log('  npx tsx src/cli.ts <komut> [seçenekler]');
 	console.log('');
 	console.log('Komutlar:');
-	console.log('  fetch     Tarihsel veri çek ve kaydet');
-	console.log('  backtest  Strateji backtest\'i çalıştır');
-	console.log('  sweep     Parametre tarama laboratuvarı');
+	console.log('  fetch         Tarihsel veri çek ve kaydet');
+	console.log('  backtest      Strateji backtest\'i çalıştır');
+	console.log('  sweep         Parametre tarama laboratuvarı');
+	console.log('  walkforward   Walk-Forward Validation');
 	console.log('');
 	console.log('Seçenekler:');
 	console.log('  --coin <sembol>       Coin sembolü (ör. BTCUSDT)');
 	console.log('  --interval <aralık>   Mum aralığı (ör. 1d, 4h, 1h)');
-	console.log('  --strategy <ad>       Strateji adı (sma-cross, ema-cross)');
+	console.log('  --strategy <ad>       Strateji adı (ema-cross, donchian-breakout)');
 	console.log('');
 	console.log('Örnekler:');
 	console.log('  npx tsx src/cli.ts fetch --coin BTCUSDT --interval 1d');
-	console.log('  npx tsx src/cli.ts backtest --strategy ema-cross --coin BTCUSDT');
+	console.log('  npx tsx src/cli.ts backtest --strategy donchian-breakout --coin BTCUSDT');
 	console.log('  npx tsx src/cli.ts sweep --coin BTCUSDT --interval 1d');
+	console.log('  npx tsx src/cli.ts walkforward --strategy donchian-breakout --coin BTCUSDT');
 	console.log('');
 }
 
@@ -195,6 +233,9 @@ async function main(): Promise<void> {
 				break;
 			case 'sweep':
 				await commandSweep(values.coin!, values.interval!);
+				break;
+			case 'walkforward':
+				await commandWalkForward(values.strategy!, values.coin!, values.interval!);
 				break;
 			default:
 				logError(`Bilinmeyen komut: ${command}`);
