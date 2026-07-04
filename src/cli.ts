@@ -26,6 +26,8 @@ import { DEFAULT_SWEEP } from './research/experiments/runner.js';
 import { runSweep, printLeaderboard, printMetadata, printStrategyComparison, exportSweepCSV, exportMetadataJSON } from './research/experiments/sweep.js';
 import { runWalkForward, printWalkForwardReport, exportWalkForwardJSON, exportWalkForwardCSV } from './research/walkforward/walkforward.js';
 import { runRollingWalkForward, printRollingReport, exportRollingCSV, exportRollingSummaryJSON } from './research/walkforward/rolling.js';
+import { PaperBroker } from './execution/paper-broker.js';
+import { runExecution } from './execution/engine.js';
 
 // Konfigürasyonları yükle
 import defaultConfig from '../config/default.json' with { type: 'json' };
@@ -210,6 +212,40 @@ async function commandRollingWalkForward(strategyName: string, coin: string, int
 	console.log(`  🔬 JSON: ${jsonPath}`);
 }
 
+async function commandPaperTrade(strategyName: string, coin: string, interval: string): Promise<void> {
+	let candles = loadCandles(coin, interval);
+	if (candles.length === 0) {
+		log('Yerel veri bulunamadı, API\'den çekiliyor...');
+		candles = await fetchAndStore(coin, interval);
+	}
+
+	if (candles.length === 0) {
+		logError(`${coin} için veri bulunamadı.`);
+		process.exit(1);
+	}
+
+	log(`${coin} verisi yüklendi: ${candles.length} mum`);
+
+	const strategy = resolveStrategy(strategyName);
+	if (!strategy) {
+		logError(`Bilinmeyen strateji: ${strategyName}`);
+		logError('Mevcut stratejiler: sma-cross, ema-cross, donchian-breakout');
+		process.exit(1);
+	}
+	const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+	const logPath = `results/paper_trades_${strategy.name}_${coin}_${timestamp}.csv`;
+
+	const broker = new PaperBroker(platformConfig.commissionPercent, platformConfig.slippagePercent, logPath);
+	const result = runExecution(candles, strategy, broker, platformConfig, riskParams, coin);
+
+	printReport(result);
+
+	console.log('');
+	console.log(`  📋 Paper Trade Log: ${logPath}`);
+	console.log(`  📊 Fills: ${broker.getFills().length}`);
+	console.log(`  🏷️  Mode: PAPER (para kullanılmadı)`);
+}
+
 // ─── Ana Giriş ──────────────────────────────────────────────────────────────
 
 function printUsage(): void {
@@ -225,6 +261,7 @@ function printUsage(): void {
 	console.log('  sweep         Parametre tarama laboratuvarı');
 	console.log('  walkforward   Walk-Forward Validation');
 	console.log('  walkforward-rolling  Rolling Walk-Forward (multi-window)');
+	console.log('  paper-trade   Paper Trading (simüle, para kullanılmaz)');
 	console.log('');
 	console.log('Seçenekler:');
 	console.log('  --coin <sembol>       Coin sembolü (ör. BTCUSDT)');
@@ -237,6 +274,7 @@ function printUsage(): void {
 	console.log('  npx tsx src/cli.ts sweep --coin BTCUSDT --interval 1d');
 	console.log('  npx tsx src/cli.ts walkforward --strategy donchian-breakout --coin BTCUSDT');
 	console.log('  npx tsx src/cli.ts walkforward-rolling --strategy donchian-breakout --coin BTCUSDT');
+	console.log('  npx tsx src/cli.ts paper-trade --strategy donchian-breakout --coin BTCUSDT');
 	console.log('');
 }
 
@@ -275,6 +313,9 @@ async function main(): Promise<void> {
 				break;
 			case 'walkforward-rolling':
 				await commandRollingWalkForward(values.strategy!, values.coin!, values.interval!);
+				break;
+			case 'paper-trade':
+				await commandPaperTrade(values.strategy!, values.coin!, values.interval!);
 				break;
 			default:
 				logError(`Bilinmeyen komut: ${command}`);
