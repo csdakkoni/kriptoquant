@@ -39,6 +39,8 @@ import type { StrategyConfig } from './research/strategies/factory/types.js';
 import { CSVTimelineProvider } from './execution/portfolio/timeline-provider.js';
 import { EqualWeightAllocation, RiskBudgetAllocation } from './execution/portfolio/allocation.js';
 import { runPortfolioExecution } from './execution/portfolio/portfolio-engine.js';
+import { runDiscoveryPipeline } from './research/discovery/pipeline.js';
+import type { DiscoveryReport } from './research/discovery/types.js';
 
 // Konfigürasyonları yükle
 import defaultConfig from '../config/default.json' with { type: 'json' };
@@ -447,6 +449,65 @@ async function commandMultiAsset(strategyName: string, coinsStr?: string, interv
 	console.log(`  🔬 JSON: ${jsonFilename}`);
 }
 
+async function commandAlphaDiscover(
+	coinsStr: string,
+	candidatesCount: number,
+	interval: string,
+): Promise<void> {
+	const coins = coinsStr.split(',').map((c) => c.trim()).filter(Boolean);
+	if (coins.length === 0) {
+		logError('Hata: --coins parametresiyle en az bir coin belirtilmelidir.');
+		process.exit(1);
+	}
+
+	const report = await runDiscoveryPipeline(coins, candidatesCount, interval);
+	printDiscoveryReportTable(report);
+}
+
+function printDiscoveryReportTable(report: DiscoveryReport): void {
+	const divider = '─'.repeat(75);
+	console.log('');
+	console.log('═'.repeat(75));
+	console.log('  🏆 ALPHA DISCOVERY LEADERBOARD (Top 10 Strateji)');
+	console.log('═'.repeat(75));
+	console.log('  Rank  Strateji Adı                 Score  Return  Drawdown  Sharpe  Trades');
+	console.log(divider);
+
+	const passed = report.results.filter((r) => r.stage === 'PASSED');
+	if (passed.length === 0) {
+		console.log('  ⚠️  Doğrulama zincirini (Quick, Multi-Asset, MC) geçen aday bulunamadı.');
+		console.log(divider);
+		return;
+	}
+
+	const sorted = [...passed].sort((a, b) => (b.score?.overall ?? 0) - (a.score?.overall ?? 0));
+	const top10 = sorted.slice(0, 10);
+
+	top10.forEach((r, idx) => {
+		const rank = String(idx + 1).padStart(2);
+		const name = r.id.padEnd(28).slice(0, 28);
+		const score = (r.score?.overall ?? 0).toFixed(1).padStart(5);
+		const ret = `${(r.totalReturn ?? 0) > 0 ? '+' : ''}${(r.totalReturn ?? 0).toFixed(1)}%`.padStart(7);
+		const dd = `-${(r.maxDrawdown ?? 0).toFixed(1)}%`.padStart(9);
+		const sharpe = (r.sharpeRatio ?? 0).toFixed(2).padStart(7);
+		const trades = String(r.tradeCount ?? 0).padStart(7);
+
+		console.log(`  #${rank}  ${name} ${score} ${ret} ${dd} ${sharpe} ${trades}`);
+	});
+
+	console.log(divider);
+	console.log(`  Toplam Aday: ${report.totalCandidates} | Geçenler: ${report.passedCandidates} | Pareto Optimal: ${report.paretoFront.length}`);
+
+	if (report.paretoFront.length > 0) {
+		console.log('');
+		console.log('  🎲 Pareto Optimal Adaylar (Return vs Drawdown vs Sharpe):');
+		report.paretoFront.forEach((p) => {
+			console.log(`    - ${p.id} (Skor: ${p.score?.overall} | Getiri: ${p.totalReturn}% | DD: -${p.maxDrawdown}% | Sharpe: ${p.sharpeRatio})`);
+		});
+	}
+	console.log('═'.repeat(75));
+}
+
 // ─── Ana Giriş ──────────────────────────────────────────────────────────────
 
 function printUsage(): void {
@@ -501,6 +562,7 @@ async function main(): Promise<void> {
 			allocation: { type: 'string', default: 'equal' },
 			'risk-percent': { type: 'string', default: '1.0' },
 			'max-positions': { type: 'string', default: '5' },
+			candidates: { type: 'string', default: '20' },
 			help: { type: 'boolean', short: 'h', default: false },
 		},
 		allowPositionals: true,
@@ -548,6 +610,12 @@ async function main(): Promise<void> {
 				const strat = values.config || values.strategy || 'sma-cross';
 				const coins = values.coins || values.coin || 'BTCUSDT';
 				await commandPortfolioBacktest(strat, coins, values.interval!, opts);
+				break;
+			}
+			case 'alpha-discover': {
+				const coins = values.coins || values.coin || 'BTCUSDT,ETHUSDT';
+				const count = parseInt(values.candidates ?? '20', 10);
+				await commandAlphaDiscover(coins, count, values.interval!);
 				break;
 			}
 			case 'sweep':
