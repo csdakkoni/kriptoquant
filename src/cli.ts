@@ -28,6 +28,8 @@ import { runWalkForward, printWalkForwardReport, exportWalkForwardJSON, exportWa
 import { runRollingWalkForward, printRollingReport, exportRollingCSV, exportRollingSummaryJSON } from './research/walkforward/rolling.js';
 import { PaperBroker } from './execution/paper-broker.js';
 import { runExecution } from './execution/engine.js';
+import { CSVProvider } from './data/csv-provider.js';
+import { CSVTradeLogger } from './execution/trade-logger.js';
 
 // Konfigürasyonları yükle
 import defaultConfig from '../config/default.json' with { type: 'json' };
@@ -73,11 +75,8 @@ async function commandBacktest(
 		process.exit(1);
 	}
 
-	let candles = loadCandles(coin, interval);
-	if (candles.length === 0) {
-		log('Yerel veri bulunamadı, API\'den çekiliyor...');
-		candles = await fetchAndStore(coin, interval);
-	}
+	const provider = new CSVProvider();
+	const candles = await provider.getHistory(coin, interval);
 
 	if (candles.length === 0) {
 		logError(`${coin} için veri bulunamadı.`);
@@ -112,11 +111,8 @@ async function commandBacktest(
 }
 
 async function commandSweep(coin: string, interval: string): Promise<void> {
-	let candles = loadCandles(coin, interval);
-	if (candles.length === 0) {
-		log('Yerel veri bulunamadı, API\'den çekiliyor...');
-		candles = await fetchAndStore(coin, interval);
-	}
+	const provider = new CSVProvider();
+	const candles = await provider.getHistory(coin, interval);
 
 	if (candles.length === 0) {
 		logError(`${coin} için veri bulunamadı.`);
@@ -146,11 +142,8 @@ async function commandSweep(coin: string, interval: string): Promise<void> {
 }
 
 async function commandWalkForward(strategyName: string, coin: string, interval: string): Promise<void> {
-	let candles = loadCandles(coin, interval);
-	if (candles.length === 0) {
-		log('Yerel veri bulunamadı, API\'den çekiliyor...');
-		candles = await fetchAndStore(coin, interval);
-	}
+	const provider = new CSVProvider();
+	const candles = await provider.getHistory(coin, interval);
 
 	if (candles.length === 0) {
 		logError(`${coin} için veri bulunamadı.`);
@@ -180,11 +173,8 @@ async function commandWalkForward(strategyName: string, coin: string, interval: 
 }
 
 async function commandRollingWalkForward(strategyName: string, coin: string, interval: string): Promise<void> {
-	let candles = loadCandles(coin, interval);
-	if (candles.length === 0) {
-		log('Yerel veri bulunamadı, API\'den çekiliyor...');
-		candles = await fetchAndStore(coin, interval);
-	}
+	const provider = new CSVProvider();
+	const candles = await provider.getHistory(coin, interval);
 
 	if (candles.length === 0) {
 		logError(`${coin} için veri bulunamadı.`);
@@ -213,11 +203,8 @@ async function commandRollingWalkForward(strategyName: string, coin: string, int
 }
 
 async function commandPaperTrade(strategyName: string, coin: string, interval: string): Promise<void> {
-	let candles = loadCandles(coin, interval);
-	if (candles.length === 0) {
-		log('Yerel veri bulunamadı, API\'den çekiliyor...');
-		candles = await fetchAndStore(coin, interval);
-	}
+	const provider = new CSVProvider();
+	const candles = await provider.getHistory(coin, interval);
 
 	if (candles.length === 0) {
 		logError(`${coin} için veri bulunamadı.`);
@@ -235,8 +222,9 @@ async function commandPaperTrade(strategyName: string, coin: string, interval: s
 	const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
 	const logPath = `results/paper_trades_${strategy.name}_${coin}_${timestamp}.csv`;
 
-	const broker = new PaperBroker(platformConfig.commissionPercent, platformConfig.slippagePercent, logPath);
-	const result = runExecution(candles, strategy, broker, platformConfig, riskParams, coin);
+	const broker = new PaperBroker(platformConfig.commissionPercent, platformConfig.slippagePercent);
+	const logger = new CSVTradeLogger(logPath);
+	const result = runExecution(candles, strategy, broker, platformConfig, riskParams, coin, strategyDefaults, logger);
 
 	printReport(result);
 

@@ -1,5 +1,5 @@
 // ============================================================================
-// KRIPTOQUANT — Execution Engine (Sprint 11)
+// KRIPTOQUANT — Execution Engine (Sprint 12)
 // ============================================================================
 // Pipeline: Strategy → Filter → Confidence → Risk → Engine → Portfolio → Broker
 //
@@ -26,6 +26,8 @@ import { analyzeSignals, calculateFilterStats } from '../research/analytics/sign
 import type { AnalyzedSignal } from '../research/analytics/signal-analyzer.js';
 import type { Broker } from './broker.js';
 import { Portfolio } from './portfolio.js';
+import { AtrStopRule } from './stop-rule.js';
+import type { TradeLogger } from './trade-logger.js';
 
 const ATR_PERIOD = 14;
 
@@ -35,12 +37,12 @@ const ATR_PERIOD = 14;
  * Unified Execution Engine.
  *
  * Hem backtest hem paper trading hem live trading bu fonksiyonu kullanır.
- * Fark sadece `broker` parametresinde.
+ * Fark sadece `broker` ve `logger` parametrelerinde.
  *
  * Reality Engine kuralları:
  * - t+1 execution: Sinyal t'de üretilir, emir t+1'de Open fiyatından çalışır
  * - Slippage: Broker uygular
- * - Intra-candle stop-loss: Engine karar verir, Broker uygular
+ * - Stop-loss: StopRule (AtrStopRule) tarafından yönetilir, PositionManager tetikler
  * - Gap-down: Open < stop ise çıkış open fiyatından
  * - Buy & Hold: Pasif benchmark
  */
@@ -52,8 +54,10 @@ export function runExecution(
 	riskConfig: RiskConfig,
 	coin: string = '',
 	strategyDefaults?: StrategyDefaultsConfig,
+	logger?: TradeLogger,
 ): BacktestResult {
 	const portfolio = new Portfolio(config.initialCapital);
+	const stopRule = new AtrStopRule(riskConfig.stopLossAtrMultiplier);
 
 	// ── Warm-up kontrolü ─────────────────────────────────────────────────
 	if (candles.length < strategy.warmupPeriod + 1) {
@@ -99,23 +103,16 @@ export function runExecution(
 		// Günlük P&L takibi
 		portfolio.updateDay(candle.openTime);
 
-		// ── 1) STOP-LOSS kontrolü (Engine karar verir, Broker uygular) ──
-		if (portfolio.hasOpenPosition() && portfolio.getStopLossPrice() > 0 && candle.low <= portfolio.getStopLossPrice()) {
-			let exitPrice: number;
-			let exitReason: string;
+		// ── 1) STOP-LOSS kontrolü (Engine karar verir via StopRule, Broker uygular) ──
+		const stopSignal = portfolio.positions.evaluateStopLoss(candle, stopRule);
+		if (stopSignal) {
+			const fill = broker.sell(candle.openTime, stopSignal.exitPrice, portfolio.positions.getQuantity());
+			if (logger) logger.onFill(fill);
 
-			if (candle.open <= portfolio.getStopLossPrice()) {
-				// Gap-down: Mum direkt stop seviyesinin altında açıldı
-				exitPrice = candle.open;
-				exitReason = `Stop-Loss Gap-Down (open=${candle.open.toFixed(2)} < stop=${portfolio.getStopLossPrice().toFixed(2)})`;
-			} else {
-				// Normal stop tetiklenmesi
-				exitPrice = portfolio.getStopLossPrice();
-				exitReason = `Stop-Loss (ATR×${riskConfig.stopLossAtrMultiplier})`;
-			}
-
-			const fill = broker.sell(candle.openTime, exitPrice, portfolio.getPositionQuantity());
-			portfolio.closePosition(fill, exitReason, coin);
+			const trade = portfolio.positions.close(fill, stopSignal.reason, coin);
+			portfolio.addTrade(trade);
+			portfolio.addCapital(fill.quantity * fill.price - fill.commission);
+			if (logger) logger.onTrade(trade);
 		}
 
 		// ── 2) t+1 SİNYAL YÜRÜTME ──────────────────────────────────────
@@ -132,9 +129,10 @@ export function runExecution(
 				);
 
 				if (riskDecision.approved) {
-					if (pendingSignal.side === 'BUY' && !portfolio.hasOpenPosition()) {
+					if (pendingSignal.side === 'BUY' && !portfolio.positions.hasOpen()) {
 						// BUY → Broker'a gönder → Portfolio'ya kaydet
 						const fill = broker.buy(candle.openTime, candle.open, riskDecision.positionSize);
+						if (logger) logger.onFill(fill);
 
 						const currentAtr = atrValues.length > i && !Number.isNaN(atrValues[i])
 							? atrValues[i]
@@ -143,12 +141,18 @@ export function runExecution(
 							? fill.price - currentAtr * riskConfig.stopLossAtrMultiplier
 							: 0;
 
-						portfolio.openPosition(fill, riskDecision.positionSize, currentAtr, stopLoss);
+						portfolio.positions.open(fill, riskDecision.positionSize, currentAtr, stopLoss);
+						portfolio.deductCapital(riskDecision.positionSize);
 
-					} else if (pendingSignal.side === 'SELL' && portfolio.hasOpenPosition()) {
+					} else if (pendingSignal.side === 'SELL' && portfolio.positions.hasOpen()) {
 						// SELL → Broker'a gönder → Portfolio'yu güncelle
-						const fill = broker.sell(candle.openTime, candle.open, portfolio.getPositionQuantity());
-						portfolio.closePosition(fill, `Signal: ${pendingSignal.reason}`, coin);
+						const fill = broker.sell(candle.openTime, candle.open, portfolio.positions.getQuantity());
+						if (logger) logger.onFill(fill);
+
+						const trade = portfolio.positions.close(fill, `Signal: ${pendingSignal.reason}`, coin);
+						portfolio.addTrade(trade);
+						portfolio.addCapital(fill.quantity * fill.price - fill.commission);
+						if (logger) logger.onTrade(trade);
 					}
 				}
 			}
@@ -159,10 +163,20 @@ export function runExecution(
 	}
 
 	// ── Açık pozisyon kaldıysa son fiyattan kapat ────────────────────────
-	if (portfolio.hasOpenPosition()) {
+	if (portfolio.positions.hasOpen()) {
 		const lastCandle = candles[candles.length - 1];
-		const fill = broker.sell(lastCandle.openTime, lastCandle.close, portfolio.getPositionQuantity());
-		portfolio.closePosition(fill, 'Backtest End (forced close)', coin);
+		const fill = broker.sell(lastCandle.openTime, lastCandle.close, portfolio.positions.getQuantity());
+		if (logger) logger.onFill(fill);
+
+		const trade = portfolio.positions.close(fill, 'Backtest End (forced close)', coin);
+		portfolio.addTrade(trade);
+		portfolio.addCapital(fill.quantity * fill.price - fill.commission);
+		if (logger) logger.onTrade(trade);
+	}
+
+	if (logger) {
+		logger.flush();
+		logger.close();
 	}
 
 	// ── Metrikleri hesapla ───────────────────────────────────────────────

@@ -7,21 +7,16 @@
 // SimulatedBroker'dan INHERIT ETMEZ — ikisi de Broker interface'ini implement eder.
 // ============================================================================
 
-import { writeFileSync, appendFileSync, existsSync, mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
 import type { Broker, Fill } from './broker.js';
 
 export class PaperBroker implements Broker {
 	private readonly commissionRate: number;
 	private readonly slippagePercent: number;
-	private readonly logPath: string;
 	private readonly fills: Fill[] = [];
-	private initialized = false;
 
-	constructor(commissionPercent: number, slippagePercent: number, logPath: string = 'results/paper-trades.csv') {
+	constructor(commissionPercent: number, slippagePercent: number) {
 		this.commissionRate = commissionPercent / 100;
 		this.slippagePercent = slippagePercent;
-		this.logPath = logPath;
 	}
 
 	buy(timestamp: number, price: number, usdtAmount: number): Fill {
@@ -31,7 +26,7 @@ export class PaperBroker implements Broker {
 		const quantity = netCost / executionPrice;
 
 		const fill: Fill = { timestamp, side: 'BUY', price: executionPrice, quantity, commission };
-		this.logFill(fill);
+		this.fills.push(fill);
 		return fill;
 	}
 
@@ -41,26 +36,11 @@ export class PaperBroker implements Broker {
 		const commission = grossValue * this.commissionRate;
 
 		const fill: Fill = { timestamp, side: 'SELL', price: executionPrice, quantity, commission };
-		this.logFill(fill);
+		this.fills.push(fill);
 		return fill;
 	}
 
 	getFills(): ReadonlyArray<Fill> {
 		return this.fills;
-	}
-
-	private logFill(fill: Fill): void {
-		this.fills.push(fill);
-
-		const dir = dirname(this.logPath);
-		if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-
-		if (!this.initialized) {
-			writeFileSync(this.logPath, 'Timestamp,Side,Price,Quantity,Commission\n', 'utf-8');
-			this.initialized = true;
-		}
-
-		const row = `${new Date(fill.timestamp).toISOString()},${fill.side},${fill.price},${fill.quantity},${fill.commission}\n`;
-		appendFileSync(this.logPath, row, 'utf-8');
 	}
 }

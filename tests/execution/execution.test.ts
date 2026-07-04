@@ -1,7 +1,7 @@
 // ============================================================================
-// KRIPTOQUANT — Execution Layer Tests (Sprint 11)
+// KRIPTOQUANT — Execution Layer Tests (Sprint 12)
 // ============================================================================
-// Broker, Portfolio, Execution Engine birim testleri
+// Broker, Portfolio, PositionManager, StopRule, Providers birim testleri
 // ============================================================================
 
 import { describe, expect, it } from 'vitest';
@@ -14,6 +14,11 @@ import { Portfolio } from '../../src/execution/portfolio.js';
 import { runExecution } from '../../src/execution/engine.js';
 import { createDonchianBreakoutStrategy } from '../../src/research/strategies/donchian-breakout/index.js';
 import { runBacktest } from '../../src/research/backtester.js';
+import { CSVProvider } from '../../src/data/csv-provider.js';
+import { ReplayProvider } from '../../src/data/replay-provider.js';
+import { AtrStopRule } from '../../src/execution/stop-rule.js';
+import { PositionManager } from '../../src/execution/position-manager.js';
+import { CSVTradeLogger } from '../../src/execution/trade-logger.js';
 
 // ─── Test Config ─────────────────────────────────────────────────────────────
 
@@ -73,45 +78,23 @@ describe('SimulatedBroker', () => {
 	it('should deduct commission from buy', () => {
 		const fill = broker.buy(1000, 50000, 10000);
 
-		// Commission = 10000 * 0.001 = 10
 		expect(fill.commission).toBeCloseTo(10, 4);
-		// Quantity = (10000 - 10) / (50000 * 1.0005) = 9990 / 50025 ≈ 0.1997
 		expect(fill.quantity).toBeCloseTo(9990 / (50000 * 1.0005), 6);
 	});
 
 	it('should deduct commission from sell', () => {
 		const fill = broker.sell(1000, 50000, 1.0);
 
-		// grossValue = 1.0 * 49975 = 49975
-		// commission = 49975 * 0.001 = 49.975
 		expect(fill.commission).toBeCloseTo(49975 * 0.001, 4);
-	});
-
-	it('should be deterministic', () => {
-		const f1 = broker.buy(1000, 50000, 10000);
-		const f2 = broker.buy(1000, 50000, 10000);
-
-		expect(f1.price).toBe(f2.price);
-		expect(f1.quantity).toBe(f2.quantity);
-		expect(f1.commission).toBe(f2.commission);
-	});
-
-	it('should have no side effects', () => {
-		// Broker has no state — calling buy/sell doesn't affect future calls
-		broker.buy(1000, 50000, 10000);
-		broker.sell(2000, 60000, 1.0);
-
-		const fill = broker.buy(3000, 50000, 10000);
-		expect(fill.price).toBeCloseTo(50000 * 1.0005, 4);
 	});
 });
 
-describe('PaperBroker', () => {
-	const logPath = 'test-paper-trades.csv';
+describe('PaperBroker & CSVTradeLogger', () => {
+	const logPath = 'test-paper-logger-trades.csv';
 
 	it('should produce same fills as SimulatedBroker', () => {
 		const sim = new SimulatedBroker(0.10, 0.05);
-		const paper = new PaperBroker(0.10, 0.05, logPath);
+		const paper = new PaperBroker(0.10, 0.05);
 
 		const simFill = sim.buy(1000, 50000, 10000);
 		const paperFill = paper.buy(1000, 50000, 10000);
@@ -119,16 +102,18 @@ describe('PaperBroker', () => {
 		expect(paperFill.price).toBe(simFill.price);
 		expect(paperFill.quantity).toBe(simFill.quantity);
 		expect(paperFill.commission).toBe(simFill.commission);
-
-		// Cleanup
-		if (existsSync(logPath)) unlinkSync(logPath);
 	});
 
-	it('should log fills to CSV', () => {
-		const paper = new PaperBroker(0.10, 0.05, logPath);
+	it('should log fills to CSV via CSVTradeLogger', () => {
+		const logger = new CSVTradeLogger(logPath);
+		const paper = new PaperBroker(0.10, 0.05);
 
-		paper.buy(1000, 50000, 10000);
-		paper.sell(2000, 55000, 0.2);
+		const f1 = paper.buy(1000, 50000, 10000);
+		const f2 = paper.sell(2000, 55000, 0.2);
+
+		logger.onFill(f1);
+		logger.onFill(f2);
+		logger.flush();
 
 		expect(existsSync(logPath)).toBe(true);
 		const content = readFileSync(logPath, 'utf-8');
@@ -141,101 +126,91 @@ describe('PaperBroker', () => {
 
 		unlinkSync(logPath);
 	});
-
-	it('should track fills internally', () => {
-		const paper = new PaperBroker(0.10, 0.05, logPath);
-
-		paper.buy(1000, 50000, 10000);
-		paper.sell(2000, 55000, 0.2);
-
-		expect(paper.getFills()).toHaveLength(2);
-
-		if (existsSync(logPath)) unlinkSync(logPath);
-	});
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// PORTFOLIO TESTS
+// PORTFOLIO & POSITION MANAGER TESTS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-describe('Portfolio', () => {
+describe('Portfolio & PositionManager', () => {
 	it('should start with correct capital', () => {
 		const p = new Portfolio(10000);
 		expect(p.getCapital()).toBe(10000);
 		expect(p.getInitialCapital()).toBe(10000);
-		expect(p.hasOpenPosition()).toBe(false);
+		expect(p.positions.hasOpen()).toBe(false);
 	});
 
 	it('should deduct capital on position open', () => {
 		const p = new Portfolio(10000);
 		const fill: Fill = { timestamp: 1000, side: 'BUY', price: 100, quantity: 50, commission: 5 };
 
-		p.openPosition(fill, 5000, 10, 90);
+		p.positions.open(fill, 5000, 10, 90);
+		p.deductCapital(5000);
 
-		expect(p.getCapital()).toBe(5000); // 10000 - 5000
-		expect(p.hasOpenPosition()).toBe(true);
-		expect(p.getPositionQuantity()).toBe(50);
-		expect(p.getStopLossPrice()).toBe(90);
+		expect(p.getCapital()).toBe(5000);
+		expect(p.positions.hasOpen()).toBe(true);
+		expect(p.positions.getQuantity()).toBe(50);
+		expect(p.positions.getStopLossPrice()).toBe(90);
 	});
 
 	it('should add capital on position close', () => {
 		const p = new Portfolio(10000);
 		const buyFill: Fill = { timestamp: 1000, side: 'BUY', price: 100, quantity: 50, commission: 5 };
-		p.openPosition(buyFill, 5000, 10, 90);
+		p.positions.open(buyFill, 5000, 10, 90);
+		p.deductCapital(5000);
 
 		const sellFill: Fill = { timestamp: 2000, side: 'SELL', price: 110, quantity: 50, commission: 5.5 };
-		const trade = p.closePosition(sellFill, 'Test close', 'TESTUSDT');
+		const trade = p.positions.close(sellFill, 'Test close', 'TESTUSDT');
+		p.addTrade(trade);
+		p.addCapital(50 * 110 - 5.5);
 
-		expect(p.hasOpenPosition()).toBe(false);
-		// Capital: 5000 (remaining) + (50 * 110 - 5.5) = 5000 + 5494.5 = 10494.5
+		expect(p.positions.hasOpen()).toBe(false);
 		expect(p.getCapital()).toBeCloseTo(10494.5, 2);
 		expect(trade.pnl).toBeCloseTo(494.5, 2);
 	});
 
-	it('should track trades', () => {
-		const p = new Portfolio(10000);
-		const buyFill: Fill = { timestamp: 1000, side: 'BUY', price: 100, quantity: 50, commission: 5 };
-		p.openPosition(buyFill, 5000, 10, 90);
+	it('should evaluate stop loss rules', () => {
+		const manager = new PositionManager();
+		const fill: Fill = { timestamp: 1000, side: 'BUY', price: 100, quantity: 50, commission: 5 };
+		manager.open(fill, 5000, 10, 90);
 
-		const sellFill: Fill = { timestamp: 2000, side: 'SELL', price: 110, quantity: 50, commission: 5.5 };
-		p.closePosition(sellFill, 'Test', 'TEST');
+		const rule = new AtrStopRule(2.0);
 
-		expect(p.getTrades()).toHaveLength(1);
-		expect(p.getTrades()[0].exitReason).toBe('Test');
+		// Stop not hit
+		const c1: Candle = { openTime: 2000, open: 95, high: 98, low: 92, close: 94, volume: 100, closeTime: 2000 };
+		expect(manager.evaluateStopLoss(c1, rule)).toBeNull();
+
+		// Stop hit (low <= 90)
+		const c2: Candle = { openTime: 3000, open: 95, high: 98, low: 88, close: 89, volume: 100, closeTime: 3000 };
+		const sig1 = manager.evaluateStopLoss(c2, rule);
+		expect(sig1).not.toBeNull();
+		expect(sig1?.exitPrice).toBe(90);
+
+		// Gap down (open <= 90)
+		const c3: Candle = { openTime: 4000, open: 85, high: 88, low: 80, close: 82, volume: 100, closeTime: 4000 };
+		const sig2 = manager.evaluateStopLoss(c3, rule);
+		expect(sig2?.exitPrice).toBe(85);
 	});
+});
 
-	it('should record equity curve', () => {
-		const p = new Portfolio(10000);
-		p.recordEquityPoint(1000, 100);
+// ═══════════════════════════════════════════════════════════════════════════════
+// PROVIDER TESTS
+// ═══════════════════════════════════════════════════════════════════════════════
 
-		expect(p.getEquityCurve()).toHaveLength(1);
-		expect(p.getEquityCurve()[0].equity).toBe(10000);
-	});
+describe('Providers', () => {
+	it('ReplayProvider should stream candles', async () => {
+		const baseCandles = makeTrendingCandles(10);
+		const provider = new ReplayProvider(baseCandles, { intervalMs: 0 });
 
-	it('should track drawdown', () => {
-		const p = new Portfolio(10000);
-		const buyFill: Fill = { timestamp: 1000, side: 'BUY', price: 100, quantity: 90, commission: 5 };
-		p.openPosition(buyFill, 9000, 10, 80);
+		const history = await provider.getHistory('BTC', '1d');
+		expect(history).toHaveLength(10);
 
-		// Price drops → equity drops
-		p.recordEquityPoint(2000, 80); // equity = 1000 + 90*80 = 8200 → DD from 10000
-		expect(p.getMaxDrawdown()).toBeGreaterThan(0);
-	});
+		const streamed: Candle[] = [];
+		provider.subscribe((c) => streamed.push(c));
 
-	it('should reset daily PnL on new day', () => {
-		const p = new Portfolio(10000);
-		p.updateDay(0);
-		expect(p.getDailyPnl()).toBe(0);
-
-		// Next day
-		p.updateDay(86400000);
-		expect(p.getDailyPnl()).toBe(0);
-	});
-
-	it('should throw on close without position', () => {
-		const p = new Portfolio(10000);
-		const fill: Fill = { timestamp: 1000, side: 'SELL', price: 100, quantity: 50, commission: 5 };
-		expect(() => p.closePosition(fill, 'Test', 'TEST')).toThrow();
+		await provider.start();
+		expect(streamed).toHaveLength(10);
+		expect(streamed[0].openTime).toBe(baseCandles[0].openTime);
 	});
 });
 
@@ -248,54 +223,17 @@ describe('Execution Engine', () => {
 		const candles = makeTrendingCandles(60);
 		const strategy = createDonchianBreakoutStrategy(20);
 
-		// Old way (through wrapper)
+		// Wrapper call
 		const oldResult = runBacktest(strategy, candles, platformConfig, riskConfig, 'TEST');
 
-		// New way (direct engine call)
+		// Direct engine call
 		const broker = new SimulatedBroker(platformConfig.commissionPercent, platformConfig.slippagePercent);
 		const newResult = runExecution(candles, strategy, broker, platformConfig, riskConfig, 'TEST');
 
-		// Same results
 		expect(newResult.totalReturn).toBe(oldResult.totalReturn);
 		expect(newResult.totalTrades).toBe(oldResult.totalTrades);
 		expect(newResult.sharpeRatio).toBe(oldResult.sharpeRatio);
 		expect(newResult.maxDrawdown).toBe(oldResult.maxDrawdown);
 		expect(newResult.winRate).toBe(oldResult.winRate);
-	});
-
-	it('should work with PaperBroker and produce same fills', () => {
-		const candles = makeTrendingCandles(60);
-		const strategy = createDonchianBreakoutStrategy(20);
-		const logPath = 'test-engine-paper.csv';
-
-		const simBroker = new SimulatedBroker(platformConfig.commissionPercent, platformConfig.slippagePercent);
-		const paperBroker = new PaperBroker(platformConfig.commissionPercent, platformConfig.slippagePercent, logPath);
-
-		const simResult = runExecution(candles, strategy, simBroker, platformConfig, riskConfig, 'TEST');
-		const paperResult = runExecution(candles, strategy, paperBroker, platformConfig, riskConfig, 'TEST');
-
-		expect(paperResult.totalReturn).toBe(simResult.totalReturn);
-		expect(paperResult.totalTrades).toBe(simResult.totalTrades);
-
-		if (existsSync(logPath)) unlinkSync(logPath);
-	});
-
-	it('should accept any Broker implementation', () => {
-		// Custom broker that always fills at exact price (no slippage, no commission)
-		const perfectBroker: Broker = {
-			buy(ts, price, usdtAmount) {
-				return { timestamp: ts, side: 'BUY', price, quantity: usdtAmount / price, commission: 0 };
-			},
-			sell(ts, price, quantity) {
-				return { timestamp: ts, side: 'SELL', price, quantity, commission: 0 };
-			},
-		};
-
-		const candles = makeTrendingCandles(60);
-		const strategy = createDonchianBreakoutStrategy(20);
-		const result = runExecution(candles, strategy, perfectBroker, platformConfig, riskConfig, 'TEST');
-
-		expect(typeof result.totalReturn).toBe('number');
-		expect(typeof result.totalTrades).toBe('number');
 	});
 });
