@@ -29,6 +29,8 @@ import { Portfolio } from './portfolio.js';
 import { AtrStopRule } from './stop-rule.js';
 import type { TradeLogger } from './trade-logger.js';
 import { buildAnalyticsSummary } from '../research/analytics/summary.js';
+import { DefaultRegimeClassifier } from '../research/regime/classifier.js';
+import { analyzeRegimes } from '../research/regime/regime-analyzer.js';
 
 const ATR_PERIOD = 14;
 
@@ -264,6 +266,7 @@ function buildResult(
 		equityCurve,
 		filterStats,
 		analyzedSignals,
+		regimeReport: analyzeRegimes(trades, candles, new DefaultRegimeClassifier()),
 		analytics: buildAnalyticsSummary(
 			equityCurve,
 			trades,

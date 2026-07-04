@@ -143,6 +143,32 @@ export function printReport(result: BacktestResult): void {
 		console.log(`  Gain/Pain Ratio : ${result.analytics.gainPainRatio}`);
 	}
 
+	// ── Piyasa Rejimi Analizi ─────────────────────────────────────────────
+	if (result.regimeReport && result.regimeReport.stats) {
+		console.log('');
+		console.log(thinDivider);
+		console.log('  🌍 Piyasa Rejimi Analizi (Market Regime Analysis)');
+		console.log(thinDivider);
+		console.log('  Regime          Coverage    Trades      Win Rate    Total Return    PF    Recommendation');
+		console.log(thinDivider);
+
+		for (const stat of result.regimeReport.stats) {
+			const keyStr = stat.regimeKey.padEnd(15);
+			const covStr = `${stat.datasetCoveragePercent.toFixed(1)}%`.padEnd(11);
+			const tradeStr = `${stat.tradeCount} (${stat.tradePercent.toFixed(1)}%)`.padEnd(12);
+			const wrStr = `${stat.winRate.toFixed(1)}%`.padEnd(12);
+			const retSign = stat.totalReturn > 0 ? '+' : '';
+			const retStr = `${retSign}${stat.totalReturn.toFixed(2)}%`.padEnd(15);
+			const pfStr = stat.profitFactor === 999 ? 'Infinity'.padEnd(6) : stat.profitFactor.toFixed(2).padEnd(6);
+			
+			let recStr = '➖ NEUTRAL';
+			if (stat.recommendation === 'ENABLE') recStr = '✔ ENABLE';
+			if (stat.recommendation === 'DISABLE') recStr = '✖ DISABLE';
+
+			console.log(`  ${keyStr} ${covStr} ${tradeStr} ${wrStr} ${retStr} ${pfStr} ${recStr}`);
+		}
+	}
+
 	// ── Filter Statistics ──────────────────────────────────────────────
 	if (result.filterStats && result.filterStats.rejected > 0) {
 		console.log('');

@@ -90,6 +90,7 @@ export interface BacktestResult {
 	readonly equityCurve: EquityPoint[];
 	readonly filterStats?: import('../research/analytics/signal-analyzer.js').FilterStats;
 	readonly analyzedSignals?: import('../research/analytics/signal-analyzer.js').AnalyzedSignal[];
+	readonly regimeReport?: import('../research/regime/regime-analyzer.js').MarketRegimeReport;
 	readonly analytics?: {
 		readonly expectancyUsdt: number | string;
 		readonly expectancyPercent: number | string;

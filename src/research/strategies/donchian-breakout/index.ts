@@ -21,6 +21,10 @@ export function createDonchianBreakoutStrategy(period: number = 20): Strategy {
 		name: 'donchian-breakout',
 		description: `Donchian Breakout (${period})`,
 		warmupPeriod: period + 1,
+		version: '1.0.0',
+		tags: ['breakout', 'trend-following'],
+		supportedRegimes: ['BULL_HIGH', 'BULL_LOW', 'BEAR_HIGH', 'BEAR_LOW'],
+		defaultParameters: { period },
 
 		evaluate(candles: Candle[]): Signal[] {
 			const { upper, lower } = donchianChannel(candles, period);

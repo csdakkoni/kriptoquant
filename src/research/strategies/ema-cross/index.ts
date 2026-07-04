@@ -20,6 +20,10 @@ export function createEmaCrossStrategy(fastPeriod: number = 9, slowPeriod: numbe
 		name: 'ema-cross',
 		description: `EMA Crossover (${fastPeriod}/${slowPeriod})`,
 		warmupPeriod: slowPeriod + 1,
+		version: '1.0.0',
+		tags: ['trend-following', 'crossover'],
+		supportedRegimes: ['BULL_HIGH', 'BULL_LOW', 'BEAR_HIGH', 'BEAR_LOW'],
+		defaultParameters: { fastPeriod, slowPeriod },
 
 		evaluate(candles: Candle[]): Signal[] {
 			const closes = candles.map((c) => c.close);
