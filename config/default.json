@@ -1,0 +1,18 @@
+{
+	"coins": [
+		"BTCUSDT",
+		"ETHUSDT",
+		"BNBUSDT",
+		"SOLUSDT",
+		"XRPUSDT",
+		"ADAUSDT",
+		"AVAXUSDT",
+		"DOGEUSDT",
+		"DOTUSDT",
+		"MATICUSDT"
+	],
+	"defaultInterval": "1d",
+	"initialCapital": 10000,
+	"commissionPercent": 0.10,
+	"slippagePercent": 0.05
+}

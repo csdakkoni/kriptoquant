@@ -1,0 +1,184 @@
+// ============================================================================
+// KRIPTOQUANT — Core Type Definitions
+// ============================================================================
+// Tüm modüller bu tipleri paylaşır. Tek kaynak noktası (Single Source of Truth).
+// ============================================================================
+
+/**
+ * Tek bir mum çubuğunu temsil eder.
+ * Binance API'den gelen veri bu formata dönüştürülür.
+ */
+export interface Candle {
+	readonly openTime: number; // Unix timestamp (ms)
+	readonly open: number;
+	readonly high: number;
+	readonly low: number;
+	readonly close: number;
+	readonly volume: number;
+	readonly closeTime: number; // Unix timestamp (ms)
+}
+
+/**
+ * Bir stratejinin ürettiği al/sat sinyali.
+ */
+export interface Signal {
+	readonly timestamp: number; // Sinyalin üretildiği zaman (ms)
+	readonly side: 'BUY' | 'SELL';
+	readonly price: number; // Sinyalin üretildiği fiyat
+	readonly confidence: number; // 0–1 arası güven skoru
+	readonly reason: string; // İndikatör gerekçesi
+	readonly metadata?: Record<string, number>; // İndikatör değerleri (ör. emaFast, emaSlow)
+}
+
+/**
+ * Backtest sırasında simüle edilen bir emir.
+ */
+export interface Order {
+	readonly timestamp: number;
+	readonly side: 'BUY' | 'SELL';
+	readonly price: number;
+	readonly quantity: number;
+	readonly value: number; // price * quantity
+}
+
+/**
+ * Tamamlanmış bir işlem çifti (giriş + çıkış).
+ */
+export interface Trade {
+	readonly asset: string;
+	readonly entryOrder: Order;
+	readonly exitOrder: Order;
+	readonly positionSize: number; // USDT cinsinden pozisyon büyüklüğü
+	readonly commission: number; // Toplam komisyon (giriş + çıkış)
+	readonly grossPnl: number; // Komisyon öncesi kar/zarar
+	readonly pnl: number; // Net kar/zarar (komisyon sonrası)
+	readonly pnlPercent: number; // Net kar/zarar (yüzde)
+	readonly holdingPeriod: number; // Pozisyon süresi (ms)
+	readonly atrAtEntry: number; // Giriş anındaki ATR değeri
+	readonly exitReason: string; // Çıkış nedeni
+}
+
+/**
+ * Backtest sonuç raporu.
+ */
+export interface BacktestResult {
+	readonly strategyName: string;
+	readonly coin: string;
+	readonly interval: string;
+	readonly startDate: string;
+	readonly endDate: string;
+	readonly initialCapital: number;
+	readonly finalCapital: number;
+	readonly totalReturn: number; // Yüzde
+	readonly buyAndHoldReturn: number; // Buy & Hold getirisi (yüzde)
+	readonly alpha: number; // Strategy Return - Buy & Hold Return
+	readonly totalTrades: number;
+	readonly winningTrades: number;
+	readonly losingTrades: number;
+	readonly rejectedSignals: number; // Filtre tarafından engellenen sinyal sayısı
+	readonly winRate: number; // Yüzde
+	readonly avgWin: number; // Ortalama kazanç (USDT)
+	readonly avgLoss: number; // Ortalama kayıp (USDT)
+	readonly maxDrawdown: number; // Yüzde
+	readonly sharpeRatio: number;
+	readonly profitFactor: number;
+	readonly trades: Trade[];
+	readonly equityCurve: EquityPoint[];
+	readonly filterStats?: import('../research/analytics/signal-analyzer.js').FilterStats;
+	readonly analyzedSignals?: import('../research/analytics/signal-analyzer.js').AnalyzedSignal[];
+}
+
+/**
+ * Equity curve üzerinde bir nokta.
+ */
+export interface EquityPoint {
+	readonly timestamp: number; // UTC ms
+	readonly equity: number; // Toplam portföy değeri (USDT)
+	readonly drawdownPercent: number; // Zirveden düşüş yüzdesi
+	readonly returnPercent: number; // Başlangıçtan itibaren getiri yüzdesi
+}
+
+/**
+ * Her stratejinin uyması gereken sözleşme.
+ * Yeni strateji = bu arayüzü implement etmek, başka bir şey değil.
+ */
+export interface Strategy {
+	readonly name: string;
+	readonly description: string;
+	readonly warmupPeriod: number; // İndikatörlerin sağlıklı hesaplanması için gereken minimum mum sayısı
+	evaluate(candles: Candle[]): Signal[];
+}
+
+/**
+ * Risk yönetimi konfigürasyonu.
+ */
+export interface RiskConfig {
+	readonly maxPositionPercent: number; // Tek coin için maks. portföy yüzdesi
+	readonly maxDailyLossPercent: number; // Günlük maks. kayıp yüzdesi
+	readonly maxOrderValue: number; // Tek emrin maks. değeri (USDT)
+	readonly stopLossAtrMultiplier: number; // Stop-loss = Entry Price - (ATR × multiplier)
+}
+
+/**
+ * Genel platform konfigürasyonu.
+ */
+export interface PlatformConfig {
+	readonly coins: string[]; // İzlenen coin sembolleri (ör. "BTCUSDT")
+	readonly defaultInterval: string; // Varsayılan mum aralığı (ör. "1d")
+	readonly initialCapital: number; // Başlangıç sermayesi (USDT)
+	readonly commissionPercent: number; // İşlem komisyonu (ör. 0.10 = %0.10)
+	readonly slippagePercent: number; // Kayma (ör. 0.05 = %0.05)
+}
+
+/**
+ * Filtre motoru konfigürasyonu.
+ */
+export interface FilterConfig {
+	readonly adxPeriod: number;
+	readonly adxVetoThreshold: number;
+	readonly rvolLookback: number;
+	readonly rvolVetoThreshold: number;
+}
+
+/**
+ * Güven motoru konfigürasyonu.
+ */
+export interface ConfidenceConfig {
+	readonly baseScore: number;
+	readonly adxStrongThreshold: number;
+	readonly adxStrongBonus: number;
+	readonly rvolHighThreshold: number;
+	readonly rvolHighBonus: number;
+	readonly minimumScore: number;
+}
+
+/**
+ * strategy-defaults.json yapısı.
+ */
+export interface StrategyDefaultsConfig {
+	readonly strategies: {
+		readonly emaCross: { readonly fast: number; readonly slow: number };
+		readonly smaCross: { readonly fast: number; readonly slow: number };
+	};
+	readonly filters: FilterConfig;
+	readonly confidence: ConfidenceConfig;
+}
+
+/**
+ * Binance API'den dönen ham mum verisi (klines).
+ * Bu tip sadece data/ katmanında kullanılır, dışarıya Candle olarak çıkar.
+ */
+export type BinanceKline = [
+	number, // Open time
+	string, // Open
+	string, // High
+	string, // Low
+	string, // Close
+	string, // Volume
+	number, // Close time
+	string, // Quote asset volume
+	number, // Number of trades
+	string, // Taker buy base volume
+	string, // Taker buy quote volume
+	string, // Ignore
+];

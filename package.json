@@ -1,0 +1,24 @@
+{
+  "name": "kriptoquant",
+  "version": "0.1.0",
+  "description": "Crypto Quant Research & Execution Platform",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/cli.ts",
+    "backtest": "tsx src/cli.ts backtest",
+    "fetch": "tsx src/cli.ts fetch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "biome check .",
+    "format": "biome format --write ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.0",
+    "typescript": "^5.7.0",
+    "tsx": "^4.19.0",
+    "vitest": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

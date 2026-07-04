@@ -1,0 +1,6 @@
+{
+	"maxPositionPercent": 20,
+	"maxDailyLossPercent": 5,
+	"maxOrderValue": 2000,
+	"stopLossAtrMultiplier": 2
+}

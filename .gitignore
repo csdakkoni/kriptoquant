@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Data files (large, should not be in git)
+data/raw/
+data/processed/
+
+# Backtest results
+results/
+
+# Secrets
+config/secrets.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
