@@ -85,8 +85,8 @@ describe('generateCombinations', () => {
 
 	it('should match expected count for DEFAULT_SWEEP', () => {
 		const combos = generateCombinations(DEFAULT_SWEEP);
-		// 5 × 3 × 4 × 3 × 3 = 540
-		expect(combos).toHaveLength(540);
+		// EMA: 5×3×4×3×3 = 540, Donchian: 5×4×3×3 = 180, Total = 720
+		expect(combos).toHaveLength(720);
 	});
 
 	it('should produce unique param sets', () => {
@@ -102,6 +102,7 @@ describe('runExperiment', () => {
 	it('should return valid ExperimentResult', () => {
 		const candles = makeTrendingCandles(60);
 		const params: ExperimentParams = {
+			strategyName: 'ema-cross',
 			emaFast: 5,
 			emaSlow: 20,
 			adxVetoThreshold: 15,
@@ -125,6 +126,7 @@ describe('runExperiment', () => {
 	it('should be deterministic — same params = same result', () => {
 		const candles = makeTrendingCandles(60);
 		const params: ExperimentParams = {
+			strategyName: 'ema-cross',
 			emaFast: 9,
 			emaSlow: 21,
 			adxVetoThreshold: 20,
@@ -145,10 +147,12 @@ describe('runExperiment', () => {
 		const candles = makeTrendingCandles(60);
 
 		const result1 = runExperiment(candles, {
+			strategyName: 'ema-cross',
 			emaFast: 5, emaSlow: 20, adxVetoThreshold: 15, rvolVetoThreshold: 1.0, minimumConfidence: 60,
 		}, platformConfig, riskConfig, 'TEST');
 
 		const result2 = runExperiment(candles, {
+			strategyName: 'ema-cross',
 			emaFast: 15, emaSlow: 50, adxVetoThreshold: 30, rvolVetoThreshold: 2.0, minimumConfidence: 80,
 		}, platformConfig, riskConfig, 'TEST');
 
@@ -168,7 +172,7 @@ describe('Sweep CSV Export', () => {
 	it('should export valid CSV with header and rows', () => {
 		const results: ExperimentResult[] = [
 			{
-				params: { emaFast: 5, emaSlow: 20, adxVetoThreshold: 15, rvolVetoThreshold: 1.5, minimumConfidence: 70 },
+				params: { strategyName: 'ema-cross', emaFast: 5, emaSlow: 20, adxVetoThreshold: 15, rvolVetoThreshold: 1.5, minimumConfidence: 70 },
 				totalReturn: 12.5,
 				sharpeRatio: 1.5,
 				profitFactor: 2.1,
@@ -204,7 +208,7 @@ describe('Sweep CSV Export', () => {
 		expect(lines[0]).toContain('emaFast');
 		expect(lines[0]).toContain('Sharpe');
 		expect(lines[0]).toContain('WinRate');
-		expect(lines[1]).toContain('5,20,15,1.5,70');
+		expect(lines[1]).toContain('ema-cross,5,20,');
 
 		// Cleanup
 		unlinkSync(testPath);

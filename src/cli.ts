@@ -20,8 +20,9 @@ import { exportSignalJournal } from './research/analytics/signal-analyzer.js';
 import { printReport, saveReport } from './research/report.js';
 import { createSmaCrossStrategy } from './research/strategies/sma-cross/index.js';
 import { createEmaCrossStrategy } from './research/strategies/ema-cross/index.js';
+import { createDonchianBreakoutStrategy } from './research/strategies/donchian-breakout/index.js';
 import { DEFAULT_SWEEP } from './research/experiments/runner.js';
-import { runSweep, printLeaderboard, printMetadata, exportSweepCSV, exportMetadataJSON } from './research/experiments/sweep.js';
+import { runSweep, printLeaderboard, printMetadata, printStrategyComparison, exportSweepCSV, exportMetadataJSON } from './research/experiments/sweep.js';
 
 // Konfigürasyonları yükle
 import defaultConfig from '../config/default.json' with { type: 'json' };
@@ -42,6 +43,7 @@ function resolveStrategy(name: string): Strategy | null {
 	const strategies: Record<string, Strategy> = {
 		'sma-cross': createSmaCrossStrategy(),
 		'ema-cross': createEmaCrossStrategy(),
+		'donchian-breakout': createDonchianBreakoutStrategy(),
 	};
 	return strategies[name] ?? null;
 }
@@ -62,7 +64,7 @@ async function commandBacktest(
 	const strategy = resolveStrategy(strategyName);
 	if (!strategy) {
 		logError(`Bilinmeyen strateji: ${strategyName}`);
-		logError('Mevcut stratejiler: sma-cross, ema-cross');
+		logError('Mevcut stratejiler: sma-cross, ema-cross, donchian-breakout');
 		process.exit(1);
 	}
 
@@ -123,6 +125,7 @@ async function commandSweep(coin: string, interval: string): Promise<void> {
 	);
 
 	printLeaderboard(results);
+	printStrategyComparison(results);
 	printMetadata(metadata);
 
 	// CSV Export

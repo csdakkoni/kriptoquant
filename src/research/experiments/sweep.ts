@@ -1,8 +1,8 @@
 // ============================================================================
-// KRIPTOQUANT — Parameter Sweep Orchestrator (Sprint 7)
+// KRIPTOQUANT — Parameter Sweep Orchestrator (Sprint 8 — Multi-Strategy)
 // ============================================================================
 // Worker Thread'lerle paralel parametre taraması.
-// CSV export, Top-N Leaderboard, Experiment Metadata.
+// CSV export, Top-N Leaderboard, Strategy Comparison, Metadata.
 // ============================================================================
 
 import { Worker } from 'node:worker_threads';
@@ -17,7 +17,14 @@ import { round } from '../../core/utils.js';
 import type { ExperimentParams, ExperimentResult, SweepConfig } from './runner.js';
 import { generateCombinations, runExperiment } from './runner.js';
 
-// ─── Tipler ──────────────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────
+
+function formatParamLabel(p: ExperimentParams): string {
+	if (p.emaFast != null) return `EMA ${p.emaFast}/${p.emaSlow}`;
+	if (p.donchianPeriod != null) return `DC ${p.donchianPeriod}`;
+	return p.strategyName;
+}
+
 
 export interface ExperimentMetadata {
 	readonly experimentId: string;
@@ -213,8 +220,9 @@ export function printLeaderboard(results: ExperimentResult[], topN: number = 20)
 			console.log(thinDivider);
 			for (const r of byAccepted.slice(0, 5)) {
 				const p = r.params;
+				const label = formatParamLabel(p);
 				console.log(
-					`  EMA ${p.emaFast}/${p.emaSlow} | ADX ${p.adxVetoThreshold} | RVOL ${p.rvolVetoThreshold} | ` +
+					`  ${label} | ADX ${p.adxVetoThreshold} | RVOL ${p.rvolVetoThreshold} | ` +
 					`Conf ${p.minimumConfidence} → Accepted: ${r.acceptedSignals}/${r.totalSignals}`,
 				);
 			}
@@ -233,9 +241,11 @@ export function printLeaderboard(results: ExperimentResult[], topN: number = 20)
 
 		console.log('');
 		console.log(thinDivider);
-		console.log(`  #${i + 1}`);
+		console.log(`  #${i + 1}  [${p.strategyName.toUpperCase()}]`);
 		console.log(thinDivider);
-		console.log(`  EMA           : ${p.emaFast}/${p.emaSlow}`);
+		console.log(`  Strategy      : ${p.strategyName}`);
+		if (p.emaFast != null) console.log(`  EMA           : ${p.emaFast}/${p.emaSlow}`);
+		if (p.donchianPeriod != null) console.log(`  Donchian      : ${p.donchianPeriod}`);
 		console.log(`  ADX Threshold : ${p.adxVetoThreshold}`);
 		console.log(`  RVOL Threshold: ${p.rvolVetoThreshold}`);
 		console.log(`  Min Confidence: ${p.minimumConfidence}`);
@@ -286,13 +296,15 @@ export function exportSweepCSV(
 	const dir = dirname(filepath);
 	if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 
-	const header = 'emaFast,emaSlow,adxThreshold,rvolThreshold,minConfidence,Return,Sharpe,ProfitFactor,MaxDrawdown,Trades,WinRate,Alpha,Signals,Accepted,Rejected';
+	const header = 'Strategy,emaFast,emaSlow,donchianPeriod,adxThreshold,rvolThreshold,minConfidence,Return,Sharpe,ProfitFactor,MaxDrawdown,Trades,WinRate,Alpha,Signals,Accepted,Rejected';
 
 	const rows = results.map((r) => {
 		const p = r.params;
 		return [
-			p.emaFast,
-			p.emaSlow,
+			p.strategyName,
+			p.emaFast ?? '',
+			p.emaSlow ?? '',
+			p.donchianPeriod ?? '',
 			p.adxVetoThreshold,
 			p.rvolVetoThreshold,
 			p.minimumConfidence,
@@ -320,4 +332,72 @@ export function exportMetadataJSON(metadata: ExperimentMetadata, filepath: strin
 	if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 
 	writeFileSync(filepath, JSON.stringify(metadata, null, 2), 'utf-8');
+}
+
+// ─── Strategy Comparison Report ─────────────────────────────────────────
+
+/**
+ * Her stratejinin en iyi performansını yan yana karşılaştırır.
+ */
+export function printStrategyComparison(results: ExperimentResult[]): void {
+	// Stratejilere göre grupla
+	const byStrategy = new Map<string, ExperimentResult[]>();
+	for (const r of results) {
+		const list = byStrategy.get(r.params.strategyName) ?? [];
+		list.push(r);
+		byStrategy.set(r.params.strategyName, list);
+	}
+
+	if (byStrategy.size < 2) return; // Tek strateji varsa karşılaştırma anlamsız
+
+	const divider = '═'.repeat(64);
+	const thinDivider = '─'.repeat(64);
+
+	console.log('');
+	console.log(divider);
+	console.log('  ⚔️  Strategy Comparison — Best of Each');
+	console.log(divider);
+
+	// Header
+	console.log('');
+	console.log(
+		'  ' +
+		'Strategy'.padEnd(20) +
+		'Return'.padStart(10) +
+		'Alpha'.padStart(10) +
+		'Sharpe'.padStart(8) +
+		'PF'.padStart(6) +
+		'Trades'.padStart(8),
+	);
+	console.log(`  ${thinDivider}`);
+
+	for (const [name, stratResults] of byStrategy) {
+		const withTrades = stratResults.filter((r) => r.totalTrades > 0);
+
+		if (withTrades.length === 0) {
+			console.log(
+				'  ' +
+				name.padEnd(20) +
+				'(no trades)'.padStart(10),
+			);
+			continue;
+		}
+
+		// Sharpe'a göre en iyi
+		const best = withTrades.sort((a, b) => b.sharpeRatio - a.sharpeRatio)[0];
+		const label = formatParamLabel(best.params);
+
+		console.log(
+			'  ' +
+			`${name} (${label})`.padEnd(20) +
+			`${best.totalReturn > 0 ? '+' : ''}${best.totalReturn}%`.padStart(10) +
+			`${best.alpha > 0 ? '+' : ''}${best.alpha}%`.padStart(10) +
+			`${best.sharpeRatio}`.padStart(8) +
+			`${best.profitFactor}`.padStart(6) +
+			`${best.totalTrades}`.padStart(8),
+		);
+	}
+
+	console.log('');
+	console.log(divider);
 }

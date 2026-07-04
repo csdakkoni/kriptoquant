@@ -10,5 +10,7 @@ export { rsi } from './rsi.js';
 export { ema, macd } from './macd.js';
 export { atr, trueRange } from './atr.js';
 export { adx } from './adx.js';
+export { donchianChannel } from './donchian.js';
 export type { MACDResult } from './macd.js';
 export type { ADXResult } from './adx.js';
+export type { DonchianResult } from './donchian.js';

@@ -1,24 +1,32 @@
 // ============================================================================
-// KRIPTOQUANT — Experiment Runner (Sprint 7)
+// KRIPTOQUANT — Experiment Runner (Sprint 8 — Multi-Strategy)
 // ============================================================================
 // Tek bir parametre kombinasyonunu backtest'e dönüştüren saf fonksiyon.
 // Yan etkisi yok. Worker thread'lerde güvenle çalıştırılabilir.
+// Yeni strateji eklemek = createStrategy'ye bir case eklemek.
 // ============================================================================
 
 import type {
 	Candle,
 	PlatformConfig,
 	RiskConfig,
+	Strategy,
 	StrategyDefaultsConfig,
 } from '../../core/types.js';
 import { runBacktest } from '../backtester.js';
 import { createEmaCrossStrategy } from '../strategies/ema-cross/index.js';
+import { createDonchianBreakoutStrategy } from '../strategies/donchian-breakout/index.js';
 
 // ─── Tipler ──────────────────────────────────────────────────────────────────
 
 export interface ExperimentParams {
-	readonly emaFast: number;
-	readonly emaSlow: number;
+	readonly strategyName: string;
+	// EMA-specific
+	readonly emaFast?: number;
+	readonly emaSlow?: number;
+	// Donchian-specific
+	readonly donchianPeriod?: number;
+	// Shared filter params
 	readonly adxVetoThreshold: number;
 	readonly rvolVetoThreshold: number;
 	readonly minimumConfidence: number;
@@ -39,8 +47,12 @@ export interface ExperimentResult {
 }
 
 export interface SweepConfig {
-	readonly emaFast: number[];
-	readonly emaSlow: number[];
+	// EMA params (yoksa EMA taranmaz)
+	readonly emaFast?: number[];
+	readonly emaSlow?: number[];
+	// Donchian params (yoksa Donchian taranmaz)
+	readonly donchianPeriod?: number[];
+	// Shared filter params
 	readonly adxVetoThreshold: number[];
 	readonly rvolVetoThreshold: number[];
 	readonly minimumConfidence: number[];
@@ -51,30 +63,71 @@ export interface SweepConfig {
 export const DEFAULT_SWEEP: SweepConfig = {
 	emaFast: [5, 7, 9, 12, 15],
 	emaSlow: [20, 30, 50],
+	donchianPeriod: [10, 15, 20, 25, 30],
 	adxVetoThreshold: [15, 20, 25, 30],
 	rvolVetoThreshold: [1.2, 1.5, 2.0],
 	minimumConfidence: [60, 70, 80],
 };
 
+// ─── Strateji Factory ────────────────────────────────────────────────────────
+
+/**
+ * Parametre setinden strateji oluşturur.
+ * Yeni strateji eklemek = buraya bir case eklemek.
+ */
+function createStrategy(params: ExperimentParams): Strategy {
+	switch (params.strategyName) {
+		case 'ema-cross':
+			return createEmaCrossStrategy(params.emaFast!, params.emaSlow!);
+		case 'donchian-breakout':
+			return createDonchianBreakoutStrategy(params.donchianPeriod!);
+		default:
+			throw new Error(`Unknown strategy: ${params.strategyName}`);
+	}
+}
+
 // ─── Kombinasyon Üretici ─────────────────────────────────────────────────────
 
 /**
  * Tüm parametre kombinasyonlarını oluşturur.
- * emaFast >= emaSlow olan geçersiz kombinasyonları otomatik atlar.
+ * Her strateji kendi parametre uzayını üretir, filtreler paylaşılır.
  */
 export function generateCombinations(config: SweepConfig): ExperimentParams[] {
 	const combinations: ExperimentParams[] = [];
 
-	for (const emaFast of config.emaFast) {
-		for (const emaSlow of config.emaSlow) {
-			if (emaFast >= emaSlow) continue;
+	// EMA Cross kombinasyonları
+	if (config.emaFast && config.emaSlow) {
+		for (const emaFast of config.emaFast) {
+			for (const emaSlow of config.emaSlow) {
+				if (emaFast >= emaSlow) continue;
 
+				for (const adx of config.adxVetoThreshold) {
+					for (const rvol of config.rvolVetoThreshold) {
+						for (const conf of config.minimumConfidence) {
+							combinations.push({
+								strategyName: 'ema-cross',
+								emaFast,
+								emaSlow,
+								adxVetoThreshold: adx,
+								rvolVetoThreshold: rvol,
+								minimumConfidence: conf,
+							});
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Donchian Breakout kombinasyonları
+	if (config.donchianPeriod) {
+		for (const period of config.donchianPeriod) {
 			for (const adx of config.adxVetoThreshold) {
 				for (const rvol of config.rvolVetoThreshold) {
 					for (const conf of config.minimumConfidence) {
 						combinations.push({
-							emaFast,
-							emaSlow,
+							strategyName: 'donchian-breakout',
+							donchianPeriod: period,
 							adxVetoThreshold: adx,
 							rvolVetoThreshold: rvol,
 							minimumConfidence: conf,
@@ -101,11 +154,11 @@ export function runExperiment(
 	riskConfig: RiskConfig,
 	coin: string,
 ): ExperimentResult {
-	const strategy = createEmaCrossStrategy(params.emaFast, params.emaSlow);
+	const strategy = createStrategy(params);
 
 	const strategyDefaults: StrategyDefaultsConfig = {
 		strategies: {
-			emaCross: { fast: params.emaFast, slow: params.emaSlow },
+			emaCross: { fast: params.emaFast ?? 9, slow: params.emaSlow ?? 21 },
 			smaCross: { fast: 10, slow: 30 },
 		},
 		filters: {

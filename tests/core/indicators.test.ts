@@ -355,3 +355,65 @@ describe('adx', () => {
 		expect(() => adx(shortCandles, 14)).toThrow();
 	});
 });
+
+// ─── Donchian Channel Tests ──────────────────────────────────────────────────
+
+import { donchianChannel } from '../../src/core/indicators/donchian.js';
+
+describe('donchianChannel', () => {
+	it('should compute correct upper and lower values', () => {
+		// 5 candles with known highs/lows
+		const candles = [
+			{ openTime: 0, open: 10, high: 15, low: 8, close: 12, volume: 100, closeTime: 1 },
+			{ openTime: 1, open: 12, high: 18, low: 10, close: 14, volume: 100, closeTime: 2 },
+			{ openTime: 2, open: 14, high: 20, low: 11, close: 16, volume: 100, closeTime: 3 },
+			{ openTime: 3, open: 16, high: 22, low: 13, close: 19, volume: 100, closeTime: 4 },
+			{ openTime: 4, open: 19, high: 25, low: 15, close: 21, volume: 100, closeTime: 5 },
+		];
+
+		const { upper, lower } = donchianChannel(candles, 3);
+
+		// Index 0,1,2 = NaN (warmup, period=3)
+		expect(upper[0]).toBeNaN();
+		expect(upper[1]).toBeNaN();
+		expect(upper[2]).toBeNaN();
+
+		// upper[3] = max(high[0], high[1], high[2]) = max(15, 18, 20) = 20
+		expect(upper[3]).toBe(20);
+		// lower[3] = min(low[0], low[1], low[2]) = min(8, 10, 11) = 8
+		expect(lower[3]).toBe(8);
+
+		// upper[4] = max(high[1], high[2], high[3]) = max(18, 20, 22) = 22
+		expect(upper[4]).toBe(22);
+		// lower[4] = min(low[1], low[2], low[3]) = min(10, 11, 13) = 10
+		expect(lower[4]).toBe(10);
+	});
+
+	it('should return NaN for indices before warmup', () => {
+		const candles = Array.from({ length: 10 }, (_, i) => ({
+			openTime: i, open: 100, high: 110, low: 90, close: 100, volume: 100, closeTime: i + 1,
+		}));
+
+		const { upper, lower } = donchianChannel(candles, 5);
+
+		for (let i = 0; i < 5; i++) {
+			expect(upper[i]).toBeNaN();
+			expect(lower[i]).toBeNaN();
+		}
+		expect(upper[5]).toBe(110);
+		expect(lower[5]).toBe(90);
+	});
+
+	it('should handle period of 1', () => {
+		const candles = [
+			{ openTime: 0, open: 10, high: 15, low: 5, close: 12, volume: 100, closeTime: 1 },
+			{ openTime: 1, open: 12, high: 20, low: 8, close: 15, volume: 100, closeTime: 2 },
+		];
+
+		const { upper, lower } = donchianChannel(candles, 1);
+
+		expect(upper[0]).toBeNaN();
+		expect(upper[1]).toBe(15); // Previous candle's high
+		expect(lower[1]).toBe(5);  // Previous candle's low
+	});
+});
