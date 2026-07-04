@@ -1,0 +1,121 @@
+// ============================================================================
+// KRIPTOQUANT — Dashboard Local HTTP Server (Sprint 24)
+// ============================================================================
+
+import { createServer, IncomingMessage, ServerResponse } from 'node:http';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { log, logError } from '../core/utils.js';
+
+/**
+ * REST API ve HTML Visualizer sunucusunu başlatır.
+ */
+export function startDashboardServer(port: number = 3000): any {
+	const server = createServer((req: IncomingMessage, res: ServerResponse) => {
+		const url = req.url ?? '/';
+
+		// CORS Headers
+		res.setHeader('Access-Control-Allow-Origin', '*');
+		res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+		res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+		if (req.method === 'OPTIONS') {
+			res.writeHead(204);
+			res.end();
+			return;
+		}
+
+		try {
+			// ── 1) GET /api/reports ──────────────────────────────────────────
+			if (url === '/api/reports') {
+				const resultsDir = join(process.cwd(), 'results');
+				const reports: any[] = [];
+
+				if (existsSync(resultsDir)) {
+					const files = readdirSync(resultsDir);
+					for (const file of files) {
+						if (file.endsWith('.json') && file !== 'alpha_discovery_registry.json') {
+							try {
+								const path = join(resultsDir, file);
+								const raw = readFileSync(path, 'utf-8');
+								const data = JSON.parse(raw);
+								reports.push({
+									filename: file,
+									strategyName: data.strategyName || 'N/A',
+									coin: data.coin || 'N/A',
+									interval: data.interval || 'N/A',
+									totalReturn: typeof data.totalReturn === 'number' ? data.totalReturn : 0,
+									sharpeRatio: typeof data.sharpeRatio === 'number' ? data.sharpeRatio : 0,
+									maxDrawdown: typeof data.maxDrawdown === 'number' ? data.maxDrawdown : 0,
+									timestamp: data.endDate || '',
+								});
+							} catch (e) {
+								// Hatalı dosyaları es geç
+							}
+						}
+					}
+				}
+
+				res.writeHead(200, { 'Content-Type': 'application/json' });
+				res.end(JSON.stringify(reports));
+				return;
+			}
+
+			// ── 2) GET /api/reports/:filename ────────────────────────────────
+			if (url.startsWith('/api/reports/')) {
+				const filename = decodeURIComponent(url.substring('/api/reports/'.length));
+				// Güvenlik: dizin dışına çıkmayı engelle
+				if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+					res.writeHead(400, { 'Content-Type': 'text/plain' });
+					res.end('Bad Request');
+					return;
+				}
+
+				const resultsDir = join(process.cwd(), 'results');
+				const filePath = join(resultsDir, filename);
+
+				if (existsSync(filePath)) {
+					const raw = readFileSync(filePath, 'utf-8');
+					res.writeHead(200, { 'Content-Type': 'application/json' });
+					res.end(raw);
+				} else {
+					res.writeHead(404, { 'Content-Type': 'text/plain' });
+					res.end('Report Not Found');
+				}
+				return;
+			}
+
+			// ── 3) GET / ➔ HTML Dashboard SPA ────────────────────────────────
+			if (url === '/' || url === '/index.html') {
+				const indexPath = join(process.cwd(), 'src', 'dashboard', 'index.html');
+				if (existsSync(indexPath)) {
+					const html = readFileSync(indexPath, 'utf-8');
+					res.writeHead(200, { 'Content-Type': 'text/html' });
+					res.end(html);
+				} else {
+					res.writeHead(404, { 'Content-Type': 'text/plain' });
+					res.end('index.html template not found under src/dashboard/');
+				}
+				return;
+			}
+
+			// Diğer tüm istekler için 404
+			res.writeHead(404, { 'Content-Type': 'text/plain' });
+			res.end('Not Found');
+
+		} catch (err) {
+			logError(`Dashboard Sunucu Hatası: ${err instanceof Error ? err.message : String(err)}`);
+			res.writeHead(500, { 'Content-Type': 'text/plain' });
+			res.end('Internal Server Error');
+		}
+	});
+
+	server.listen(port, () => {
+		log(`\n================================================================`);
+		log(`  📊 KRIPTOQUANT DASHBOARD SERVER RUNNING`);
+		log(`  🚀 URL: http://localhost:${port}`);
+		log(`================================================================\n`);
+	});
+
+	return server;
+}

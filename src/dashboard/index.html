@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KriptoQuant — Quant Research Dashboard</title>
+    <!-- Google Fonts Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- TailwindCSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        darkBg: '#0b0f19',
+                        darkCard: '#151c2c',
+                        accentGreen: '#10b981',
+                        accentRed: '#ef4444',
+                        accentBlue: '#3b82f6',
+                        glassBorder: 'rgba(255, 255, 255, 0.08)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #0b0f19;
+            color: #e2e8f0;
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0b0f19;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #334155;
+        }
+        .glass-card {
+            background: #151c2c;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+        }
+    </style>
+</head>
+<body class="h-full flex overflow-hidden">
+
+    <!-- SIDEBAR -->
+    <aside class="w-80 bg-[#0d1322] border-r border-glassBorder flex flex-col flex-shrink-0">
+        <!-- Logo Header -->
+        <div class="p-6 border-b border-glassBorder flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+                <span class="text-xl font-bold tracking-tight bg-gradient-to-r from-accentGreen to-accentBlue bg-clip-text text-transparent">
+                    📊 KriptoQuant
+                </span>
+                <span class="text-xs bg-[#1e293b] px-2 py-0.5 rounded text-gray-400 font-mono">v1.0</span>
+            </div>
+        </div>
+
+        <!-- Reports List -->
+        <div class="flex-1 overflow-y-auto p-4 space-y-3" id="reports-list">
+            <div class="text-gray-500 text-sm text-center py-8">Raporlar yükleniyor...</div>
+        </div>
+    </aside>
+
+    <!-- MAIN APP CONTAINER -->
+    <main class="flex-1 flex flex-col overflow-hidden">
+        <!-- Top Nav -->
+        <header class="h-16 border-b border-glassBorder flex items-center justify-between px-8 flex-shrink-0 bg-[#0d1322]/50 backdrop-blur-md">
+            <div>
+                <h1 class="text-lg font-semibold" id="active-strategy-title">Strateji Seçilmedi</h1>
+                <p class="text-xs text-gray-400" id="active-coin-subtitle">Lütfen soldaki menüden bir backtest raporu seçin.</p>
+            </div>
+            <div class="flex items-center space-x-4">
+                <span class="text-xs text-gray-400" id="active-date-range">-- → --</span>
+                <button onclick="loadReportList()" class="px-3 py-1.5 bg-accentBlue/20 text-accentBlue border border-accentBlue/30 rounded-md text-xs hover:bg-accentBlue/30 transition-all">
+                    Yenile
+                </button>
+            </div>
+        </header>
+
+        <!-- DASHBOARD SCROLL AREA -->
+        <div class="flex-1 overflow-y-auto p-8 space-y-6" id="dashboard-content" style="display: none;">
+            
+            <!-- KEY METRICS CARDS -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <!-- Final Capital -->
+                <div class="glass-card p-6 flex flex-col justify-between">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Net Sermaye / Return</span>
+                    <div class="mt-2 flex items-baseline justify-between">
+                        <span class="text-2xl font-bold" id="metric-capital">0.00 USDT</span>
+                        <span class="text-sm font-semibold" id="metric-return">+0.00%</span>
+                    </div>
+                    <span class="text-xs text-gray-500 mt-2" id="metric-initial">Başlangıç: --</span>
+                </div>
+                <!-- Performance -->
+                <div class="glass-card p-6 flex flex-col justify-between">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Sharpe & Profit Factor</span>
+                    <div class="mt-2 flex items-baseline justify-between">
+                        <span class="text-2xl font-bold text-accentBlue" id="metric-sharpe">0.00</span>
+                        <span class="text-sm font-semibold text-gray-300" id="metric-pf">PF: 0.00</span>
+                    </div>
+                    <span class="text-xs text-gray-500 mt-2" id="metric-expectancy">Expectancy: --</span>
+                </div>
+                <!-- Trades count -->
+                <div class="glass-card p-6 flex flex-col justify-between">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Win Rate / İşlem</span>
+                    <div class="mt-2 flex items-baseline justify-between">
+                        <span class="text-2xl font-bold text-emerald-400" id="metric-winrate">+0%</span>
+                        <span class="text-sm font-semibold text-gray-300" id="metric-trades">0 İşlem</span>
+                    </div>
+                    <span class="text-xs text-gray-500 mt-2" id="metric-winloss">Win: 0 | Loss: 0</span>
+                </div>
+                <!-- Drawdown / Ruin -->
+                <div class="glass-card p-6 flex flex-col justify-between">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Max Drawdown / Ruin</span>
+                    <div class="mt-2 flex items-baseline justify-between">
+                        <span class="text-2xl font-bold text-accentRed" id="metric-maxdd">-0.00%</span>
+                        <span class="text-sm font-semibold text-orange-400" id="metric-ruin">Ruin: --</span>
+                    </div>
+                    <span class="text-xs text-gray-500 mt-2" id="metric-ulcer">Ulcer Index: --</span>
+                </div>
+            </div>
+
+            <!-- CHARTS ROW -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Equity Curve (2/3 width) -->
+                <div class="glass-card p-6 lg:col-span-2 flex flex-col">
+                    <span class="text-sm font-semibold text-gray-300 mb-4">Sermaye ve Drawdown Grafiği</span>
+                    <div class="flex-1 min-h-[350px]">
+                        <canvas id="equityChart"></canvas>
+                    </div>
+                </div>
+                <!-- Monte Carlo Stress Test (1/3 width) -->
+                <div class="glass-card p-6 flex flex-col">
+                    <span class="text-sm font-semibold text-gray-300 mb-4">Monte Carlo Dağılımları</span>
+                    <div class="flex-1 min-h-[350px]">
+                        <canvas id="monteCarloChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- REGIMES AND SECONDARY INFO -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Regime Allocation -->
+                <div class="glass-card p-6 flex flex-col">
+                    <span class="text-sm font-semibold text-gray-300 mb-4">Piyasa Rejimi Getirileri</span>
+                    <div class="flex-1 min-h-[220px]">
+                        <canvas id="regimeChart"></canvas>
+                    </div>
+                </div>
+                <!-- Stats Breakdown Table -->
+                <div class="glass-card p-6 lg:col-span-2 flex flex-col justify-between">
+                    <span class="text-sm font-semibold text-gray-300 mb-4">Gelişmiş Analiz Metrikleri</span>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-6 text-sm">
+                        <div class="border-b border-glassBorder pb-3">
+                            <span class="text-gray-500 block text-xs">Recovery Factor</span>
+                            <span class="font-bold text-gray-200 mt-1 block" id="val-rec">0.00</span>
+                        </div>
+                        <div class="border-b border-glassBorder pb-3">
+                            <span class="text-gray-500 block text-xs">MAR Ratio</span>
+                            <span class="font-bold text-gray-200 mt-1 block" id="val-mar">0.00</span>
+                        </div>
+                        <div class="border-b border-glassBorder pb-3">
+                            <span class="text-gray-500 block text-xs">Gain/Pain Ratio</span>
+                            <span class="font-bold text-gray-200 mt-1 block" id="val-gainpain">0.00</span>
+                        </div>
+                        <div class="border-b border-glassBorder pb-3">
+                            <span class="text-gray-500 block text-xs">Exposure Time</span>
+                            <span class="font-bold text-gray-200 mt-1 block" id="val-exposure">0.0%</span>
+                        </div>
+                        <div>
+                            <span class="text-gray-500 block text-xs">SQN Score</span>
+                            <span class="font-bold text-gray-200 mt-1 block" id="val-sqn">0.00</span>
+                        </div>
+                        <div>
+                            <span class="text-gray-500 block text-xs">Kelly Fraction</span>
+                            <span class="font-bold text-gray-200 mt-1 block" id="val-kelly">0.0%</span>
+                        </div>
+                        <div>
+                            <span class="text-gray-500 block text-xs">Avg Win / Avg Loss</span>
+                            <span class="font-bold text-gray-200 mt-1 block" id="val-avgwinloss">0 / 0</span>
+                        </div>
+                        <div>
+                            <span class="text-gray-500 block text-xs">Capital Usage</span>
+                            <span class="font-bold text-gray-200 mt-1 block" id="val-capusage">0.0%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TRADE JOURNAL -->
+            <div class="glass-card p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <span class="text-sm font-semibold text-gray-300">İşlem Günlüğü (Trade Journal)</span>
+                    <span class="text-xs text-gray-500" id="trade-journal-count">0 işlem gösteriliyor</span>
+                </div>
+                <div class="overflow-x-auto max-h-96">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="border-b border-glassBorder text-gray-500 text-xs uppercase tracking-wider">
+                                <th class="pb-3 font-semibold">Varlık</th>
+                                <th class="pb-3 font-semibold">Yön</th>
+                                <th class="pb-3 font-semibold text-right">Miktar</th>
+                                <th class="pb-3 font-semibold text-right">Giriş Fiyatı</th>
+                                <th class="pb-3 font-semibold text-right">Çıkış Fiyatı</th>
+                                <th class="pb-3 font-semibold text-right">Kar / Zarar %</th>
+                                <th class="pb-3 font-semibold">Çıkış Nedeni</th>
+                                <th class="pb-3 font-semibold text-right">MAE</th>
+                                <th class="pb-3 font-semibold text-right">MFE</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trade-journal-body" class="divide-y divide-glassBorder text-sm">
+                            <!-- JS rows here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- JS SCRIPTS -->
+    <script>
+        let equityChart = null;
+        let monteCarloChart = null;
+        let regimeChart = null;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadReportList();
+        });
+
+        async function loadReportList() {
+            const listEl = document.getElementById('reports-list');
+            listEl.innerHTML = '<div class="text-gray-500 text-sm text-center py-8">Raporlar yükleniyor...</div>';
+            
+            try {
+                const res = await fetch('/api/reports');
+                const reports = await res.json();
+                
+                if (reports.length === 0) {
+                    listEl.innerHTML = '<div class="text-gray-500 text-sm text-center py-8">Rapor bulunamadı. Lütfen önce backtest çalıştırın.</div>';
+                    return;
+                }
+                
+                // Sort by timestamp desc
+                reports.sort((a, b) => b.filename.localeCompare(a.filename));
+                
+                listEl.innerHTML = '';
+                reports.forEach((rep) => {
+                    const btn = document.createElement('button');
+                    btn.className = 'w-full text-left p-4 rounded-lg bg-[#151c2c]/40 hover:bg-[#151c2c]/80 border border-glassBorder flex flex-col transition-all';
+                    btn.onclick = () => selectReport(rep.filename, btn);
+                    
+                    const retStr = rep.totalReturn >= 0 ? `+${rep.totalReturn.toFixed(1)}%` : `${rep.totalReturn.toFixed(1)}%`;
+                    const retColor = rep.totalReturn >= 0 ? 'text-accentGreen' : 'text-accentRed';
+                    
+                    btn.innerHTML = `
+                        <div class="flex items-center justify-between w-full">
+                            <span class="font-bold text-gray-200 text-sm truncate w-2/3">${rep.strategyName}</span>
+                            <span class="text-xs font-semibold ${retColor}">${retStr}</span>
+                        </div>
+                        <div class="flex items-center justify-between w-full mt-2 text-xs text-gray-500">
+                            <span>${rep.coin} | ${rep.interval}</span>
+                            <span>Sharpe: ${rep.sharpeRatio.toFixed(2)}</span>
+                        </div>
+                    `;
+                    listEl.appendChild(btn);
+                });
+            } catch (err) {
+                listEl.innerHTML = `<div class="text-red-500 text-sm text-center py-8">Yükleme hatası: ${err.message}</div>`;
+            }
+        }
+
+        async function selectReport(filename, buttonEl) {
+            // Remove active style from all sidebar buttons
+            const buttons = document.querySelectorAll('#reports-list button');
+            buttons.forEach(b => b.classList.remove('border-accentBlue', 'bg-[#151c2c]/90'));
+            
+            // Add active style to selected button
+            buttonEl.classList.add('border-accentBlue', 'bg-[#151c2c]/90');
+            
+            try {
+                const res = await fetch(`/api/reports/${encodeURIComponent(filename)}`);
+                const data = await res.json();
+                renderDashboard(data);
+            } catch (err) {
+                alert('Rapor yüklenemedi: ' + err.message);
+            }
+        }
+
+        function renderDashboard(data) {
+            document.getElementById('dashboard-content').style.display = 'block';
+
+            // ── Set Metadata Titles ──────────────────────────────────────────
+            document.getElementById('active-strategy-title').innerText = data.strategyName || 'Config-based Strategy';
+            document.getElementById('active-coin-subtitle').innerText = `${data.coin} | Aralık: ${data.interval}`;
+            document.getElementById('active-date-range').innerText = `${data.startDate || ''} → ${data.endDate || ''}`;
+
+            // ── Set Metric Cards ──────────────────────────────────────────────
+            const ret = data.totalReturn ?? 0;
+            const retStr = ret >= 0 ? `+${ret.toFixed(2)}%` : `${ret.toFixed(2)}%`;
+            document.getElementById('metric-return').innerText = retStr;
+            document.getElementById('metric-return').className = `text-sm font-semibold ${ret >= 0 ? 'text-accentGreen' : 'text-accentRed'}`;
+            
+            document.getElementById('metric-capital').innerText = `${(data.finalCapital ?? 0).toLocaleString()} USDT`;
+            document.getElementById('metric-initial').innerText = `Başlangıç: ${(data.initialCapital ?? 0).toLocaleString()} USDT`;
+
+            const sharpe = data.sharpeRatio ?? 0;
+            document.getElementById('metric-sharpe').innerText = sharpe.toFixed(3);
+            document.getElementById('metric-pf').innerText = `PF: ${(data.profitFactor ?? 0).toFixed(3)}`;
+            
+            const expectancy = data.analytics?.expectancyUsdt ?? 0;
+            document.getElementById('metric-expectancy').innerText = `Expectancy: ${expectancy.toFixed(1)} USDT`;
+
+            const winRate = data.winRate ?? 0;
+            document.getElementById('metric-winrate').innerText = `+${winRate.toFixed(1)}%`;
+            document.getElementById('metric-trades').innerText = `${data.totalTrades ?? 0} İşlem`;
+            document.getElementById('metric-winloss').innerText = `Win: ${data.winningTrades ?? 0} | Loss: ${data.losingTrades ?? 0}`;
+
+            const maxDd = data.maxDrawdown ?? 0;
+            document.getElementById('metric-maxdd').innerText = `-${maxDd.toFixed(2)}%`;
+            
+            const ruin = data.monteCarlo?.riskOfRuinPercent ?? 0;
+            document.getElementById('metric-ruin').innerText = `Ruin: ${ruin.toFixed(1)}%`;
+
+            const ulcer = data.analytics?.ulcerIndex ?? 0;
+            document.getElementById('metric-ulcer').innerText = `Ulcer Index: ${ulcer.toFixed(2)}`;
+
+            // ── Set Detailed Breakdown Metrics ─────────────────────────────
+            document.getElementById('val-rec').innerText = (data.analytics?.recoveryFactor ?? 0).toFixed(2);
+            document.getElementById('val-mar').innerText = (data.analytics?.marRatio ?? 0).toFixed(2);
+            document.getElementById('val-gainpain').innerText = (data.analytics?.gainPainRatio ?? 0).toFixed(2);
+            document.getElementById('val-exposure').innerText = `${((data.analytics?.exposureTime ?? 0)).toFixed(1)}%`;
+            document.getElementById('val-sqn').innerText = (data.analytics?.sqn ?? 0).toFixed(2);
+            document.getElementById('val-kelly').innerText = `${((data.analytics?.kelly ?? 0) * 100).toFixed(1)}%`;
+            
+            const avgWin = data.avgWin ?? 0;
+            const avgLoss = data.avgLoss ?? 0;
+            document.getElementById('val-avgwinloss').innerText = `${avgWin.toFixed(0)} / ${avgLoss.toFixed(0)}`;
+            document.getElementById('val-capusage').innerText = `${((data.analytics?.capitalUsage ?? 0)).toFixed(1)}%`;
+
+            // ── Trade Journal Table ──────────────────────────────────────────
+            const trades = data.trades || [];
+            document.getElementById('trade-journal-count').innerText = `${trades.length} işlem listelendi`;
+            const tbody = document.getElementById('trade-journal-body');
+            tbody.innerHTML = '';
+            
+            trades.forEach(t => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-800/40 transition-all';
+                
+                const sideColor = t.entryOrder.side === 'BUY' ? 'text-accentGreen' : 'text-accentRed';
+                const pnlColor = t.pnl >= 0 ? 'text-accentGreen' : 'text-accentRed';
+                
+                tr.innerHTML = `
+                    <td class="py-3 font-semibold text-gray-200">${t.asset || data.coin}</td>
+                    <td class="py-3 font-bold ${sideColor}">${t.entryOrder.side}</td>
+                    <td class="py-3 text-right text-gray-400 font-mono">${t.entryOrder.quantity.toFixed(4)}</td>
+                    <td class="py-3 text-right text-gray-400 font-mono">${t.entryOrder.price.toFixed(2)}</td>
+                    <td class="py-3 text-right text-gray-400 font-mono">${t.exitOrder.price.toFixed(2)}</td>
+                    <td class="py-3 text-right font-bold font-mono ${pnlColor}">${t.pnlPercent >= 0 ? '+' : ''}${t.pnlPercent.toFixed(2)}%</td>
+                    <td class="py-3 text-xs text-gray-400 max-w-[200px] truncate" title="${t.exitReason}">${t.exitReason}</td>
+                    <td class="py-3 text-right text-accentRed font-mono">${(t.mae ?? 0).toFixed(2)}%</td>
+                    <td class="py-3 text-right text-accentGreen font-mono">${(t.mfe ?? 0).toFixed(2)}%</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            // ── Render Charts ───────────────────────────────────────────────
+            renderEquityChart(data.equityCurve || []);
+            renderMonteCarloChart(data.monteCarlo || {}, data.initialCapital);
+            renderRegimeChart(data.trades || []);
+        }
+
+        function renderEquityChart(curve) {
+            const ctx = document.getElementById('equityChart').getContext('2d');
+            if (equityChart) equityChart.destroy();
+            
+            const labels = curve.map(c => new Date(c.timestamp).toISOString().slice(0, 10));
+            const equities = curve.map(c => c.equity);
+            const drawdowns = curve.map(c => c.drawdownPercent || 0);
+
+            equityChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Portföy Sermayesi (USDT)',
+                            data: equities,
+                            borderColor: '#3b82f6',
+                            borderWidth: 2,
+                            yAxisID: 'y',
+                            pointRadius: 0,
+                            fill: false,
+                        },
+                        {
+                            label: 'Drawdown (%)',
+                            data: drawdowns,
+                            borderColor: '#ef4444',
+                            borderWidth: 1.5,
+                            backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                            fill: true,
+                            yAxisID: 'y1',
+                            pointRadius: 0,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: { color: '#94a3b8', font: { size: 10 } }
+                        },
+                        y: {
+                            position: 'left',
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: { color: '#3b82f6' }
+                        },
+                        y1: {
+                            position: 'right',
+                            grid: { drawOnChartArea: false },
+                            ticks: { color: '#ef4444' },
+                            reverse: true,
+                            min: 0,
+                            max: 100
+                        }
+                    },
+                    plugins: {
+                        legend: { labels: { color: '#e2e8f0' } }
+                    }
+                }
+            });
+        }
+
+        function renderMonteCarloChart(mc, initialCap) {
+            const ctx = document.getElementById('monteCarloChart').getContext('2d');
+            if (monteCarloChart) monteCarloChart.destroy();
+
+            // Handle empty Monte Carlo object
+            if (!mc || !mc.finalCapitalQuantiles) {
+                // draw empty state or dummy chart
+                return;
+            }
+
+            const quantiles = mc.finalCapitalQuantiles;
+            const labels = ['Worst', 'P5', 'P50 (Median)', 'P95', 'Best'];
+            const data = [
+                quantiles.worst,
+                quantiles.p5,
+                quantiles.p50,
+                quantiles.p95,
+                quantiles.best
+            ];
+
+            monteCarloChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Simüle Bitiş Sermayesi (USDT)',
+                        data: data,
+                        backgroundColor: [
+                            '#ef4444', // Worst
+                            '#f97316', // P5
+                            '#3b82f6', // P50
+                            '#10b981', // P95
+                            '#059669'  // Best
+                        ],
+                        borderWidth: 0,
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#94a3b8', font: { size: 10 } }
+                        },
+                        y: {
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: { color: '#94a3b8' }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
+        function renderRegimeChart(trades) {
+            const ctx = document.getElementById('regimeChart').getContext('2d');
+            if (regimeChart) regimeChart.destroy();
+
+            // Count returns grouped by exitReason/regime properties if logged
+            // Fallback: Group returns by positive vs negative exit trades
+            let profitCount = 0;
+            let lossCount = 0;
+            trades.forEach(t => {
+                if (t.pnlPercent >= 0) profitCount++;
+                else lossCount++;
+            });
+
+            regimeChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Karlı İşlemler', 'Zararlı İşlemler'],
+                    datasets: [{
+                        data: [profitCount, lossCount],
+                        backgroundColor: ['#10b981', '#ef4444'],
+                        borderWidth: 1,
+                        borderColor: '#151c2c'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { color: '#e2e8f0', font: { size: 11 } }
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>

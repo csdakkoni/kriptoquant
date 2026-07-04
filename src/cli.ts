@@ -42,6 +42,7 @@ import { runPortfolioExecution } from './execution/portfolio/portfolio-engine.js
 import { runDiscoveryPipeline } from './research/discovery/pipeline.js';
 import type { DiscoveryReport } from './research/discovery/types.js';
 import { runMonteCarlo } from './research/analytics/monte-carlo.js';
+import { startDashboardServer } from './dashboard/server.js';
 
 // Konfigürasyonları yükle
 import defaultConfig from '../config/default.json' with { type: 'json' };
@@ -632,6 +633,16 @@ async function commandVerifyE2e(): Promise<void> {
 		const discovery = await runDiscoveryPipeline(['E2E_MOCK', 'E2E_MOCK2'], 4, '1d');
 		console.log(`  ✔ [Stage 8/8] Alpha Discovery Pipeline successfully finished. Candidates: ${discovery.totalCandidates}`);
 
+		// 9) Dashboard Server Verification
+		const testServer = startDashboardServer(3005);
+		const pingRes = await fetch('http://localhost:3005/api/reports');
+		if (pingRes.ok) {
+			console.log('  ✔ [Stage 9/9] Local Dashboard server successfully started and responded.');
+		} else {
+			throw new Error(`Dashboard server responded with status: ${pingRes.status}`);
+		}
+		testServer.close();
+
 		console.log('═'.repeat(64));
 		console.log('  🎉 E2E INTEGRATION VERIFICATION PASSED SUCCESSFULLY!');
 		console.log('═'.repeat(64));
@@ -660,10 +671,10 @@ function printUsage(): void {
 	console.log('  walkforward-multi  Multi-Asset Walk-Forward (cross-validation)');
 	console.log('  paper-trade   Paper Trading (simüle, para kullanılmaz)');
 	console.log('  backtest-config  JSON strateji dosyası ile backtest çalıştır');
+	console.log('  dashboard     Premium HTML Dashboard sunucusunu başlat');
 	console.log('');
 	console.log('Seçenekler:');
 	console.log('  --config <yol>        JSON strateji dosyası yolu');
-	console.log('  --coin <sembol>       Coin sembolü (ör. BTCUSDT)');
 	console.log('  --coins <semboller>   Virgülle ayrılmış coinler (ör. BTCUSDT,ETHUSDT)');
 	console.log('  --interval <aralık>   Mum aralığı (ör. 1d, 4h, 1h)');
 	console.log('  --intervals <aralıklar> Virgülle ayrılmış aralıklar (ör. 4h,1d)');
@@ -697,6 +708,7 @@ async function main(): Promise<void> {
 			'risk-percent': { type: 'string', default: '1.0' },
 			'max-positions': { type: 'string', default: '5' },
 			candidates: { type: 'string', default: '20' },
+			port: { type: 'string', default: '3000' },
 			help: { type: 'boolean', short: 'h', default: false },
 		},
 		allowPositionals: true,
@@ -770,6 +782,11 @@ async function main(): Promise<void> {
 			case 'verify-e2e':
 				await commandVerifyE2e();
 				break;
+			case 'dashboard': {
+				const portNum = parseInt(values.port ?? '3000', 10);
+				startDashboardServer(portNum);
+				break;
+			}
 			default:
 				logError(`Bilinmeyen komut: ${command}`);
 				printUsage();
