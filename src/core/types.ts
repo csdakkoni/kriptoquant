@@ -131,6 +131,18 @@ export interface MonteCarloStats {
 	};
 }
 
+export interface PortfolioBacktestResult {
+	readonly initialCapital: number;
+	readonly finalCapital: number;
+	readonly totalReturn: number;
+	readonly maxDrawdown: number;
+	readonly totalTrades: number;
+	readonly winRate: number;
+	readonly profitFactor: number;
+	readonly trades: Trade[];
+	readonly equityCurve: EquityPoint[];
+}
+
 /**
  * Equity curve üzerinde bir nokta.
  */

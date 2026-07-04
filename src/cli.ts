@@ -36,6 +36,9 @@ import { aggregateResearchResults } from './research/multi-asset/aggregator.js';
 import { printMultiAssetReport, exportMultiAssetCSV, exportMultiAssetJSON } from './research/multi-asset/reporter.js';
 import { createStrategyFromConfig } from './research/strategies/factory/index.js';
 import type { StrategyConfig } from './research/strategies/factory/types.js';
+import { CSVTimelineProvider } from './execution/portfolio/timeline-provider.js';
+import { EqualWeightAllocation, RiskBudgetAllocation } from './execution/portfolio/allocation.js';
+import { runPortfolioExecution } from './execution/portfolio/portfolio-engine.js';
 
 // Konfigürasyonları yükle
 import defaultConfig from '../config/default.json' with { type: 'json' };
@@ -179,6 +182,107 @@ async function commandBacktestConfig(
 	}
 
 	// Equity Curve (CSV)
+	const equityPath = exportEquityCurve(enrichedResult);
+	console.log(`  📉 Equity Curve : ${equityPath}`);
+}
+
+async function commandPortfolioBacktest(
+	strategyNameOrConfig: string,
+	coinsStr: string,
+	interval: string,
+	options: {
+		allocation: 'equal' | 'risk-budget';
+		riskPercent: number;
+		maxPositions: number;
+		simulationsCount: number;
+		mcMethod: 'bootstrap' | 'shuffle';
+		ruinPct: number;
+	}
+): Promise<void> {
+	const coins = coinsStr.split(',').map((c) => c.trim()).filter(Boolean);
+	if (coins.length === 0) {
+		logError('Hata: --coins parametresiyle en az bir coin belirtilmelidir.');
+		process.exit(1);
+	}
+
+	const provider = new CSVProvider();
+	const candlesMap = new Map<string, import('./core/types.js').Candle[]>();
+	const strategies = new Map<string, Strategy>();
+
+	let isJson = false;
+	try {
+		if (strategyNameOrConfig.endsWith('.json')) isJson = true;
+	} catch {}
+
+	let configJson: StrategyConfig | undefined;
+	if (isJson) {
+		try {
+			const raw = readFileSync(strategyNameOrConfig, 'utf-8');
+			configJson = JSON.parse(raw) as StrategyConfig;
+		} catch {
+			logError(`Hata: Konfigürasyon dosyası okunamadı: ${strategyNameOrConfig}`);
+			process.exit(1);
+		}
+	}
+
+	for (const coin of coins) {
+		const candles = await provider.getHistory(coin, interval);
+		if (candles.length === 0) {
+			logError(`${coin} için veri bulunamadı.`);
+			process.exit(1);
+		}
+		candlesMap.set(coin, candles);
+
+		if (configJson) {
+			const compiled = createStrategyFromConfig(configJson, candles);
+			strategies.set(coin, compiled.strategy);
+		} else {
+			const strategy = resolveStrategy(strategyNameOrConfig);
+			if (!strategy) {
+				logError(`Bilinmeyen strateji: ${strategyNameOrConfig}`);
+				process.exit(1);
+			}
+			strategies.set(coin, strategy);
+		}
+	}
+
+	const timelineProvider = new CSVTimelineProvider();
+	const alignedTimeline = timelineProvider.alignCandles(candlesMap);
+
+	const allocation = options.allocation === 'risk-budget'
+		? new RiskBudgetAllocation(options.riskPercent, riskParams.stopLossAtrMultiplier)
+		: new EqualWeightAllocation();
+
+	log(`Portföy Backtest başlıyor: ${configJson ? configJson.metadata.name : strategyNameOrConfig} / Varlıklar: ${coins.join(', ')} / ${interval}`);
+	const result = runPortfolioExecution(
+		alignedTimeline,
+		candlesMap,
+		strategies,
+		allocation,
+		platformConfig,
+		riskParams,
+		{ maxPositions: options.maxPositions, preventDoublePosition: true },
+		{
+			method: options.mcMethod,
+			simulationsCount: options.simulationsCount,
+			ruinThresholdPercent: options.ruinPct,
+		}
+	);
+
+	const enrichedResult = {
+		...result,
+		strategyName: configJson ? configJson.metadata.name : strategyNameOrConfig,
+		coin: coins.join('+'),
+		interval,
+		startDate: alignedTimeline[0]?.timestamp ? new Date(alignedTimeline[0].timestamp).toISOString().slice(0, 10) : '',
+		endDate: alignedTimeline[alignedTimeline.length - 1]?.timestamp ? new Date(alignedTimeline[alignedTimeline.length - 1].timestamp).toISOString().slice(0, 10) : '',
+	};
+
+	printReport(enrichedResult);
+	saveReport(enrichedResult);
+
+	const journalPath = exportTradeJournal(enrichedResult);
+	console.log(`  📋 Trade Journal: ${journalPath}`);
 	const equityPath = exportEquityCurve(enrichedResult);
 	console.log(`  📉 Equity Curve : ${equityPath}`);
 }
@@ -394,6 +498,9 @@ async function main(): Promise<void> {
 			simulations: { type: 'string', default: '1000' },
 			'mc-method': { type: 'string', default: 'bootstrap' },
 			'ruin-pct': { type: 'string', default: '30' },
+			allocation: { type: 'string', default: 'equal' },
+			'risk-percent': { type: 'string', default: '1.0' },
+			'max-positions': { type: 'string', default: '5' },
 			help: { type: 'boolean', short: 'h', default: false },
 		},
 		allowPositionals: true,
@@ -427,6 +534,20 @@ async function main(): Promise<void> {
 					ruinThresholdPercent: parseInt(values['ruin-pct'] ?? '30', 10),
 				};
 				await commandBacktestConfig(values.config!, values.coin!, values.interval!, mcOptions);
+				break;
+			}
+			case 'portfolio-backtest': {
+				const opts = {
+					allocation: (values.allocation === 'risk-budget' ? 'risk-budget' : 'equal') as 'equal' | 'risk-budget',
+					riskPercent: parseFloat(values['risk-percent'] ?? '1.0'),
+					maxPositions: parseInt(values['max-positions'] ?? '5', 10),
+					simulationsCount: parseInt(values.simulations ?? '1000', 10),
+					mcMethod: (values['mc-method'] === 'shuffle' ? 'shuffle' : 'bootstrap') as 'bootstrap' | 'shuffle',
+					ruinPct: parseInt(values['ruin-pct'] ?? '30', 10),
+				};
+				const strat = values.config || values.strategy || 'sma-cross';
+				const coins = values.coins || values.coin || 'BTCUSDT';
+				await commandPortfolioBacktest(strat, coins, values.interval!, opts);
 				break;
 			}
 			case 'sweep':
