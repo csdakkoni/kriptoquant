@@ -10,7 +10,7 @@
 // ============================================================================
 
 import { parseArgs } from 'node:util';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'node:fs';
 import type { PlatformConfig, RiskConfig, Strategy, StrategyDefaultsConfig } from './core/types.js';
 import { log, logError } from './core/utils.js';
 import { fetchAndStore } from './data/fetcher.js';
@@ -41,6 +41,7 @@ import { EqualWeightAllocation, RiskBudgetAllocation } from './execution/portfol
 import { runPortfolioExecution } from './execution/portfolio/portfolio-engine.js';
 import { runDiscoveryPipeline } from './research/discovery/pipeline.js';
 import type { DiscoveryReport } from './research/discovery/types.js';
+import { runMonteCarlo } from './research/analytics/monte-carlo.js';
 
 // Konfigürasyonları yükle
 import defaultConfig from '../config/default.json' with { type: 'json' };
@@ -508,6 +509,139 @@ function printDiscoveryReportTable(report: DiscoveryReport): void {
 	console.log('═'.repeat(75));
 }
 
+async function commandVerifyE2e(): Promise<void> {
+	console.log('═'.repeat(64));
+	console.log('  🔬 KRIPTOQUANT — End-to-End Integration Verification');
+	console.log('═'.repeat(64));
+
+	const mockFile1 = 'data/raw/E2E_MOCK_1d.json';
+	const mockFile2 = 'data/raw/E2E_MOCK2_1d.json';
+
+	try {
+		// 1) Mock mum verisi üret ve kaydet
+		const candles1: import('./core/types.js').Candle[] = [];
+		const candles2: import('./core/types.js').Candle[] = [];
+		let price1 = 100;
+		let price2 = 50;
+		const now = Date.now() - 120 * 86400000;
+		for (let i = 0; i < 120; i++) {
+			const t = now + i * 86400000;
+			price1 += i > 20 && i < 60 ? 2 : i > 60 && i < 100 ? -2.5 : 0.2;
+			price2 += i > 30 && i < 70 ? 1 : i > 70 && i < 110 ? -1.2 : 0.1;
+
+			candles1.push({
+				openTime: t,
+				closeTime: t + 86400000,
+				open: price1 - 0.1,
+				high: price1 + 2,
+				low: price1 - 2,
+				close: price1,
+				volume: 1000,
+			});
+			candles2.push({
+				openTime: t,
+				closeTime: t + 86400000,
+				open: price2 - 0.1,
+				high: price2 + 1,
+				low: price2 - 1,
+				close: price2,
+				volume: 500,
+			});
+		}
+
+		if (!existsSync('data/raw')) {
+			mkdirSync('data/raw', { recursive: true });
+		}
+		writeFileSync(mockFile1, JSON.stringify(candles1, null, 2), 'utf-8');
+		writeFileSync(mockFile2, JSON.stringify(candles2, null, 2), 'utf-8');
+		console.log('  ✔ [Stage 1/8] Mock raw candles generated.');
+
+		// 2) Strateji Derleme (Strategy Factory)
+		const configJson: StrategyConfig = {
+			metadata: { name: 'e2e-strat', version: '1.0.0', description: 'E2E Validation Strat' },
+			warmupPeriod: 25,
+			indicators: [
+				{ id: 'fast', type: 'ema', params: [9] },
+				{ id: 'slow', type: 'ema', params: [21] },
+				{ id: 'rsi', type: 'rsi', params: [14] },
+				{ id: 'atr', type: 'atr', params: [14] },
+			],
+			entry: {
+				type: 'comparison',
+				operator: '>',
+				left: { type: 'indicator', id: 'fast' },
+				right: { type: 'indicator', id: 'slow' },
+			},
+			exit: {
+				type: 'comparison',
+				operator: '<',
+				left: { type: 'indicator', id: 'fast' },
+				right: { type: 'indicator', id: 'slow' },
+			},
+		};
+		const compiled = createStrategyFromConfig(configJson, candles1);
+		console.log(`  ✔ [Stage 2/8] Strategy Factory successfully compiled strategy: ${compiled.strategy.name}`);
+
+		// 3) Single asset Backtest
+		const backtestResult = runBacktest(compiled.strategy, candles1, platformConfig, riskParams, 'E2E_MOCK');
+		console.log(`  ✔ [Stage 3/8] Single-asset backtest run completed. Trades: ${backtestResult.totalTrades}`);
+
+		// 4) Walk-Forward & Rolling Walk-Forward
+		const rollingResult = runRollingWalkForward(candles1, platformConfig, riskParams, 'E2E_MOCK', '1d', compiled.strategy.name, 3);
+		console.log(`  ✔ [Stage 4/8] Rolling Walk-Forward validation run completed. Windows: ${rollingResult.windows.length}`);
+
+		// 5) Multi-Asset Walk-Forward check
+		const multiResult = await runMultiAssetResearch(
+			{ coins: ['E2E_MOCK', 'E2E_MOCK2'], intervals: ['1d'], strategyName: compiled.strategy.name, numWindows: 2 },
+			platformConfig,
+			riskParams
+		);
+		console.log(`  ✔ [Stage 5/8] Multi-Asset walk-forward cross-validation completed. Runs: ${multiResult.length}`);
+
+		// 6) Monte Carlo Risk check
+		const mc = runMonteCarlo(backtestResult.trades.map((t) => t.pnlPercent), platformConfig.initialCapital, {
+			method: 'bootstrap',
+			simulationsCount: 100,
+			ruinThresholdPercent: 30,
+		});
+		console.log(`  ✔ [Stage 6/8] Monte Carlo simulation run completed. Risk of Ruin: ${mc.riskOfRuinPercent}%`);
+
+		// 7) Portfolio Backtest simulation
+		const timelineProvider = new CSVTimelineProvider();
+		const candlesMap = new Map();
+		candlesMap.set('E2E_MOCK', candles1);
+		candlesMap.set('E2E_MOCK2', candles2);
+		const alignedTimeline = timelineProvider.alignCandles(candlesMap);
+
+		const strategiesMap = new Map();
+		strategiesMap.set('E2E_MOCK', compiled.strategy);
+		strategiesMap.set('E2E_MOCK2', createStrategyFromConfig(configJson, candles2).strategy);
+
+		const portfolioResult = runPortfolioExecution(
+			alignedTimeline,
+			candlesMap,
+			strategiesMap,
+			new EqualWeightAllocation(),
+			platformConfig,
+			riskParams,
+			{ maxPositions: 2, preventDoublePosition: true }
+		);
+		console.log(`  ✔ [Stage 7/8] Portfolio multi-position engine execution completed. Return: ${portfolioResult.totalReturn}%`);
+
+		// 8) Alpha Discovery Pipeline
+		const discovery = await runDiscoveryPipeline(['E2E_MOCK', 'E2E_MOCK2'], 4, '1d');
+		console.log(`  ✔ [Stage 8/8] Alpha Discovery Pipeline successfully finished. Candidates: ${discovery.totalCandidates}`);
+
+		console.log('═'.repeat(64));
+		console.log('  🎉 E2E INTEGRATION VERIFICATION PASSED SUCCESSFULLY!');
+		console.log('═'.repeat(64));
+
+	} finally {
+		if (existsSync(mockFile1)) unlinkSync(mockFile1);
+		if (existsSync(mockFile2)) unlinkSync(mockFile2);
+	}
+}
+
 // ─── Ana Giriş ──────────────────────────────────────────────────────────────
 
 function printUsage(): void {
@@ -632,6 +766,9 @@ async function main(): Promise<void> {
 				break;
 			case 'paper-trade':
 				await commandPaperTrade(values.strategy!, values.coin!, values.interval!);
+				break;
+			case 'verify-e2e':
+				await commandVerifyE2e();
 				break;
 			default:
 				logError(`Bilinmeyen komut: ${command}`);
