@@ -57,7 +57,7 @@ export interface WalkForwardResult {
  * Strateji adına göre sweep config'i filtreler.
  * "donchian-breakout" verilmişse sadece Donchian parametrelerini tutar.
  */
-function filterSweepByStrategy(config: SweepConfig, strategyName?: string): SweepConfig {
+export function filterSweepByStrategy(config: SweepConfig, strategyName?: string): SweepConfig {
 	if (!strategyName) return config;
 
 	switch (strategyName) {
@@ -72,7 +72,7 @@ function filterSweepByStrategy(config: SweepConfig, strategyName?: string): Swee
 
 // ─── Overfitting Detector ────────────────────────────────────────────────────
 
-function scoreGeneralization(trainReturn: number, testReturn: number): GeneralizationScore {
+export function scoreGeneralization(trainReturn: number, testReturn: number): GeneralizationScore {
 	if (testReturn < 0) {
 		return { retention: 0, label: 'FAILED', emoji: '❌' };
 	}
@@ -91,7 +91,7 @@ function scoreGeneralization(trainReturn: number, testReturn: number): Generaliz
 
 // ─── Metrics Extractor ───────────────────────────────────────────────────────
 
-function extractMetrics(result: ExperimentResult): WalkForwardMetrics {
+export function extractMetrics(result: ExperimentResult): WalkForwardMetrics {
 	return {
 		totalReturn: result.totalReturn,
 		sharpeRatio: result.sharpeRatio,
