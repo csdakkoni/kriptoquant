@@ -5,10 +5,10 @@
 4 silly config load:file:/Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant/.npmrc
 5 silly config load:file:/Users/erdemaslan/.npmrc
 6 silly config load:file:/usr/local/etc/npmrc
-7 verbose title npm exec vitest run
-8 verbose argv "exec" "--" "vitest" "run"
-9 verbose logfile logs-max:10 dir:/Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant/.npm-cache/_logs/2026-07-04T16_35_43_736Z-
-10 verbose logfile /Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant/.npm-cache/_logs/2026-07-04T16_35_43_736Z-debug-0.log
+7 verbose title npm exec tsx src/cli.ts portfolio-backtest --config examples/ema_cross.json --coins BTCUSDT,ETHUSDT,SOLUSDT --interval 1d --allocation equal
+8 verbose argv "exec" "--" "tsx" "src/cli.ts" "portfolio-backtest" "--config" "examples/ema_cross.json" "--coins" "BTCUSDT,ETHUSDT,SOLUSDT" "--interval" "1d" "--allocation" "equal"
+9 verbose logfile logs-max:10 dir:/Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant/.npm-cache/_logs/2026-07-04T18_16_03_020Z-
+10 verbose logfile /Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant/.npm-cache/_logs/2026-07-04T18_16_03_020Z-debug-0.log
 11 silly logfile start cleaning logs, removing 1 files
 12 silly logfile done cleaning log files
 13 verbose cwd /Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant

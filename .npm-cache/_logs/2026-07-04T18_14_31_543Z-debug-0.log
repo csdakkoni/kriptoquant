@@ -5,10 +5,10 @@
 4 silly config load:file:/Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant/.npmrc
 5 silly config load:file:/Users/erdemaslan/.npmrc
 6 silly config load:file:/usr/local/etc/npmrc
-7 verbose title npm exec tsx src/cli.ts portfolio-backtest --strategy ema-cross --coins BTCUSDT,ETHUSDT --interval 1d --max-positions 2 --allocation risk-budget --risk-percent 2
-8 verbose argv "exec" "--" "tsx" "src/cli.ts" "portfolio-backtest" "--strategy" "ema-cross" "--coins" "BTCUSDT,ETHUSDT" "--interval" "1d" "--max-positions" "2" "--allocation" "risk-budget" "--risk-percent" "2"
-9 verbose logfile logs-max:10 dir:/Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant/.npm-cache/_logs/2026-07-04T16_26_22_116Z-
-10 verbose logfile /Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant/.npm-cache/_logs/2026-07-04T16_26_22_116Z-debug-0.log
+7 verbose title npm exec tsx src/cli.ts alpha-discover --coins BTCUSDT,ETHUSDT --candidates 50 --interval 4h
+8 verbose argv "exec" "--" "tsx" "src/cli.ts" "alpha-discover" "--coins" "BTCUSDT,ETHUSDT" "--candidates" "50" "--interval" "4h"
+9 verbose logfile logs-max:10 dir:/Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant/.npm-cache/_logs/2026-07-04T18_14_31_543Z-
+10 verbose logfile /Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant/.npm-cache/_logs/2026-07-04T18_14_31_543Z-debug-0.log
 11 silly logfile start cleaning logs, removing 1 files
 12 silly logfile done cleaning log files
 13 verbose cwd /Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant

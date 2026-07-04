@@ -103,8 +103,25 @@ export function runPortfolioExecution(
 				if (constraints.preventDoublePosition && positionBook.hasOpen(coin)) continue;
 				if (positionBook.getOpenCount() >= constraints.maxPositions) continue;
 
-				// ATR değeri
-				const atr = (strategy as any).indicatorsData?.get('atr')?.[candleIdx] ?? 0;
+				// ATR değeri (varsa stratejiden al, yoksa dinamik hesapla)
+				let atr = (strategy as any).indicatorsData?.get('atr')?.[candleIdx];
+				if (atr === undefined || atr === 0 || Number.isNaN(atr)) {
+					const coinCandles = candlesMap.get(coin) ?? [];
+					if (coinCandles.length >= 15 && candleIdx >= 14) {
+						let sum = 0;
+						for (let k = candleIdx - 13; k <= candleIdx; k++) {
+							const c = coinCandles[k];
+							const prevC = coinCandles[k - 1];
+							const tr = prevC
+								? Math.max(c.high - c.low, Math.abs(c.high - prevC.close), Math.abs(c.low - prevC.close))
+								: c.high - c.low;
+							sum += tr;
+						}
+						atr = sum / 14;
+					} else {
+						atr = candle.close * 0.02 / (riskConfig.stopLossAtrMultiplier ?? 2.0);
+					}
+				}
 
 				// Sermaye dağıtım boyutu
 				const allocSize = allocation.allocate(coin, candle.close, atr, {

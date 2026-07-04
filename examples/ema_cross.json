@@ -1,0 +1,34 @@
+{
+	"metadata": {
+		"name": "ema-cross-lego",
+		"version": "1.0.0",
+		"tags": ["trend-following", "crossover"],
+		"category": "Trend",
+		"author": "KriptoQuant Factory"
+	},
+	"warmupPeriod": 22,
+	"indicators": [
+		{
+			"id": "fast",
+			"type": "ema",
+			"params": [9]
+		},
+		{
+			"id": "slow",
+			"type": "ema",
+			"params": [21]
+		}
+	],
+	"entry": {
+		"type": "crossover",
+		"operator": "cross-above",
+		"left": { "type": "indicator", "id": "fast" },
+		"right": { "type": "indicator", "id": "slow" }
+	},
+	"exit": {
+		"type": "crossover",
+		"operator": "cross-below",
+		"left": { "type": "indicator", "id": "fast" },
+		"right": { "type": "indicator", "id": "slow" }
+	}
+}
