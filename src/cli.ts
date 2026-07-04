@@ -10,6 +10,7 @@
 // ============================================================================
 
 import { parseArgs } from 'node:util';
+import { readFileSync } from 'node:fs';
 import type { PlatformConfig, RiskConfig, Strategy, StrategyDefaultsConfig } from './core/types.js';
 import { log, logError } from './core/utils.js';
 import { fetchAndStore } from './data/fetcher.js';
@@ -33,6 +34,8 @@ import { CSVTradeLogger } from './execution/trade-logger.js';
 import { runMultiAssetResearch } from './research/multi-asset/runner.js';
 import { aggregateResearchResults } from './research/multi-asset/aggregator.js';
 import { printMultiAssetReport, exportMultiAssetCSV, exportMultiAssetJSON } from './research/multi-asset/reporter.js';
+import { createStrategyFromConfig } from './research/strategies/factory/index.js';
+import type { StrategyConfig } from './research/strategies/factory/types.js';
 
 // Konfigürasyonları yükle
 import defaultConfig from '../config/default.json' with { type: 'json' };
@@ -101,6 +104,63 @@ async function commandBacktest(
 	console.log(`  📋 Trade Journal: ${journalPath}`);
 
 	// Signal Journal (CSV) — tüm sinyaller (accepted + rejected)
+	if (enrichedResult.analyzedSignals && enrichedResult.analyzedSignals.length > 0) {
+		const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+		const signalPath = `results/signals_${strategy.name}_${coin}_${timestamp}.csv`;
+		exportSignalJournal(enrichedResult.analyzedSignals, signalPath);
+		console.log(`  📊 Signal Journal: ${signalPath}`);
+	}
+
+	// Equity Curve (CSV)
+	const equityPath = exportEquityCurve(enrichedResult);
+	console.log(`  📉 Equity Curve : ${equityPath}`);
+}
+
+async function commandBacktestConfig(
+	configPath: string,
+	coin: string,
+	interval: string,
+): Promise<void> {
+	if (!configPath) {
+		logError('Hata: --config seçeneğiyle bir JSON dosyası belirtilmelidir.');
+		process.exit(1);
+	}
+
+	let configJson: StrategyConfig;
+	try {
+		const raw = readFileSync(configPath, 'utf-8');
+		configJson = JSON.parse(raw) as StrategyConfig;
+	} catch (e) {
+		logError(`Hata: Konfigürasyon dosyası okunamadı veya parse edilemedi: ${configPath}`);
+		process.exit(1);
+	}
+
+	const provider = new CSVProvider();
+	const candles = await provider.getHistory(coin, interval);
+
+	if (candles.length === 0) {
+		logError(`${coin} için veri bulunamadı.`);
+		process.exit(1);
+	}
+
+	log(`Strategy Factory: ${configJson.metadata.name} (v${configJson.metadata.version}) yükleniyor...`);
+	const compiled = createStrategyFromConfig(configJson, candles);
+	const strategy = compiled.strategy;
+
+	log(`Backtest başlıyor (Config): ${strategy.name} / ${coin} / ${interval}`);
+	const result = runBacktest(strategy, candles, platformConfig, riskParams, coin, strategyDefaults);
+
+	const enrichedResult = { ...result, interval };
+
+	// Raporlar
+	printReport(enrichedResult);
+	saveReport(enrichedResult);
+
+	// Trade Journal (CSV)
+	const journalPath = exportTradeJournal(enrichedResult);
+	console.log(`  📋 Trade Journal: ${journalPath}`);
+
+	// Signal Journal (CSV)
 	if (enrichedResult.analyzedSignals && enrichedResult.analyzedSignals.length > 0) {
 		const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
 		const signalPath = `results/signals_${strategy.name}_${coin}_${timestamp}.csv`;
@@ -290,8 +350,10 @@ function printUsage(): void {
 	console.log('  walkforward-rolling  Rolling Walk-Forward (multi-window)');
 	console.log('  walkforward-multi  Multi-Asset Walk-Forward (cross-validation)');
 	console.log('  paper-trade   Paper Trading (simüle, para kullanılmaz)');
+	console.log('  backtest-config  JSON strateji dosyası ile backtest çalıştır');
 	console.log('');
 	console.log('Seçenekler:');
+	console.log('  --config <yol>        JSON strateji dosyası yolu');
 	console.log('  --coin <sembol>       Coin sembolü (ör. BTCUSDT)');
 	console.log('  --coins <semboller>   Virgülle ayrılmış coinler (ör. BTCUSDT,ETHUSDT)');
 	console.log('  --interval <aralık>   Mum aralığı (ör. 1d, 4h, 1h)');
@@ -318,6 +380,7 @@ async function main(): Promise<void> {
 			interval: { type: 'string', default: platformConfig.defaultInterval },
 			intervals: { type: 'string' },
 			strategy: { type: 'string', default: 'sma-cross' },
+			config: { type: 'string' },
 			help: { type: 'boolean', short: 'h', default: false },
 		},
 		allowPositionals: true,
@@ -337,6 +400,9 @@ async function main(): Promise<void> {
 				break;
 			case 'backtest':
 				await commandBacktest(values.strategy!, values.coin!, values.interval!);
+				break;
+			case 'backtest-config':
+				await commandBacktestConfig(values.config!, values.coin!, values.interval!);
 				break;
 			case 'sweep':
 				await commandSweep(values.coin!, values.interval!);
