@@ -30,6 +30,9 @@ import { PaperBroker } from './execution/paper-broker.js';
 import { runExecution } from './execution/engine.js';
 import { CSVProvider } from './data/csv-provider.js';
 import { CSVTradeLogger } from './execution/trade-logger.js';
+import { runMultiAssetResearch } from './research/multi-asset/runner.js';
+import { aggregateResearchResults } from './research/multi-asset/aggregator.js';
+import { printMultiAssetReport, exportMultiAssetCSV, exportMultiAssetJSON } from './research/multi-asset/reporter.js';
 
 // Konfigürasyonları yükle
 import defaultConfig from '../config/default.json' with { type: 'json' };
@@ -234,6 +237,42 @@ async function commandPaperTrade(strategyName: string, coin: string, interval: s
 	console.log(`  🏷️  Mode: PAPER (para kullanılmadı)`);
 }
 
+async function commandMultiAsset(strategyName: string, coinsStr?: string, intervalsStr?: string): Promise<void> {
+	const strategy = resolveStrategy(strategyName);
+	if (!strategy) {
+		logError(`Bilinmeyen strateji: ${strategyName}`);
+		logError('Mevcut stratejiler: sma-cross, ema-cross, donchian-breakout');
+		process.exit(1);
+	}
+
+	const coins = coinsStr ? coinsStr.split(',') : ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT'];
+	const intervals = intervalsStr ? intervalsStr.split(',') : ['4h', '1d'];
+
+	log(`Çoklu varlık analizi başlıyor... Strateji: ${strategy.name}`);
+	log(`Coinler  : ${coins.join(', ')}`);
+	log(`Aralıklar: ${intervals.join(', ')}`);
+
+	const results = await runMultiAssetResearch(
+		{ coins, intervals, strategyName: strategy.name },
+		platformConfig,
+		riskParams,
+	);
+
+	const summary = aggregateResearchResults(results, strategy.name);
+
+	printMultiAssetReport(summary);
+
+	// Exporters
+	const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+	const csvFilename = `results/multi_asset_${strategy.name}_${timestamp}.csv`;
+	exportMultiAssetCSV(summary, csvFilename);
+	console.log(`  💾 CSV: ${csvFilename}`);
+
+	const jsonFilename = `results/multi_asset_summary_${strategy.name}_${timestamp}.json`;
+	exportMultiAssetJSON(summary, jsonFilename);
+	console.log(`  🔬 JSON: ${jsonFilename}`);
+}
+
 // ─── Ana Giriş ──────────────────────────────────────────────────────────────
 
 function printUsage(): void {
@@ -249,11 +288,14 @@ function printUsage(): void {
 	console.log('  sweep         Parametre tarama laboratuvarı');
 	console.log('  walkforward   Walk-Forward Validation');
 	console.log('  walkforward-rolling  Rolling Walk-Forward (multi-window)');
+	console.log('  walkforward-multi  Multi-Asset Walk-Forward (cross-validation)');
 	console.log('  paper-trade   Paper Trading (simüle, para kullanılmaz)');
 	console.log('');
 	console.log('Seçenekler:');
 	console.log('  --coin <sembol>       Coin sembolü (ör. BTCUSDT)');
+	console.log('  --coins <semboller>   Virgülle ayrılmış coinler (ör. BTCUSDT,ETHUSDT)');
 	console.log('  --interval <aralık>   Mum aralığı (ör. 1d, 4h, 1h)');
+	console.log('  --intervals <aralıklar> Virgülle ayrılmış aralıklar (ör. 4h,1d)');
 	console.log('  --strategy <ad>       Strateji adı (ema-cross, donchian-breakout)');
 	console.log('');
 	console.log('Örnekler:');
@@ -262,6 +304,7 @@ function printUsage(): void {
 	console.log('  npx tsx src/cli.ts sweep --coin BTCUSDT --interval 1d');
 	console.log('  npx tsx src/cli.ts walkforward --strategy donchian-breakout --coin BTCUSDT');
 	console.log('  npx tsx src/cli.ts walkforward-rolling --strategy donchian-breakout --coin BTCUSDT');
+	console.log('  npx tsx src/cli.ts walkforward-multi --strategy donchian-breakout --coins BTCUSDT,ETHUSDT --intervals 4h,1d');
 	console.log('  npx tsx src/cli.ts paper-trade --strategy donchian-breakout --coin BTCUSDT');
 	console.log('');
 }
@@ -271,7 +314,9 @@ async function main(): Promise<void> {
 		args: process.argv.slice(2),
 		options: {
 			coin: { type: 'string', default: 'BTCUSDT' },
+			coins: { type: 'string' },
 			interval: { type: 'string', default: platformConfig.defaultInterval },
+			intervals: { type: 'string' },
 			strategy: { type: 'string', default: 'sma-cross' },
 			help: { type: 'boolean', short: 'h', default: false },
 		},
@@ -301,6 +346,9 @@ async function main(): Promise<void> {
 				break;
 			case 'walkforward-rolling':
 				await commandRollingWalkForward(values.strategy!, values.coin!, values.interval!);
+				break;
+			case 'walkforward-multi':
+				await commandMultiAsset(values.strategy!, values.coins, values.intervals);
 				break;
 			case 'paper-trade':
 				await commandPaperTrade(values.strategy!, values.coin!, values.interval!);
