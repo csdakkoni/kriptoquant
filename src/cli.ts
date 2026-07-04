@@ -73,6 +73,11 @@ async function commandBacktest(
 	strategyName: string,
 	coin: string,
 	interval: string,
+	mcOptions?: {
+		readonly method?: 'bootstrap' | 'shuffle';
+		readonly simulationsCount?: number;
+		readonly ruinThresholdPercent?: number;
+	},
 ): Promise<void> {
 	const strategy = resolveStrategy(strategyName);
 	if (!strategy) {
@@ -90,7 +95,7 @@ async function commandBacktest(
 	}
 
 	log(`Backtest başlıyor: ${strategy.name} / ${coin} / ${interval}`);
-	const result = runBacktest(strategy, candles, platformConfig, riskParams, coin, strategyDefaults);
+	const result = runBacktest(strategy, candles, platformConfig, riskParams, coin, strategyDefaults, mcOptions);
 
 	// interval bilgisini sonuca ekle
 	const enrichedResult = { ...result, interval };
@@ -120,6 +125,11 @@ async function commandBacktestConfig(
 	configPath: string,
 	coin: string,
 	interval: string,
+	mcOptions?: {
+		readonly method?: 'bootstrap' | 'shuffle';
+		readonly simulationsCount?: number;
+		readonly ruinThresholdPercent?: number;
+	},
 ): Promise<void> {
 	if (!configPath) {
 		logError('Hata: --config seçeneğiyle bir JSON dosyası belirtilmelidir.');
@@ -148,7 +158,7 @@ async function commandBacktestConfig(
 	const strategy = compiled.strategy;
 
 	log(`Backtest başlıyor (Config): ${strategy.name} / ${coin} / ${interval}`);
-	const result = runBacktest(strategy, candles, platformConfig, riskParams, coin, strategyDefaults);
+	const result = runBacktest(strategy, candles, platformConfig, riskParams, coin, strategyDefaults, mcOptions);
 
 	const enrichedResult = { ...result, interval };
 
@@ -381,6 +391,9 @@ async function main(): Promise<void> {
 			intervals: { type: 'string' },
 			strategy: { type: 'string', default: 'sma-cross' },
 			config: { type: 'string' },
+			simulations: { type: 'string', default: '1000' },
+			'mc-method': { type: 'string', default: 'bootstrap' },
+			'ruin-pct': { type: 'string', default: '30' },
 			help: { type: 'boolean', short: 'h', default: false },
 		},
 		allowPositionals: true,
@@ -398,12 +411,24 @@ async function main(): Promise<void> {
 			case 'fetch':
 				await commandFetch(values.coin!, values.interval!);
 				break;
-			case 'backtest':
-				await commandBacktest(values.strategy!, values.coin!, values.interval!);
+			case 'backtest': {
+				const mcOptions = {
+					simulationsCount: parseInt(values.simulations ?? '1000', 10),
+					method: (values['mc-method'] === 'shuffle' ? 'shuffle' : 'bootstrap') as 'bootstrap' | 'shuffle',
+					ruinThresholdPercent: parseInt(values['ruin-pct'] ?? '30', 10),
+				};
+				await commandBacktest(values.strategy!, values.coin!, values.interval!, mcOptions);
 				break;
-			case 'backtest-config':
-				await commandBacktestConfig(values.config!, values.coin!, values.interval!);
+			}
+			case 'backtest-config': {
+				const mcOptions = {
+					simulationsCount: parseInt(values.simulations ?? '1000', 10),
+					method: (values['mc-method'] === 'shuffle' ? 'shuffle' : 'bootstrap') as 'bootstrap' | 'shuffle',
+					ruinThresholdPercent: parseInt(values['ruin-pct'] ?? '30', 10),
+				};
+				await commandBacktestConfig(values.config!, values.coin!, values.interval!, mcOptions);
 				break;
+			}
 			case 'sweep':
 				await commandSweep(values.coin!, values.interval!);
 				break;

@@ -169,6 +169,27 @@ export function printReport(result: BacktestResult): void {
 		}
 	}
 
+	// ── Monte Carlo Risk Simülasyonu ─────────────────────────────────────
+	if (result.monteCarlo) {
+		console.log('');
+		console.log(thinDivider);
+		console.log(`  🎲 Monte Carlo Risk Simülasyonu (${result.monteCarlo.simulationsCount} Simülasyon - ${result.monteCarlo.method.toUpperCase()})`);
+		console.log(thinDivider);
+		console.log(`  Risk of Ruin (%${result.monteCarlo.ruinThresholdPercent} çöküş) : ${result.monteCarlo.riskOfRuinPercent.toFixed(2)}%`);
+		console.log('');
+		console.log('  Max Drawdown Quantiles:');
+		console.log(`    P50 (Median)           : ${formatPercent(-result.monteCarlo.drawdownQuantiles.p50)}`);
+		console.log(`    P95 (Güven Sınırı)     : ${formatPercent(-result.monteCarlo.drawdownQuantiles.p95)}`);
+		console.log(`    Worst Path             : ${formatPercent(-result.monteCarlo.drawdownQuantiles.worst)}`);
+		console.log('');
+		console.log('  Final Capital Quantiles:');
+		console.log(`    Worst Path             : ${formatUSDT(result.monteCarlo.capitalQuantiles.worst)}`);
+		console.log(`    P5 (En Kötü %5)        : ${formatUSDT(result.monteCarlo.capitalQuantiles.p5)}`);
+		console.log(`    P50 (Median)           : ${formatUSDT(result.monteCarlo.capitalQuantiles.p50)}`);
+		console.log(`    P95 (En İyi %5)        : ${formatUSDT(result.monteCarlo.capitalQuantiles.p95)}`);
+		console.log(`    Best Path              : ${formatUSDT(result.monteCarlo.capitalQuantiles.best)}`);
+	}
+
 	// ── Filter Statistics ──────────────────────────────────────────────
 	if (result.filterStats && result.filterStats.rejected > 0) {
 		console.log('');

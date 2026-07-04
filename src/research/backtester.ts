@@ -30,7 +30,12 @@ export function runBacktest(
 	riskConfig: RiskConfig,
 	coin: string = '',
 	strategyDefaults?: StrategyDefaultsConfig,
+	mcOptions?: {
+		readonly method?: 'bootstrap' | 'shuffle';
+		readonly simulationsCount?: number;
+		readonly ruinThresholdPercent?: number;
+	},
 ): BacktestResult {
 	const broker = new SimulatedBroker(config.commissionPercent, config.slippagePercent);
-	return runExecution(candles, strategy, broker, config, riskConfig, coin, strategyDefaults);
+	return runExecution(candles, strategy, broker, config, riskConfig, coin, strategyDefaults, undefined, mcOptions);
 }

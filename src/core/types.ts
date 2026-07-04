@@ -109,6 +109,26 @@ export interface BacktestResult {
 			readonly drawdowns: number[];
 		};
 	};
+	readonly monteCarlo?: MonteCarloStats;
+}
+
+export interface MonteCarloStats {
+	readonly method: 'bootstrap' | 'shuffle';
+	readonly simulationsCount: number;
+	readonly ruinThresholdPercent: number;
+	readonly riskOfRuinPercent: number;
+	readonly capitalQuantiles: {
+		readonly worst: number;
+		readonly p5: number;
+		readonly p50: number;
+		readonly p95: number;
+		readonly best: number;
+	};
+	readonly drawdownQuantiles: {
+		readonly p50: number;
+		readonly p95: number;
+		readonly worst: number;
+	};
 }
 
 /**

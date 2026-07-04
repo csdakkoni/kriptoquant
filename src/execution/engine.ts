@@ -31,6 +31,7 @@ import type { TradeLogger } from './trade-logger.js';
 import { buildAnalyticsSummary } from '../research/analytics/summary.js';
 import { DefaultRegimeClassifier } from '../research/regime/classifier.js';
 import { analyzeRegimes } from '../research/regime/regime-analyzer.js';
+import { runMonteCarlo } from '../research/analytics/monte-carlo.js';
 
 const ATR_PERIOD = 14;
 
@@ -58,6 +59,11 @@ export function runExecution(
 	coin: string = '',
 	strategyDefaults?: StrategyDefaultsConfig,
 	logger?: TradeLogger,
+	mcOptions?: {
+		readonly method?: 'bootstrap' | 'shuffle';
+		readonly simulationsCount?: number;
+		readonly ruinThresholdPercent?: number;
+	},
 ): BacktestResult {
 	const portfolio = new Portfolio(config.initialCapital);
 	const stopRule = new AtrStopRule(riskConfig.stopLossAtrMultiplier);
@@ -190,7 +196,7 @@ export function runExecution(
 	}
 
 	// ── Metrikleri hesapla ───────────────────────────────────────────────
-	return buildResult(strategy, candles, portfolio, coin, analyzedSignals);
+	return buildResult(strategy, candles, portfolio, coin, analyzedSignals, mcOptions);
 }
 
 // ─── Sonuç Hesaplama ─────────────────────────────────────────────────────────
@@ -201,6 +207,11 @@ function buildResult(
 	portfolio: Portfolio,
 	coin: string,
 	analyzedSignals: AnalyzedSignal[],
+	mcOptions?: {
+		readonly method?: 'bootstrap' | 'shuffle';
+		readonly simulationsCount?: number;
+		readonly ruinThresholdPercent?: number;
+	},
 ): BacktestResult {
 	const trades = [...portfolio.getTrades()];
 	const equityCurve = [...portfolio.getEquityCurve()];
@@ -274,6 +285,11 @@ function buildResult(
 			initialCapital,
 			finalCapital,
 			portfolio.getMaxDrawdown(),
+		),
+		monteCarlo: runMonteCarlo(
+			trades.map((t) => t.pnlPercent),
+			initialCapital,
+			mcOptions,
 		),
 	};
 }
