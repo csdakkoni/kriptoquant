@@ -19,6 +19,8 @@ export class PositionManager {
 	private entryCommission: number = 0;
 	private entryValue: number = 0;
 	private entryOrder: Order | null = null;
+	private highestPrice: number = 0;
+	private lowestPrice: number = 0;
 
 	open(fill: Fill, orderValue: number, atrAtEntry: number, stopLossPrice: number): void {
 		this.quantity = fill.quantity;
@@ -35,6 +37,8 @@ export class PositionManager {
 			quantity: fill.quantity,
 			value: orderValue,
 		};
+		this.highestPrice = fill.price;
+		this.lowestPrice = fill.price;
 	}
 
 	close(fill: Fill, exitReason: string, coin: string): Trade {
@@ -62,6 +66,12 @@ export class PositionManager {
 		const netPnl = netValue - this.entryValue;
 		const pnlPercent = (netPnl / this.entryValue) * 100;
 
+		if (fill.price > this.highestPrice) this.highestPrice = fill.price;
+		if (fill.price < this.lowestPrice) this.lowestPrice = fill.price;
+
+		const mae = ((this.lowestPrice - this.entryPrice) / this.entryPrice) * 100;
+		const mfe = ((this.highestPrice - this.entryPrice) / this.entryPrice) * 100;
+
 		const trade: Trade = {
 			asset: coin,
 			entryOrder: this.entryOrder,
@@ -74,6 +84,10 @@ export class PositionManager {
 			holdingPeriod: fill.timestamp - this.entryTimestamp,
 			atrAtEntry: round(this.atrAtEntry, 4),
 			exitReason,
+			highestPrice: round(this.highestPrice, 4),
+			lowestPrice: round(this.lowestPrice, 4),
+			mae: round(mae, 4),
+			mfe: round(mfe, 4),
 		};
 
 		// Pozisyonu sıfırla
@@ -115,6 +129,12 @@ export class PositionManager {
 		return this.quantity * price;
 	}
 
+	updateIntraTradePrices(high: number, low: number): void {
+		if (!this.hasOpen()) return;
+		if (high > this.highestPrice) this.highestPrice = high;
+		if (low < this.lowestPrice) this.lowestPrice = low;
+	}
+
 	private reset(): void {
 		this.quantity = 0;
 		this.entryPrice = 0;
@@ -124,6 +144,8 @@ export class PositionManager {
 		this.entryCommission = 0;
 		this.entryValue = 0;
 		this.entryOrder = null;
+		this.highestPrice = 0;
+		this.lowestPrice = 0;
 	}
 }
 import type { Candle } from '../core/types.js';

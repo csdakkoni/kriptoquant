@@ -28,6 +28,7 @@ import type { Broker } from './broker.js';
 import { Portfolio } from './portfolio.js';
 import { AtrStopRule } from './stop-rule.js';
 import type { TradeLogger } from './trade-logger.js';
+import { buildAnalyticsSummary } from '../research/analytics/summary.js';
 
 const ATR_PERIOD = 14;
 
@@ -103,6 +104,9 @@ export function runExecution(
 		// Günlük P&L takibi
 		portfolio.updateDay(candle.openTime);
 
+		// İşlem içi en yüksek/en düşük fiyat takibi (Mevcut pozisyonlar için)
+		portfolio.positions.updateIntraTradePrices(candle.high, candle.low);
+
 		// ── 1) STOP-LOSS kontrolü (Engine karar verir via StopRule, Broker uygular) ──
 		const stopSignal = portfolio.positions.evaluateStopLoss(candle, stopRule);
 		if (stopSignal) {
@@ -144,6 +148,9 @@ export function runExecution(
 						portfolio.positions.open(fill, riskDecision.positionSize, currentAtr, stopLoss);
 						portfolio.deductCapital(riskDecision.positionSize);
 
+						// Yeni açılan pozisyon için mum içi fiyatları hemen güncelle
+						portfolio.positions.updateIntraTradePrices(candle.high, candle.low);
+
 					} else if (pendingSignal.side === 'SELL' && portfolio.positions.hasOpen()) {
 						// SELL → Broker'a gönder → Portfolio'yu güncelle
 						const fill = broker.sell(candle.openTime, candle.open, portfolio.positions.getQuantity());
@@ -159,6 +166,7 @@ export function runExecution(
 		}
 
 		// ── 3) Equity curve kaydı (mark-to-market) ──────────────────────
+		portfolio.positions.updateIntraTradePrices(candle.high, candle.low);
 		portfolio.recordEquityPoint(candle.openTime, candle.close);
 	}
 
@@ -256,5 +264,13 @@ function buildResult(
 		equityCurve,
 		filterStats,
 		analyzedSignals,
+		analytics: buildAnalyticsSummary(
+			equityCurve,
+			trades,
+			candles,
+			initialCapital,
+			finalCapital,
+			portfolio.getMaxDrawdown(),
+		),
 	};
 }

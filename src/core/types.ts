@@ -56,6 +56,10 @@ export interface Trade {
 	readonly holdingPeriod: number; // Pozisyon süresi (ms)
 	readonly atrAtEntry: number; // Giriş anındaki ATR değeri
 	readonly exitReason: string; // Çıkış nedeni
+	readonly highestPrice?: number; // İşlem süresince görülen en yüksek fiyat
+	readonly lowestPrice?: number; // İşlem süresince görülen en düşük fiyat
+	readonly mae?: number; // Maximum Adverse Excursion (%)
+	readonly mfe?: number; // Maximum Favorable Excursion (%)
 }
 
 /**
@@ -86,6 +90,24 @@ export interface BacktestResult {
 	readonly equityCurve: EquityPoint[];
 	readonly filterStats?: import('../research/analytics/signal-analyzer.js').FilterStats;
 	readonly analyzedSignals?: import('../research/analytics/signal-analyzer.js').AnalyzedSignal[];
+	readonly analytics?: {
+		readonly expectancyUsdt: number | string;
+		readonly expectancyPercent: number | string;
+		readonly expectancyR: number | string;
+		readonly sqn: number | string;
+		readonly kelly: number | string;
+		readonly exposureTime: number;
+		readonly capitalUsage: number;
+		readonly recoveryFactor: number;
+		readonly ulcerIndex: number;
+		readonly marRatio: number;
+		readonly gainPainRatio: number;
+		readonly distributions: {
+			readonly returns: number[];
+			readonly durations: number[];
+			readonly drawdowns: number[];
+		};
+	};
 }
 
 /**

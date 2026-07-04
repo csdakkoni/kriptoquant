@@ -124,6 +124,25 @@ export function printReport(result: BacktestResult): void {
 	console.log(`  Sharpe Ratio  : ${result.sharpeRatio}`);
 	console.log(`  Max Drawdown  : ${formatPercent(-result.maxDrawdown)}`);
 
+	// ── Gelişmiş Analiz Metrikleri ─────────────────────────────────────────
+	if (result.analytics) {
+		console.log('');
+		console.log(thinDivider);
+		console.log('  📊 Gelişmiş Analiz Metrikleri');
+		console.log(thinDivider);
+		console.log(`  Expectancy USDT : ${typeof result.analytics.expectancyUsdt === 'number' ? formatUSDT(result.analytics.expectancyUsdt) : result.analytics.expectancyUsdt}`);
+		console.log(`  Expectancy %    : ${typeof result.analytics.expectancyPercent === 'number' ? formatPercent(result.analytics.expectancyPercent) : result.analytics.expectancyPercent}`);
+		console.log(`  Expectancy R    : ${result.analytics.expectancyR}`);
+		console.log(`  SQN Score       : ${result.analytics.sqn}`);
+		console.log(`  Kelly Fraction  : ${typeof result.analytics.kelly === 'number' ? formatPercent(result.analytics.kelly * 100) : result.analytics.kelly}`);
+		console.log(`  Exposure Time   : ${formatPercent(result.analytics.exposureTime)}`);
+		console.log(`  Capital Usage   : ${formatPercent(result.analytics.capitalUsage)}`);
+		console.log(`  Recovery Factor : ${result.analytics.recoveryFactor}`);
+		console.log(`  Ulcer Index     : ${result.analytics.ulcerIndex}`);
+		console.log(`  MAR Ratio       : ${result.analytics.marRatio}`);
+		console.log(`  Gain/Pain Ratio : ${result.analytics.gainPainRatio}`);
+	}
+
 	// ── Filter Statistics ──────────────────────────────────────────────
 	if (result.filterStats && result.filterStats.rejected > 0) {
 		console.log('');
@@ -175,13 +194,15 @@ export function printReport(result: BacktestResult): void {
 			const entryDate = formatDate(trade.entryOrder.timestamp);
 			const exitDate = formatDate(trade.exitOrder.timestamp);
 			const emoji = trade.pnl > 0 ? '🟢' : '🔴';
-			const exitShort = trade.exitReason.length > 30
-				? `${trade.exitReason.slice(0, 27)}...`
+			const exitShort = trade.exitReason.length > 25
+				? `${trade.exitReason.slice(0, 22)}...`
 				: trade.exitReason;
+			const maeStr = trade.mae !== undefined ? ` (MAE: ${trade.mae.toFixed(1)}%` : '';
+			const mfeStr = trade.mfe !== undefined ? `, MFE: ${trade.mfe.toFixed(1)}%)` : '';
 			console.log(
 				`  ${emoji} ${entryDate} → ${exitDate} | ` +
 				`${formatPercent(trade.pnlPercent).padStart(8)} | ` +
-				`${exitShort}`,
+				`${exitShort}${maeStr}${mfeStr}`,
 			);
 		}
 	}
