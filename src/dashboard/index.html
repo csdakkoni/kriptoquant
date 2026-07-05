@@ -600,16 +600,16 @@
             document.getElementById('card-capital').innerText = `${(data.finalCapital ?? 0).toLocaleString()} USDT`;
             document.getElementById('card-initial').innerText = `Başlangıç: ${(data.initialCapital ?? 0).toLocaleString()} USDT`;
 
-            document.getElementById('card-sharpe').innerText = (data.sharpeRatio ?? 0).toFixed(3);
-            document.getElementById('card-pf').innerText = `Profit Factor: ${(data.profitFactor ?? 0).toFixed(3)}`;
+            document.getElementById('card-sharpe').innerText = Number(data.sharpeRatio ?? 0).toFixed(3);
+            document.getElementById('card-pf').innerText = `Profit Factor: ${Number(data.profitFactor ?? 0).toFixed(3)}`;
 
-            const winRate = data.winRate ?? 0;
+            const winRate = Number(data.winRate ?? 0);
             document.getElementById('card-winrate').innerText = `%${winRate.toFixed(1)}`;
             document.getElementById('card-winloss').innerText = `W: ${data.winningTrades ?? 0} | L: ${data.losingTrades ?? 0}`;
 
-            const maxDd = data.maxDrawdown ?? 0;
+            const maxDd = Number(data.maxDrawdown ?? 0);
             document.getElementById('card-maxdd').innerText = `-%${maxDd.toFixed(2)}`;
-            const expectancy = data.analytics?.expectancyUsdt ?? 0;
+            const expectancy = Number(data.analytics?.expectancyUsdt ?? 0);
             document.getElementById('card-avgtrade').innerText = `Expectancy: ${expectancy.toFixed(1)} USDT`;
 
             // Dynamic Asset and Yearly breakdowns
@@ -618,16 +618,16 @@
             calculateAndRenderYearlyBreakdown(trades);
 
             // Detailed Risk Tab Metrics
-            document.getElementById('risk-rec-factor').innerText = (data.analytics?.recoveryFactor ?? 0).toFixed(2);
-            document.getElementById('risk-mar-ratio').innerText = (data.analytics?.marRatio ?? 0).toFixed(2);
-            document.getElementById('risk-gainpain-ratio').innerText = (data.analytics?.gainPainRatio ?? 0).toFixed(2);
-            document.getElementById('risk-exposure').innerText = `${(data.analytics?.exposureTime ?? 0).toFixed(1)}%`;
-            document.getElementById('risk-sqn').innerText = (data.analytics?.sqn ?? 0).toFixed(2);
-            document.getElementById('risk-kelly').innerText = `%${((data.analytics?.kelly ?? 0) * 100).toFixed(1)}`;
-            document.getElementById('risk-ulcer').innerText = (data.analytics?.ulcerIndex ?? 0).toFixed(2);
-            document.getElementById('risk-capusage').innerText = `%${(data.analytics?.capitalUsage ?? 0).toFixed(1)}`;
+            document.getElementById('risk-rec-factor').innerText = Number(data.analytics?.recoveryFactor ?? 0).toFixed(2);
+            document.getElementById('risk-mar-ratio').innerText = Number(data.analytics?.marRatio ?? 0).toFixed(2);
+            document.getElementById('risk-gainpain-ratio').innerText = Number(data.analytics?.gainPainRatio ?? 0).toFixed(2);
+            document.getElementById('risk-exposure').innerText = `${Number(data.analytics?.exposureTime ?? 0).toFixed(1)}%`;
+            document.getElementById('risk-sqn').innerText = Number(data.analytics?.sqn ?? 0).toFixed(2);
+            document.getElementById('risk-kelly').innerText = `%${(Number(data.analytics?.kelly ?? 0) * 100).toFixed(1)}`;
+            document.getElementById('risk-ulcer').innerText = Number(data.analytics?.ulcerIndex ?? 0).toFixed(2);
+            document.getElementById('risk-capusage').innerText = `%${(Number(data.analytics?.capitalUsage ?? 0)).toFixed(1)}`;
 
-            const ruinPercent = data.monteCarlo?.riskOfRuinPercent ?? 0;
+            const ruinPercent = Number(data.monteCarlo?.riskOfRuinPercent ?? 0);
             document.getElementById('risk-ruin-indicator').innerText = `Risk of Ruin (%30 Limit): %${ruinPercent.toFixed(1)}`;
 
             // Monte Carlo details
