@@ -760,14 +760,19 @@
             const decisionBanner = document.getElementById('decision-banner');
             const decisionIcon = document.getElementById('decision-icon');
             const decisionLabel = document.getElementById('decision-label');
-
             if (alpha > 0) {
                 decisionBanner.className = 'p-6 rounded-xl border border-accentGreen/30 bg-accentGreen/5 flex items-center justify-between transition-all';
                 decisionIcon.innerHTML = '🥇';
                 decisionLabel.innerText = 'OUTPERFORM (Piyasayı Yendi)';
                 decisionLabel.className = 'text-xl font-bold mt-0.5 text-accentGreen';
             } else {
-                decisionBanner.className = 'p-6 rounded-xl border border-accentRed/30 bg-accentRed            // AI Recommendation logic
+                decisionBanner.className = 'p-6 rounded-xl border border-accentRed/30 bg-accentRed/5 flex items-center justify-between transition-all';
+                decisionIcon.innerHTML = '⚠️';
+                decisionLabel.innerText = 'UNDERPERFORM (Piyasa Gerisinde)';
+                decisionLabel.className = 'text-xl font-bold mt-0.5 text-accentRed';
+            }
+
+            // AI Recommendation logic
             const sharpe = Number(data.sharpeRatio ?? 0);
             const aiInsightCard = document.getElementById('ai-insight-card');
             const recConfidence = document.getElementById('rec-confidence');
