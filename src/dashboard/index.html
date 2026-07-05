@@ -870,40 +870,14 @@
             // Populate Deploy Decision Panel (Problem 8)
             document.getElementById('deploy-badge').innerText = badgeText;
             document.getElementById('deploy-badge').className = `text-2xl font-extrabold block mt-1 tracking-tight ${badgeClass}`;
-            document.getElementById('deploy-exp-dd').innerText = `-%${maxDd.toFixed(1)}`;
+            document.getElementById('deploy-exp-dd').innerText = `-%${Number(data.maxDrawdown ?? 0).toFixed(1)}`;
             document.getElementById('deploy-exp-cagr').innerText = `%${stratRet.toFixed(1)}`;
             
-            const deployScore = Math.round((Math.min(10, Math.max(1, stratRet / 10)) * 0.3 + Math.max(1, Math.min(10, 10 - maxDd / 3)) * 0.3 + Math.max(1, Math.min(10, sharpe * 2)) * 0.4) * 10);
+            const deployScore = Math.round((Math.min(10, Math.max(1, stratRet / 10)) * 0.3 + Math.max(1, Math.min(10, 10 - Number(data.maxDrawdown ?? 0) / 3)) * 0.3 + Math.max(1, Math.min(10, sharpe * 2)) * 0.4) * 10);
             document.getElementById('deploy-confidence').innerText = `%${deployScore}`;
             
             const capRec = alpha > 0 ? Math.min(40, Math.max(5, Math.round(sharpe * 10))) : 0;
             document.getElementById('deploy-cap-rec').innerText = `%${capRec}`;
-
-            // Strategy Scorecard (Problem 4)
-            const scoreRetVal = Math.min(10, Math.max(1, Math.round(stratRet / 10)));
-            const scoreRiskVal = Math.max(1, Math.min(10, Math.round(10 - maxDd / 3)));
-            const scoreRobustVal = Math.max(1, Math.min(10, Math.round(sharpe * 2)));
-            const scoreOverfitVal = Math.max(1, Math.min(10, Math.round(10 - sharpe / 1.5)));
-
-            document.getElementById('score-ret').innerText = `${scoreRetVal}/10`;
-            document.getElementById('score-risk').innerText = `${scoreRiskVal}/10`;
-            document.getElementById('score-robust').innerText = `${scoreRobustVal}/10`;
-            document.getElementById('score-overfit').innerText = `${scoreOverfitVal}/10`;
-            document.getElementById('score-total').innerText = `${deployScore}/100`;
-
-            // Metrics Cards
-            const capPct = `${stratRet >= 0 ? '+' : ''}${stratRet.toFixed(2)}%`;
-            document.getElementById('card-capital-pct').innerText = capPct;
-            document.getElementById('card-capital-pct').className = `text-3xl font-extrabold ${stratRet >= 0 ? 'text-accentGreen' : 'text-accentRed'}`;
-            document.getElementById('card-capital-val').innerText = `Bitiş: ${(data.finalCapital ?? 0).toLocaleString()} USDT | Başlangıç: ${(data.initialCapital ?? 0).toLocaleString()} USDT`;
-
-            document.getElementById('card-sharpe').innerText = Number(data.sharpeRatio ?? 0).toFixed(3);
-            document.getElementById('card-pf').innerText = `Profit Factor: ${Number(data.profitFactor ?? 0).toFixed(3)}`;tGreen' : 'border-l-orange-400') : 'border-l-accentRed'} transition-all`;
-            recConfidence.innerText = `Yapay Zeka Güven Seviyesi: ${confidenceStr}`;
-            recText.innerText = reasoning;
-            recBadge.innerText = badgeText;
-            recBadge.className = `text-lg font-bold mt-1 ${badgeClass}`;
-            recStars.innerText = stars;
 
             // Metrics Cards
             const capPct = `${stratRet >= 0 ? '+' : ''}${stratRet.toFixed(2)}%`;
@@ -919,6 +893,25 @@
             document.getElementById('card-winloss').innerText = `W: ${data.winningTrades ?? 0} | L: ${data.losingTrades ?? 0}`;
 
             const maxDd = Number(data.maxDrawdown ?? 0);
+            document.getElementById('card-maxdd').innerText = `-%${maxDd.toFixed(2)}`;
+            const expectancy = Number(data.analytics?.expectancyUsdt ?? 0);
+            document.getElementById('card-avgtrade').innerText = `Expectancy: ${expectancy.toFixed(1)} USDT`;
+
+            // Strategy Scorecard (Problem 4)
+            const scoreRetVal = Math.min(10, Math.max(1, Math.round(stratRet / 10)));
+            const scoreRiskVal = Math.max(1, Math.min(10, Math.round(10 - maxDd / 3)));
+            const scoreRobustVal = Math.max(1, Math.min(10, Math.round(sharpe * 2)));
+            const scoreOverfitVal = Math.max(1, Math.min(10, Math.round(10 - sharpe / 1.5)));
+
+            document.getElementById('score-ret').innerText = `${scoreRetVal}/10`;
+            document.getElementById('score-risk').innerText = `${scoreRiskVal}/10`;
+            document.getElementById('score-robust').innerText = `${scoreRobustVal}/10`;
+            document.getElementById('score-overfit').innerText = `${scoreOverfitVal}/10`;
+            document.getElementById('score-total').innerText = `${deployScore}/100`;
+
+            document.getElementById('card-winrate').innerText = `%${winRate.toFixed(1)}`;
+            document.getElementById('card-winloss').innerText = `W: ${data.winningTrades ?? 0} | L: ${data.losingTrades ?? 0}`;
+
             document.getElementById('card-maxdd').innerText = `-%${maxDd.toFixed(2)}`;
             const expectancy = Number(data.analytics?.expectancyUsdt ?? 0);
             document.getElementById('card-avgtrade').innerText = `Expectancy: ${expectancy.toFixed(1)} USDT`;
