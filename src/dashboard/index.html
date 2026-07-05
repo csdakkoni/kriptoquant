@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full">
+<html lang="tr" class="h-full">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KriptoQuant — Quant Research Dashboard</title>
+    <title>KriptoQuant — Quant Research Workspace</title>
     <!-- Google Fonts Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -20,12 +20,12 @@
                         sans: ['Inter', 'sans-serif'],
                     },
                     colors: {
-                        darkBg: '#0b0f19',
-                        darkCard: '#151c2c',
+                        darkBg: '#090d16',
+                        darkCard: '#111827',
                         accentGreen: '#10b981',
                         accentRed: '#ef4444',
                         accentBlue: '#3b82f6',
-                        glassBorder: 'rgba(255, 255, 255, 0.08)',
+                        glassBorder: 'rgba(255, 255, 255, 0.06)',
                     }
                 }
             }
@@ -33,8 +33,8 @@
     </script>
     <style>
         body {
-            background-color: #0b0f19;
-            color: #e2e8f0;
+            background-color: #090d16;
+            color: #f1f5f9;
         }
         /* Custom scrollbar */
         ::-webkit-scrollbar {
@@ -42,34 +42,47 @@
             height: 6px;
         }
         ::-webkit-scrollbar-track {
-            background: #0b0f19;
+            background: #090d16;
         }
         ::-webkit-scrollbar-thumb {
-            background: #1e293b;
+            background: #1f2937;
             border-radius: 3px;
         }
         ::-webkit-scrollbar-thumb:hover {
-            background: #334155;
+            background: #374151;
         }
         .glass-card {
-            background: #151c2c;
-            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: #111827;
+            border: 1px solid rgba(255, 255, 255, 0.06);
             border-radius: 12px;
-            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+        }
+        .tab-btn.active {
+            border-color: #3b82f6;
+            color: #3b82f6;
+            background: rgba(59, 130, 246, 0.05);
         }
     </style>
 </head>
 <body class="h-full flex overflow-hidden">
 
     <!-- SIDEBAR -->
-    <aside class="w-80 bg-[#0d1322] border-r border-glassBorder flex flex-col flex-shrink-0">
+    <aside class="w-80 bg-[#0b0f19] border-r border-glassBorder flex flex-col flex-shrink-0">
         <!-- Logo Header -->
         <div class="p-6 border-b border-glassBorder flex items-center justify-between">
             <div class="flex items-center space-x-2">
                 <span class="text-xl font-bold tracking-tight bg-gradient-to-r from-accentGreen to-accentBlue bg-clip-text text-transparent">
                     📊 KriptoQuant
                 </span>
-                <span class="text-xs bg-[#1e293b] px-2 py-0.5 rounded text-gray-400 font-mono">v1.0</span>
+                <span class="text-xs bg-[#1f2937] px-2 py-0.5 rounded text-gray-400 font-mono">v2.0</span>
+            </div>
+        </div>
+
+        <!-- Sidebar Actions & Compare Mode Toggle -->
+        <div class="p-4 border-b border-glassBorder space-y-2">
+            <div class="flex items-center justify-between text-xs text-gray-400">
+                <span>Rapor Seçimi & Karşılaştırma</span>
+                <button onclick="clearComparison()" class="text-accentBlue hover:underline">Seçimleri Temizle</button>
             </div>
         </div>
 
@@ -81,171 +94,372 @@
 
     <!-- MAIN APP CONTAINER -->
     <main class="flex-1 flex flex-col overflow-hidden">
-        <!-- Top Nav -->
-        <header class="h-16 border-b border-glassBorder flex items-center justify-between px-8 flex-shrink-0 bg-[#0d1322]/50 backdrop-blur-md">
-            <div>
-                <h1 class="text-lg font-semibold" id="active-strategy-title">Strateji Seçilmedi</h1>
-                <p class="text-xs text-gray-400" id="active-coin-subtitle">Lütfen soldaki menüden bir backtest raporu seçin.</p>
+        <!-- Top Nav & Tabs -->
+        <header class="border-b border-glassBorder flex flex-col flex-shrink-0 bg-[#0b0f19]/60 backdrop-blur-md">
+            <!-- Header Title -->
+            <div class="flex items-center justify-between px-8 pt-6 pb-4">
+                <div>
+                    <h1 class="text-lg font-bold" id="active-strategy-title">Lütfen Bir Rapor Seçin</h1>
+                    <p class="text-xs text-gray-400" id="active-coin-subtitle">Varlık ve periyot verisi sol listeden seçilir.</p>
+                </div>
+                <div class="flex items-center space-x-6">
+                    <span class="text-xs text-gray-400 font-mono" id="active-date-range">-- → --</span>
+                    <button onclick="loadReportList()" class="px-3 py-1.5 bg-accentBlue/20 text-accentBlue border border-accentBlue/30 rounded-md text-xs hover:bg-accentBlue/30 transition-all font-medium">
+                        Listeyi Yenile
+                    </button>
+                </div>
             </div>
-            <div class="flex items-center space-x-4">
-                <span class="text-xs text-gray-400" id="active-date-range">-- → --</span>
-                <button onclick="loadReportList()" class="px-3 py-1.5 bg-accentBlue/20 text-accentBlue border border-accentBlue/30 rounded-md text-xs hover:bg-accentBlue/30 transition-all">
-                    Yenile
+
+            <!-- Tab Buttons Navigation -->
+            <div class="flex border-t border-glassBorder/50 px-8 text-sm font-medium">
+                <button onclick="switchTab('overview')" id="tab-overview" class="tab-btn px-6 py-3 border-b-2 border-transparent text-gray-400 hover:text-gray-200 transition-all active">
+                    📈 Genel Bakış
+                </button>
+                <button onclick="switchTab('risk')" id="tab-risk" class="tab-btn px-6 py-3 border-b-2 border-transparent text-gray-400 hover:text-gray-200 transition-all">
+                    🎲 Risk & MC
+                </button>
+                <button onclick="switchTab('compare')" id="tab-compare" class="tab-btn px-6 py-3 border-b-2 border-transparent text-gray-400 hover:text-gray-200 transition-all">
+                    ⚖️ Karşılaştır (<span id="compare-count">0</span>)
+                </button>
+                <button onclick="switchTab('journal')" id="tab-journal" class="tab-btn px-6 py-3 border-b-2 border-transparent text-gray-400 hover:text-gray-200 transition-all">
+                    📋 İşlem Günlüğü
+                </button>
+                <button onclick="switchTab('discovery')" id="tab-discovery" class="tab-btn px-6 py-3 border-b-2 border-transparent text-gray-400 hover:text-gray-200 transition-all">
+                    ⚗️ Discovery Hunisi
                 </button>
             </div>
         </header>
 
-        <!-- DASHBOARD SCROLL AREA -->
-        <div class="flex-1 overflow-y-auto p-8 space-y-6" id="dashboard-content" style="display: none;">
-            
-            <!-- KEY METRICS CARDS -->
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
-                <!-- Final Capital -->
-                <div class="glass-card p-6 flex flex-col justify-between">
-                    <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Net Sermaye / Return</span>
-                    <div class="mt-2 flex items-baseline justify-between">
-                        <span class="text-2xl font-bold" id="metric-capital">0.00 USDT</span>
-                        <span class="text-sm font-semibold" id="metric-return">+0.00%</span>
-                    </div>
-                    <span class="text-xs text-gray-500 mt-2" id="metric-initial">Başlangıç: --</span>
-                </div>
-                <!-- Performance -->
-                <div class="glass-card p-6 flex flex-col justify-between">
-                    <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Sharpe & Profit Factor</span>
-                    <div class="mt-2 flex items-baseline justify-between">
-                        <span class="text-2xl font-bold text-accentBlue" id="metric-sharpe">0.00</span>
-                        <span class="text-sm font-semibold text-gray-300" id="metric-pf">PF: 0.00</span>
-                    </div>
-                    <span class="text-xs text-gray-500 mt-2" id="metric-expectancy">Expectancy: --</span>
-                </div>
-                <!-- Trades count -->
-                <div class="glass-card p-6 flex flex-col justify-between">
-                    <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Win Rate / İşlem</span>
-                    <div class="mt-2 flex items-baseline justify-between">
-                        <span class="text-2xl font-bold text-emerald-400" id="metric-winrate">+0%</span>
-                        <span class="text-sm font-semibold text-gray-300" id="metric-trades">0 İşlem</span>
-                    </div>
-                    <span class="text-xs text-gray-500 mt-2" id="metric-winloss">Win: 0 | Loss: 0</span>
-                </div>
-                <!-- Drawdown / Ruin -->
-                <div class="glass-card p-6 flex flex-col justify-between">
-                    <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Max Drawdown / Ruin</span>
-                    <div class="mt-2 flex items-baseline justify-between">
-                        <span class="text-2xl font-bold text-accentRed" id="metric-maxdd">-0.00%</span>
-                        <span class="text-sm font-semibold text-orange-400" id="metric-ruin">Ruin: --</span>
-                    </div>
-                    <span class="text-xs text-gray-500 mt-2" id="metric-ulcer">Ulcer Index: --</span>
-                </div>
-            </div>
+        <!-- DASHBOARD SCROLL CONTENT -->
+        <div class="flex-1 overflow-y-auto p-8">
 
-            <!-- CHARTS ROW -->
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <!-- Equity Curve (2/3 width) -->
-                <div class="glass-card p-6 lg:col-span-2 flex flex-col">
-                    <span class="text-sm font-semibold text-gray-300 mb-4">Sermaye ve Drawdown Grafiği</span>
-                    <div class="flex-1 min-h-[350px]">
-                        <canvas id="equityChart"></canvas>
+            <!-- ─── SEKME 1: GENEL BAKIŞ (OVERVIEW) ─────────────────────────────────── -->
+            <div id="content-overview" class="tab-content space-y-6">
+                <!-- BENCHMARK DECISION BANNER (Outperform vs Underperform) -->
+                <div id="decision-banner" class="p-6 rounded-xl border flex items-center justify-between transition-all">
+                    <div class="flex items-center space-x-4">
+                        <div class="p-3 rounded-full bg-black/20" id="decision-icon">
+                            <!-- JS Icon -->
+                        </div>
+                        <div>
+                            <div class="text-xs uppercase tracking-wider text-gray-400 font-semibold">Portföy Karşılaştırma Kararı</div>
+                            <div class="text-xl font-bold mt-0.5" id="decision-label">--</div>
+                        </div>
+                    </div>
+                    <!-- Banner Mini Stats Grid -->
+                    <div class="grid grid-cols-3 gap-8 text-right">
+                        <div>
+                            <span class="text-xs text-gray-400 block">Strateji Getirisi</span>
+                            <span class="text-lg font-bold font-mono" id="banner-strat-ret">--</span>
+                        </div>
+                        <div>
+                            <span class="text-xs text-gray-400 block">Buy & Hold (Benchmark)</span>
+                            <span class="text-lg font-bold font-mono text-gray-400" id="banner-bh-ret">--</span>
+                        </div>
+                        <div>
+                            <span class="text-xs text-gray-400 block">Üretilen Alfa (Alpha)</span>
+                            <span class="text-lg font-bold font-mono" id="banner-alpha">--</span>
+                        </div>
                     </div>
                 </div>
-                <!-- Monte Carlo Stress Test (1/3 width) -->
+
+                <!-- OVERVIEW STATISTICS CARDS -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <div class="glass-card p-6 flex flex-col justify-between">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Net Sermaye</span>
+                        <div class="mt-2 flex items-baseline justify-between">
+                            <span class="text-2xl font-bold" id="card-capital">--</span>
+                        </div>
+                        <span class="text-xs text-gray-500 mt-2" id="card-initial">Başlangıç: --</span>
+                    </div>
+                    <div class="glass-card p-6 flex flex-col justify-between">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Sharpe Raporu</span>
+                        <div class="mt-2 flex items-baseline justify-between">
+                            <span class="text-2xl font-bold text-accentBlue" id="card-sharpe">--</span>
+                        </div>
+                        <span class="text-xs text-gray-500 mt-2" id="card-pf">Profit Factor: --</span>
+                    </div>
+                    <div class="glass-card p-6 flex flex-col justify-between">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Kazanma Oranı</span>
+                        <div class="mt-2 flex items-baseline justify-between">
+                            <span class="text-2xl font-bold text-emerald-400" id="card-winrate">--</span>
+                        </div>
+                        <span class="text-xs text-gray-500 mt-2" id="card-winloss">Win/Loss: --</span>
+                    </div>
+                    <div class="glass-card p-6 flex flex-col justify-between">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Maksimum Çöküş</span>
+                        <div class="mt-2 flex items-baseline justify-between">
+                            <span class="text-2xl font-bold text-accentRed" id="card-maxdd">--</span>
+                        </div>
+                        <span class="text-xs text-gray-500 mt-2" id="card-avgtrade">Expectancy: --</span>
+                    </div>
+                </div>
+
+                <!-- MAIN EQUITY AND DRAWDOWN CHART (FULL WIDTH) -->
                 <div class="glass-card p-6 flex flex-col">
-                    <span class="text-sm font-semibold text-gray-300 mb-4">Monte Carlo Dağılımları</span>
-                    <div class="flex-1 min-h-[350px]">
-                        <canvas id="monteCarloChart"></canvas>
+                    <div class="flex items-center justify-between mb-4">
+                        <span class="text-sm font-semibold text-gray-300">Sermaye Büyüme ve Çöküş Grafiği</span>
+                        <span class="text-xs text-gray-500">Mavi: Sermaye | Kırmızı: Drawdown (%)</span>
+                    </div>
+                    <div class="h-96 min-h-[380px]">
+                        <canvas id="equityChartV2"></canvas>
                     </div>
                 </div>
-            </div>
 
-            <!-- REGIMES AND SECONDARY INFO -->
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <!-- Regime Allocation -->
-                <div class="glass-card p-6 flex flex-col">
-                    <span class="text-sm font-semibold text-gray-300 mb-4">Piyasa Rejimi Getirileri</span>
-                    <div class="flex-1 min-h-[220px]">
-                        <canvas id="regimeChart"></canvas>
+                <!-- BREAKDOWNS ROW (Asset Contribution & Yearly Return) -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Asset Contribution -->
+                    <div class="glass-card p-6 flex flex-col">
+                        <span class="text-sm font-semibold text-gray-300 mb-4">Varlık Bazlı Kar Katkısı (Asset Contribution)</span>
+                        <div class="h-64 min-h-[220px]">
+                            <canvas id="assetContribChart"></canvas>
+                        </div>
                     </div>
-                </div>
-                <!-- Stats Breakdown Table -->
-                <div class="glass-card p-6 lg:col-span-2 flex flex-col justify-between">
-                    <span class="text-sm font-semibold text-gray-300 mb-4">Gelişmiş Analiz Metrikleri</span>
-                    <div class="grid grid-cols-2 md:grid-cols-4 gap-6 text-sm">
-                        <div class="border-b border-glassBorder pb-3">
-                            <span class="text-gray-500 block text-xs">Recovery Factor</span>
-                            <span class="font-bold text-gray-200 mt-1 block" id="val-rec">0.00</span>
-                        </div>
-                        <div class="border-b border-glassBorder pb-3">
-                            <span class="text-gray-500 block text-xs">MAR Ratio</span>
-                            <span class="font-bold text-gray-200 mt-1 block" id="val-mar">0.00</span>
-                        </div>
-                        <div class="border-b border-glassBorder pb-3">
-                            <span class="text-gray-500 block text-xs">Gain/Pain Ratio</span>
-                            <span class="font-bold text-gray-200 mt-1 block" id="val-gainpain">0.00</span>
-                        </div>
-                        <div class="border-b border-glassBorder pb-3">
-                            <span class="text-gray-500 block text-xs">Exposure Time</span>
-                            <span class="font-bold text-gray-200 mt-1 block" id="val-exposure">0.0%</span>
-                        </div>
-                        <div>
-                            <span class="text-gray-500 block text-xs">SQN Score</span>
-                            <span class="font-bold text-gray-200 mt-1 block" id="val-sqn">0.00</span>
-                        </div>
-                        <div>
-                            <span class="text-gray-500 block text-xs">Kelly Fraction</span>
-                            <span class="font-bold text-gray-200 mt-1 block" id="val-kelly">0.0%</span>
-                        </div>
-                        <div>
-                            <span class="text-gray-500 block text-xs">Avg Win / Avg Loss</span>
-                            <span class="font-bold text-gray-200 mt-1 block" id="val-avgwinloss">0 / 0</span>
-                        </div>
-                        <div>
-                            <span class="text-gray-500 block text-xs">Capital Usage</span>
-                            <span class="font-bold text-gray-200 mt-1 block" id="val-capusage">0.0%</span>
+                    <!-- Yearly Performance -->
+                    <div class="glass-card p-6 flex flex-col">
+                        <span class="text-sm font-semibold text-gray-300 mb-4">Yıllık Performans Dağılımı (Yearly P&L)</span>
+                        <div class="h-64 min-h-[220px]">
+                            <canvas id="yearlyPnlChart"></canvas>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- TRADE JOURNAL -->
-            <div class="glass-card p-6">
-                <div class="flex items-center justify-between mb-4">
-                    <span class="text-sm font-semibold text-gray-300">İşlem Günlüğü (Trade Journal)</span>
-                    <span class="text-xs text-gray-500" id="trade-journal-count">0 işlem gösteriliyor</span>
+            <!-- ─── SEKME 2: RISK & MONTE CARLO ────────────────────────────────────── -->
+            <div id="content-risk" class="tab-content space-y-6 hidden">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- Monte Carlo Fan Chart (2/3 width) -->
+                    <div class="glass-card p-6 lg:col-span-2 flex flex-col">
+                        <div class="flex items-center justify-between mb-4">
+                            <span class="text-sm font-semibold text-gray-300">Monte Carlo Simüle Yol Dağılımları (1000 Simülasyon)</span>
+                            <span class="text-xs text-orange-400 font-bold" id="risk-ruin-indicator">Risk of Ruin: --</span>
+                        </div>
+                        <div class="h-96 min-h-[380px]">
+                            <canvas id="monteCarloChartV2"></canvas>
+                        </div>
+                    </div>
+                    
+                    <!-- Advanced Metrics Grid (1/3 width) -->
+                    <div class="glass-card p-6 flex flex-col justify-between">
+                        <span class="text-sm font-semibold text-gray-300 mb-4">Gelişmiş Risk Metrikleri</span>
+                        <div class="space-y-4 text-sm flex-1 flex flex-col justify-center">
+                            <div class="flex items-center justify-between pb-3 border-b border-glassBorder/50">
+                                <span class="text-gray-400">Recovery Factor</span>
+                                <span class="font-bold text-gray-200" id="risk-rec-factor">--</span>
+                            </div>
+                            <div class="flex items-center justify-between pb-3 border-b border-glassBorder/50">
+                                <span class="text-gray-400">MAR Ratio</span>
+                                <span class="font-bold text-gray-200" id="risk-mar-ratio">--</span>
+                            </div>
+                            <div class="flex items-center justify-between pb-3 border-b border-glassBorder/50">
+                                <span class="text-gray-400">Gain / Pain Ratio</span>
+                                <span class="font-bold text-gray-200" id="risk-gainpain-ratio">--</span>
+                            </div>
+                            <div class="flex items-center justify-between pb-3 border-b border-glassBorder/50">
+                                <span class="text-gray-400">Exposure Time (Piyasada Kalma)</span>
+                                <span class="font-bold text-gray-200 font-mono" id="risk-exposure">--</span>
+                            </div>
+                            <div class="flex items-center justify-between pb-3 border-b border-glassBorder/50">
+                                <span class="text-gray-400">SQN Score (Sistem Kalitesi)</span>
+                                <span class="font-bold text-gray-200" id="risk-sqn">--</span>
+                            </div>
+                            <div class="flex items-center justify-between pb-3 border-b border-glassBorder/50">
+                                <span class="text-gray-400">Kelly Oranı</span>
+                                <span class="font-bold text-gray-200 font-mono" id="risk-kelly">--</span>
+                            </div>
+                            <div class="flex items-center justify-between pb-3 border-b border-glassBorder/50">
+                                <span class="text-gray-400">Ulcer Index (Stres Endeksi)</span>
+                                <span class="font-bold text-accentRed" id="risk-ulcer">--</span>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <span class="text-gray-400">Capital Usage (Sermaye Kullanımı)</span>
+                                <span class="font-bold text-gray-200 font-mono" id="risk-capusage">--</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="overflow-x-auto max-h-96">
-                    <table class="w-full text-left border-collapse">
-                        <thead>
-                            <tr class="border-b border-glassBorder text-gray-500 text-xs uppercase tracking-wider">
-                                <th class="pb-3 font-semibold">Varlık</th>
-                                <th class="pb-3 font-semibold">Yön</th>
-                                <th class="pb-3 font-semibold text-right">Miktar</th>
-                                <th class="pb-3 font-semibold text-right">Giriş Fiyatı</th>
-                                <th class="pb-3 font-semibold text-right">Çıkış Fiyatı</th>
-                                <th class="pb-3 font-semibold text-right">Kar / Zarar %</th>
-                                <th class="pb-3 font-semibold">Çıkış Nedeni</th>
-                                <th class="pb-3 font-semibold text-right">MAE</th>
-                                <th class="pb-3 font-semibold text-right">MFE</th>
-                            </tr>
-                        </thead>
-                        <tbody id="trade-journal-body" class="divide-y divide-glassBorder text-sm">
-                            <!-- JS rows here -->
-                        </tbody>
-                    </table>
+
+                <!-- Market Regime Allocations breakdown -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="glass-card p-6 flex flex-col">
+                        <span class="text-sm font-semibold text-gray-300 mb-2">Piyasa Rejim Performansı</span>
+                        <div class="h-64 flex items-center justify-center">
+                            <canvas id="riskRegimeChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="glass-card p-6 lg:col-span-2 flex flex-col justify-center">
+                        <span class="text-sm font-semibold text-gray-300 mb-4">Monte Carlo Dağılım Çıktıları</span>
+                        <div class="grid grid-cols-2 md:grid-cols-5 gap-6 text-center">
+                            <div class="bg-black/20 p-4 rounded-lg">
+                                <span class="text-xs text-gray-400 block">Worst Path</span>
+                                <span class="text-sm font-bold text-accentRed mt-1 block" id="mc-worst">--</span>
+                            </div>
+                            <div class="bg-black/20 p-4 rounded-lg">
+                                <span class="text-xs text-gray-400 block">P5 (Kötü %5)</span>
+                                <span class="text-sm font-bold text-orange-400 mt-1 block" id="mc-p5">--</span>
+                            </div>
+                            <div class="bg-black/20 p-4 rounded-lg">
+                                <span class="text-xs text-gray-400 block">P50 (Ortanca)</span>
+                                <span class="text-sm font-bold text-accentBlue mt-1 block" id="mc-p50">--</span>
+                            </div>
+                            <div class="bg-black/20 p-4 rounded-lg">
+                                <span class="text-xs text-gray-400 block">P95 (İyi %5)</span>
+                                <span class="text-sm font-bold text-emerald-400 mt-1 block" id="mc-p95">--</span>
+                            </div>
+                            <div class="bg-black/20 p-4 rounded-lg">
+                                <span class="text-xs text-gray-400 block">Best Path</span>
+                                <span class="text-sm font-bold text-accentGreen mt-1 block" id="mc-best">--</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ─── SEKME 3: KARŞILAŞTIRMA (COMPARE) ────────────────────────────────── -->
+            <div id="content-compare" class="tab-content space-y-6 hidden">
+                <div class="glass-card p-6">
+                    <div class="flex items-center justify-between mb-6">
+                        <div>
+                            <span class="text-sm font-semibold text-gray-300">Strateji Karşılaştırma Analizi</span>
+                            <p class="text-xs text-gray-500 mt-0.5">Soldaki listeden kutucukları işaretleyerek stratejileri yan yana kıyaslayın.</p>
+                        </div>
+                        <span class="text-xs bg-accentBlue/20 text-accentBlue px-2.5 py-1 border border-accentBlue/30 rounded-full font-bold" id="badge-winner">🥇 Kazanan: Donchian</span>
+                    </div>
+
+                    <!-- Compare Table -->
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse" id="compare-table">
+                            <thead>
+                                <tr class="border-b border-glassBorder text-gray-500 text-xs uppercase tracking-wider">
+                                    <th class="pb-4 font-semibold">Metrik</th>
+                                    <!-- Dynamic headers will be injected here -->
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-glassBorder text-sm" id="compare-table-body">
+                                <!-- Dynamic comparison rows will be injected here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ─── SEKME 4: İŞLEM GÜNLÜĞÜ (JOURNAL) ─────────────────────────────────── -->
+            <div id="content-journal" class="tab-content space-y-6 hidden">
+                <div class="glass-card p-6">
+                    <div class="flex flex-col md:flex-row md:items-center md:justify-between space-y-3 md:space-y-0 mb-6">
+                        <div>
+                            <span class="text-sm font-semibold text-gray-300">Tarihsel İşlemler Listesi</span>
+                            <p class="text-xs text-gray-500 mt-0.5" id="journal-trades-subtitle">0 işlem listeleniyor</p>
+                        </div>
+                        <!-- Search / Filters -->
+                        <div class="flex items-center space-x-4">
+                            <input type="text" id="journal-search" oninput="filterTradesTable()" placeholder="Coin veya çıkış nedeni ara..." class="bg-[#090d16] border border-glassBorder px-4 py-1.5 rounded-lg text-sm focus:outline-none focus:border-accentBlue w-64">
+                        </div>
+                    </div>
+
+                    <!-- Journal Table -->
+                    <div class="overflow-x-auto max-h-[500px]">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="border-b border-glassBorder text-gray-500 text-xs uppercase tracking-wider sticky top-0 bg-darkCard">
+                                    <th class="pb-3 font-semibold">Varlık</th>
+                                    <th class="pb-3 font-semibold">Yön</th>
+                                    <th class="pb-3 font-semibold text-right">Miktar</th>
+                                    <th class="pb-3 font-semibold text-right">Giriş Fiyatı</th>
+                                    <th class="pb-3 font-semibold text-right">Çıkış Fiyatı</th>
+                                    <th class="pb-3 font-semibold text-right">Net P&L %</th>
+                                    <th class="pb-3 font-semibold">Çıkış Nedeni</th>
+                                    <th class="pb-3 font-semibold text-right">MAE</th>
+                                    <th class="pb-3 font-semibold text-right">MFE</th>
+                                </tr>
+                            </thead>
+                            <tbody id="journal-table-body" class="divide-y divide-glassBorder text-sm">
+                                <!-- Dynamic rows -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ─── SEKME 5: DISCOVERY HUNİSİ (DISCOVERY) ───────────────────────────── -->
+            <div id="content-discovery" class="tab-content space-y-6 hidden">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- Funnel Visualizer (2/3 width) -->
+                    <div class="glass-card p-6 lg:col-span-2 flex flex-col">
+                        <span class="text-sm font-semibold text-gray-300 mb-6">Alpha Discovery Filtreleme Hunisi (Strategy Funnel)</span>
+                        <div class="flex-1 flex flex-col justify-around py-4 min-h-[300px]">
+                            <!-- Funnel Stages -->
+                            <div class="flex items-center space-x-4">
+                                <span class="text-xs font-mono text-gray-400 w-32">Toplam Aday</span>
+                                <div class="flex-1 bg-accentBlue/20 border border-accentBlue/40 h-8 rounded flex items-center px-4 font-bold text-sm text-accentBlue" id="funnel-total" style="width: 100%;">0 Aday</div>
+                            </div>
+                            <div class="flex items-center space-x-4">
+                                <span class="text-xs font-mono text-gray-400 w-32">Backtest Geçen</span>
+                                <div class="bg-indigo-500/20 border border-indigo-500/40 h-8 rounded flex items-center px-4 font-bold text-sm text-indigo-400" id="funnel-bt" style="width: 80%;">0 Aday</div>
+                            </div>
+                            <div class="flex items-center space-x-4">
+                                <span class="text-xs font-mono text-gray-400 w-32">Monte Carlo Geçen</span>
+                                <div class="bg-orange-500/20 border border-orange-500/40 h-8 rounded flex items-center px-4 font-bold text-sm text-orange-400" id="funnel-mc" style="width: 60%;">0 Aday</div>
+                            </div>
+                            <div class="flex items-center space-x-4">
+                                <span class="text-xs font-mono text-gray-400 w-32">Walk-Forward Geçen</span>
+                                <div class="bg-accentGreen/20 border border-accentGreen/40 h-8 rounded flex items-center px-4 font-bold text-sm text-accentGreen" id="funnel-wf" style="width: 40%;">0 Aday</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Top Candidates leaderboard -->
+                    <div class="glass-card p-6 flex flex-col justify-between">
+                        <div>
+                            <span class="text-sm font-semibold text-gray-300">En İyi Keşifler (Top Leaderboard)</span>
+                            <p class="text-xs text-gray-500 mt-0.5">En yüksek genelleme başarısına sahip adaylar.</p>
+                        </div>
+                        <div class="mt-4 flex-1 overflow-y-auto space-y-3 pr-2" id="discovery-leaderboard">
+                            <div class="text-gray-500 text-xs text-center py-8">Yükleniyor veya keşif verisi bulunamadı...</div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
         </div>
     </main>
 
-    <!-- JS SCRIPTS -->
+    <!-- UI JAVASCRIPT LOGIC -->
     <script>
-        let equityChart = null;
-        let monteCarloChart = null;
-        let regimeChart = null;
+        let mainReportData = null;
+        let selectedReports = new Set();
+        let allReportsCache = new Map();
+
+        // Chart instances cache
+        let myEquityChart = null;
+        let myMonteCarloChart = null;
+        let myRegimeChart = null;
+        let myAssetContribChart = null;
+        let myYearlyPnlChart = null;
 
         document.addEventListener('DOMContentLoaded', () => {
             loadReportList();
+            loadDiscoveryFunnel();
         });
 
+        // ── Tabs Navigation ───────────────────────────────────────────────────
+        function switchTab(tabId) {
+            const tabs = document.querySelectorAll('.tab-btn');
+            tabs.forEach(t => t.classList.remove('active', 'border-accentBlue', 'text-accentBlue'));
+            
+            document.getElementById(`tab-${tabId}`).classList.add('active', 'border-accentBlue', 'text-accentBlue');
+            
+            const contents = document.querySelectorAll('.tab-content');
+            contents.forEach(c => c.classList.add('hidden'));
+            
+            document.getElementById(`content-${tabId}`).classList.remove('hidden');
+
+            if (tabId === 'compare') {
+                renderCompareTab();
+            }
+        }
+
+        // ── Load list of files from server ──────────────────────────────────
         async function loadReportList() {
             const listEl = document.getElementById('reports-list');
             listEl.innerHTML = '<div class="text-gray-500 text-sm text-center py-8">Raporlar yükleniyor...</div>';
@@ -264,113 +478,500 @@
                 
                 listEl.innerHTML = '';
                 reports.forEach((rep) => {
-                    const btn = document.createElement('button');
-                    btn.className = 'w-full text-left p-4 rounded-lg bg-[#151c2c]/40 hover:bg-[#151c2c]/80 border border-glassBorder flex flex-col transition-all';
-                    btn.onclick = () => selectReport(rep.filename, btn);
+                    allReportsCache.set(rep.filename, rep);
+
+                    const container = document.createElement('div');
+                    container.className = 'w-full p-4 rounded-lg bg-[#111827]/40 hover:bg-[#111827]/80 border border-glassBorder flex items-center justify-between space-x-3 transition-all relative';
                     
+                    // Checkbox
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.className = 'w-4 h-4 rounded border-gray-300 text-accentBlue focus:ring-accentBlue z-10 cursor-pointer';
+                    checkbox.checked = selectedReports.has(rep.filename);
+                    checkbox.onchange = (e) => {
+                        e.stopPropagation();
+                        toggleCompare(rep.filename, checkbox.checked);
+                    };
+
+                    // Label/Button
+                    const btn = document.createElement('div');
+                    btn.className = 'flex-1 cursor-pointer select-none';
+                    btn.onclick = () => selectReport(rep.filename, container);
+
                     const retStr = rep.totalReturn >= 0 ? `+${rep.totalReturn.toFixed(1)}%` : `${rep.totalReturn.toFixed(1)}%`;
                     const retColor = rep.totalReturn >= 0 ? 'text-accentGreen' : 'text-accentRed';
                     
                     btn.innerHTML = `
                         <div class="flex items-center justify-between w-full">
-                            <span class="font-bold text-gray-200 text-sm truncate w-2/3">${rep.strategyName}</span>
+                            <span class="font-bold text-gray-200 text-xs truncate max-w-[130px]" title="${rep.strategyName}">${rep.strategyName}</span>
                             <span class="text-xs font-semibold ${retColor}">${retStr}</span>
                         </div>
-                        <div class="flex items-center justify-between w-full mt-2 text-xs text-gray-500">
-                            <span>${rep.coin} | ${rep.interval}</span>
+                        <div class="flex items-center justify-between w-full mt-2 text-[10px] text-gray-500">
+                            <span>${rep.coin.split('+').slice(0, 2).join('+')} | ${rep.interval}</span>
                             <span>Sharpe: ${rep.sharpeRatio.toFixed(2)}</span>
                         </div>
                     `;
-                    listEl.appendChild(btn);
+
+                    container.appendChild(checkbox);
+                    container.appendChild(btn);
+                    listEl.appendChild(container);
                 });
+
+                // Select first report automatically
+                if (reports.length > 0 && !mainReportData) {
+                    const firstEl = listEl.querySelector('div');
+                    selectReport(reports[0].filename, firstEl);
+                }
             } catch (err) {
                 listEl.innerHTML = `<div class="text-red-500 text-sm text-center py-8">Yükleme hatası: ${err.message}</div>`;
             }
         }
 
-        async function selectReport(filename, buttonEl) {
-            // Remove active style from all sidebar buttons
-            const buttons = document.querySelectorAll('#reports-list button');
-            buttons.forEach(b => b.classList.remove('border-accentBlue', 'bg-[#151c2c]/90'));
-            
-            // Add active style to selected button
-            buttonEl.classList.add('border-accentBlue', 'bg-[#151c2c]/90');
-            
+        function toggleCompare(filename, checked) {
+            if (checked) {
+                selectedReports.add(filename);
+            } else {
+                selectedReports.delete(filename);
+            }
+            document.getElementById('compare-count').innerText = selectedReports.size;
+        }
+
+        function clearComparison() {
+            selectedReports.clear();
+            document.getElementById('compare-count').innerText = 0;
+            const checkboxes = document.querySelectorAll('#reports-list input[type="checkbox"]');
+            checkboxes.forEach(c => c.checked = false);
+            renderCompareTab();
+        }
+
+        async function selectReport(filename, element) {
+            const cards = document.querySelectorAll('#reports-list > div');
+            cards.forEach(c => c.classList.remove('border-accentBlue', 'bg-[#111827]/80'));
+            if (element) {
+                element.classList.add('border-accentBlue', 'bg-[#111827]/80');
+            }
+
             try {
                 const res = await fetch(`/api/reports/${encodeURIComponent(filename)}`);
                 const data = await res.json();
+                mainReportData = data;
                 renderDashboard(data);
             } catch (err) {
                 alert('Rapor yüklenemedi: ' + err.message);
             }
         }
 
+        // ── RENDER OVERVIEW DATA ──────────────────────────────────────────────
         function renderDashboard(data) {
-            document.getElementById('dashboard-content').style.display = 'block';
-
-            // ── Set Metadata Titles ──────────────────────────────────────────
+            // Set Header Metadata
             document.getElementById('active-strategy-title').innerText = data.strategyName || 'Config-based Strategy';
-            document.getElementById('active-coin-subtitle').innerText = `${data.coin} | Aralık: ${data.interval}`;
+            document.getElementById('active-coin-subtitle').innerText = `${data.coin} | Interval: ${data.interval}`;
             document.getElementById('active-date-range').innerText = `${data.startDate || ''} → ${data.endDate || ''}`;
 
-            // ── Set Metric Cards ──────────────────────────────────────────────
-            const ret = data.totalReturn ?? 0;
-            const retStr = ret >= 0 ? `+${ret.toFixed(2)}%` : `${ret.toFixed(2)}%`;
-            document.getElementById('metric-return').innerText = retStr;
-            document.getElementById('metric-return').className = `text-sm font-semibold ${ret >= 0 ? 'text-accentGreen' : 'text-accentRed'}`;
-            
-            document.getElementById('metric-capital').innerText = `${(data.finalCapital ?? 0).toLocaleString()} USDT`;
-            document.getElementById('metric-initial').innerText = `Başlangıç: ${(data.initialCapital ?? 0).toLocaleString()} USDT`;
+            // Decision Outperformance Banner Calculation
+            const stratRet = data.totalReturn ?? 0;
+            const bhRet = data.buyAndHoldReturn ?? 0;
+            const alpha = stratRet - bhRet;
 
-            const sharpe = data.sharpeRatio ?? 0;
-            document.getElementById('metric-sharpe').innerText = sharpe.toFixed(3);
-            document.getElementById('metric-pf').innerText = `PF: ${(data.profitFactor ?? 0).toFixed(3)}`;
-            
-            const expectancy = data.analytics?.expectancyUsdt ?? 0;
-            document.getElementById('metric-expectancy').innerText = `Expectancy: ${expectancy.toFixed(1)} USDT`;
+            const decisionBanner = document.getElementById('decision-banner');
+            const decisionIcon = document.getElementById('decision-icon');
+            const decisionLabel = document.getElementById('decision-label');
+
+            if (alpha > 0) {
+                decisionBanner.className = 'p-6 rounded-xl border border-accentGreen/30 bg-accentGreen/5 flex items-center justify-between transition-all';
+                decisionIcon.innerHTML = '🥇';
+                decisionLabel.innerText = 'OUTPERFORM (Piyasayı Yendi)';
+                decisionLabel.className = 'text-xl font-bold mt-0.5 text-accentGreen';
+            } else {
+                decisionBanner.className = 'p-6 rounded-xl border border-accentRed/30 bg-accentRed/5 flex items-center justify-between transition-all';
+                decisionIcon.innerHTML = '⚠️';
+                decisionLabel.innerText = 'UNDERPERFORM (Piyasa Gerisinde)';
+                decisionLabel.className = 'text-xl font-bold mt-0.5 text-accentRed';
+            }
+
+            // Populate Banner Metrics
+            document.getElementById('banner-strat-ret').innerText = `${stratRet >= 0 ? '+' : ''}${stratRet.toFixed(2)}%`;
+            document.getElementById('banner-strat-ret').className = `text-lg font-bold font-mono ${stratRet >= 0 ? 'text-accentGreen' : 'text-accentRed'}`;
+            document.getElementById('banner-bh-ret').innerText = `${bhRet >= 0 ? '+' : ''}${bhRet.toFixed(2)}%`;
+            document.getElementById('banner-alpha').innerText = `${alpha >= 0 ? '+' : ''}${alpha.toFixed(2)}%`;
+            document.getElementById('banner-alpha').className = `text-lg font-bold font-mono ${alpha >= 0 ? 'text-accentGreen' : 'text-accentRed'}`;
+
+            // Metrics Cards
+            document.getElementById('card-capital').innerText = `${(data.finalCapital ?? 0).toLocaleString()} USDT`;
+            document.getElementById('card-initial').innerText = `Başlangıç: ${(data.initialCapital ?? 0).toLocaleString()} USDT`;
+
+            document.getElementById('card-sharpe').innerText = (data.sharpeRatio ?? 0).toFixed(3);
+            document.getElementById('card-pf').innerText = `Profit Factor: ${(data.profitFactor ?? 0).toFixed(3)}`;
 
             const winRate = data.winRate ?? 0;
-            document.getElementById('metric-winrate').innerText = `+${winRate.toFixed(1)}%`;
-            document.getElementById('metric-trades').innerText = `${data.totalTrades ?? 0} İşlem`;
-            document.getElementById('metric-winloss').innerText = `Win: ${data.winningTrades ?? 0} | Loss: ${data.losingTrades ?? 0}`;
+            document.getElementById('card-winrate').innerText = `%${winRate.toFixed(1)}`;
+            document.getElementById('card-winloss').innerText = `W: ${data.winningTrades ?? 0} | L: ${data.losingTrades ?? 0}`;
 
             const maxDd = data.maxDrawdown ?? 0;
-            document.getElementById('metric-maxdd').innerText = `-${maxDd.toFixed(2)}%`;
-            
-            const ruin = data.monteCarlo?.riskOfRuinPercent ?? 0;
-            document.getElementById('metric-ruin').innerText = `Ruin: ${ruin.toFixed(1)}%`;
+            document.getElementById('card-maxdd').innerText = `-%${maxDd.toFixed(2)}`;
+            const expectancy = data.analytics?.expectancyUsdt ?? 0;
+            document.getElementById('card-avgtrade').innerText = `Expectancy: ${expectancy.toFixed(1)} USDT`;
 
-            const ulcer = data.analytics?.ulcerIndex ?? 0;
-            document.getElementById('metric-ulcer').innerText = `Ulcer Index: ${ulcer.toFixed(2)}`;
-
-            // ── Set Detailed Breakdown Metrics ─────────────────────────────
-            document.getElementById('val-rec').innerText = (data.analytics?.recoveryFactor ?? 0).toFixed(2);
-            document.getElementById('val-mar').innerText = (data.analytics?.marRatio ?? 0).toFixed(2);
-            document.getElementById('val-gainpain').innerText = (data.analytics?.gainPainRatio ?? 0).toFixed(2);
-            document.getElementById('val-exposure').innerText = `${((data.analytics?.exposureTime ?? 0)).toFixed(1)}%`;
-            document.getElementById('val-sqn').innerText = (data.analytics?.sqn ?? 0).toFixed(2);
-            document.getElementById('val-kelly').innerText = `${((data.analytics?.kelly ?? 0) * 100).toFixed(1)}%`;
-            
-            const avgWin = data.avgWin ?? 0;
-            const avgLoss = data.avgLoss ?? 0;
-            document.getElementById('val-avgwinloss').innerText = `${avgWin.toFixed(0)} / ${avgLoss.toFixed(0)}`;
-            document.getElementById('val-capusage').innerText = `${((data.analytics?.capitalUsage ?? 0)).toFixed(1)}%`;
-
-            // ── Trade Journal Table ──────────────────────────────────────────
+            // Dynamic Asset and Yearly breakdowns
             const trades = data.trades || [];
-            document.getElementById('trade-journal-count').innerText = `${trades.length} işlem listelendi`;
-            const tbody = document.getElementById('trade-journal-body');
-            tbody.innerHTML = '';
-            
+            calculateAndRenderAssetBreakdown(trades);
+            calculateAndRenderYearlyBreakdown(trades);
+
+            // Detailed Risk Tab Metrics
+            document.getElementById('risk-rec-factor').innerText = (data.analytics?.recoveryFactor ?? 0).toFixed(2);
+            document.getElementById('risk-mar-ratio').innerText = (data.analytics?.marRatio ?? 0).toFixed(2);
+            document.getElementById('risk-gainpain-ratio').innerText = (data.analytics?.gainPainRatio ?? 0).toFixed(2);
+            document.getElementById('risk-exposure').innerText = `${(data.analytics?.exposureTime ?? 0).toFixed(1)}%`;
+            document.getElementById('risk-sqn').innerText = (data.analytics?.sqn ?? 0).toFixed(2);
+            document.getElementById('risk-kelly').innerText = `%${((data.analytics?.kelly ?? 0) * 100).toFixed(1)}`;
+            document.getElementById('risk-ulcer').innerText = (data.analytics?.ulcerIndex ?? 0).toFixed(2);
+            document.getElementById('risk-capusage').innerText = `%${(data.analytics?.capitalUsage ?? 0).toFixed(1)}`;
+
+            const ruinPercent = data.monteCarlo?.riskOfRuinPercent ?? 0;
+            document.getElementById('risk-ruin-indicator').innerText = `Risk of Ruin (%30 Limit): %${ruinPercent.toFixed(1)}`;
+
+            // Monte Carlo details
+            const mc = data.monteCarlo || {};
+            if (mc.finalCapitalQuantiles) {
+                document.getElementById('mc-worst').innerText = `${mc.finalCapitalQuantiles.worst?.toLocaleString(undefined, {maximumFractionDigits:0})} $`;
+                document.getElementById('mc-p5').innerText = `${mc.finalCapitalQuantiles.p5?.toLocaleString(undefined, {maximumFractionDigits:0})} $`;
+                document.getElementById('mc-p50').innerText = `${mc.finalCapitalQuantiles.p50?.toLocaleString(undefined, {maximumFractionDigits:0})} $`;
+                document.getElementById('mc-p95').innerText = `${mc.finalCapitalQuantiles.p95?.toLocaleString(undefined, {maximumFractionDigits:0})} $`;
+                document.getElementById('mc-best').innerText = `${mc.finalCapitalQuantiles.best?.toLocaleString(undefined, {maximumFractionDigits:0})} $`;
+            }
+
+            // Render main Equity chart and Monte Carlo Chart
+            renderEquityChart(data.equityCurve || []);
+            renderMonteCarloChart(data.monteCarlo || {});
+            renderRegimeChart(trades);
+
+            // Populate Trade journal tab
+            populateJournalTable(trades);
+        }
+
+        // ── CALCULATE ASSET CONTRIBUTION ────────────────────────────────────
+        function calculateAndRenderAssetBreakdown(trades) {
+            const assetPnL = new Map();
             trades.forEach(t => {
+                const current = assetPnL.get(t.asset) || 0;
+                assetPnL.set(t.asset, current + (t.pnl || 0));
+            });
+
+            const labels = Array.from(assetPnL.keys());
+            const data = Array.from(assetPnL.values());
+            const colors = data.map(v => v >= 0 ? '#10b981' : '#ef4444');
+
+            const ctx = document.getElementById('assetContribChart').getContext('2d');
+            if (myAssetContribChart) myAssetContribChart.destroy();
+
+            myAssetContribChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Varlık Net Kârı (USDT)',
+                        data: data,
+                        backgroundColor: colors,
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { grid: { display: false }, ticks: { color: '#9ca3af' } },
+                        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#9ca3af' } }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        // ── CALCULATE YEARLY P&L ─────────────────────────────────────────────
+        function calculateAndRenderYearlyBreakdown(trades) {
+            const yearlyPnL = new Map();
+            trades.forEach(t => {
+                const date = new Date(t.exitOrder.timestamp);
+                const year = date.getFullYear();
+                if (!isNaN(year)) {
+                    const current = yearlyPnL.get(year) || 0;
+                    yearlyPnL.set(year, current + (t.pnl || 0));
+                }
+            });
+
+            const labels = Array.from(yearlyPnL.keys()).sort();
+            const data = labels.map(y => yearlyPnL.get(y));
+            const colors = data.map(v => v >= 0 ? '#10b981' : '#ef4444');
+
+            const ctx = document.getElementById('yearlyPnlChart').getContext('2d');
+            if (myYearlyPnlChart) myYearlyPnlChart.destroy();
+
+            myYearlyPnlChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels.map(String),
+                    datasets: [{
+                        label: 'Yıllık Kar/Zarar (USDT)',
+                        data: data,
+                        backgroundColor: colors,
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { grid: { display: false }, ticks: { color: '#9ca3af' } },
+                        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#9ca3af' } }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        // ── RENDER MAIN EQUITY & DD CHART ────────────────────────────────────
+        function renderEquityChart(curve) {
+            const ctx = document.getElementById('equityChartV2').getContext('2d');
+            if (myEquityChart) myEquityChart.destroy();
+
+            const labels = curve.map(c => new Date(c.timestamp).toISOString().slice(0, 10));
+            const equities = curve.map(c => c.equity);
+            const drawdowns = curve.map(c => c.drawdownPercent || 0);
+
+            myEquityChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Portföy Sermayesi (USDT)',
+                            data: equities,
+                            borderColor: '#3b82f6',
+                            borderWidth: 2.5,
+                            yAxisID: 'y',
+                            pointRadius: 0,
+                            fill: false
+                        },
+                        {
+                            label: 'Drawdown (%)',
+                            data: drawdowns,
+                            borderColor: '#ef4444',
+                            borderWidth: 1.5,
+                            backgroundColor: 'rgba(239, 68, 68, 0.12)',
+                            fill: true,
+                            yAxisID: 'y1',
+                            pointRadius: 0
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(255, 255, 255, 0.03)' },
+                            ticks: { color: '#9ca3af', maxRotation: 0, font: { size: 10 } }
+                        },
+                        y: {
+                            position: 'left',
+                            grid: { color: 'rgba(255, 255, 255, 0.04)' },
+                            ticks: { color: '#3b82f6' }
+                        },
+                        y1: {
+                            position: 'right',
+                            grid: { display: false },
+                            ticks: { color: '#ef4444' },
+                            reverse: true,
+                            min: 0,
+                            max: 100
+                        }
+                    },
+                    plugins: {
+                        legend: { labels: { color: '#f1f5f9' } }
+                    }
+                }
+            });
+        }
+
+        // ── RENDER MONTE CARLO CHART ─────────────────────────────────────────
+        function renderMonteCarloChart(mc) {
+            const ctx = document.getElementById('monteCarloChartV2').getContext('2d');
+            if (myMonteCarloChart) myMonteCarloChart.destroy();
+
+            if (!mc || !mc.finalCapitalQuantiles) return;
+
+            const q = mc.finalCapitalQuantiles;
+            const labels = ['Worst Path', 'P5 (Kötü %5)', 'P50 (Ortanca)', 'P95 (İyi %5)', 'Best Path'];
+            const data = [q.worst, q.p5, q.p50, q.p95, q.best];
+
+            myMonteCarloChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: ['#ef4444', '#f97316', '#3b82f6', '#10b981', '#059669'],
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { grid: { display: false }, ticks: { color: '#9ca3af' } },
+                        y: { grid: { color: 'rgba(255, 255, 255, 0.04)' }, ticks: { color: '#9ca3af' } }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        // ── RENDER REGIME doughnut CHART ──────────────────────────────────────
+        function renderRegimeChart(trades) {
+            const ctx = document.getElementById('riskRegimeChart').getContext('2d');
+            if (myRegimeChart) myRegimeChart.destroy();
+
+            let wins = 0;
+            let losses = 0;
+            trades.forEach(t => {
+                if (t.pnlPercent >= 0) wins++;
+                else losses++;
+            });
+
+            myRegimeChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Karlı İşlemler', 'Zararlı İşlemler'],
+                    datasets: [{
+                        data: [wins, losses],
+                        backgroundColor: ['#10b981', '#ef4444'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { color: '#9ca3af' } }
+                    }
+                }
+            });
+        }
+
+        // ── RENDER COMPARE MODULE (Sekme 3) ──────────────────────────────────
+        async function renderCompareTab() {
+            const tableBody = document.getElementById('compare-table-body');
+            const tableHeader = document.querySelector('#compare-table thead tr');
+            
+            if (selectedReports.size === 0) {
+                tableBody.innerHTML = '<tr><td colspan="10" class="py-8 text-center text-gray-500">Lütfen karşılaştırmak için soldaki listeden en az iki kutucuğu işaretleyin.</td></tr>';
+                document.getElementById('badge-winner').innerText = '🥇 Seçim Yapılmadı';
+                return;
+            }
+
+            // Fetch all reports contents in parallel
+            const reportDataList = [];
+            for (const filename of selectedReports) {
+                try {
+                    const res = await fetch(`/api/reports/${encodeURIComponent(filename)}`);
+                    const data = await res.json();
+                    reportDataList.push(data);
+                } catch {}
+            }
+
+            // Render Headers
+            tableHeader.innerHTML = '<th class="pb-4 font-semibold">Metrik / Özellik</th>';
+            reportDataList.forEach(data => {
+                tableHeader.innerHTML += `<th class="pb-4 font-semibold text-center">${data.strategyName || 'Strategy'}</th>`;
+            });
+
+            // Compare Rows config
+            const rowsConfig = [
+                { label: 'Coin / Varlık', key: 'coin', type: 'string' },
+                { label: 'Mum Aralığı', key: 'interval', type: 'string' },
+                { label: 'Strateji Getirisi (%)', key: 'totalReturn', type: 'pct', higherBetter: true },
+                { label: 'Buy & Hold Getirisi (%)', key: 'buyAndHoldReturn', type: 'pct', higherBetter: true },
+                { label: 'Sharpe Oranı', key: 'sharpeRatio', type: 'num', higherBetter: true },
+                { label: 'Maksimum Çöküş (%)', key: 'maxDrawdown', type: 'dd', higherBetter: false },
+                { label: 'Kazanma Oranı (%)', key: 'winRate', type: 'pct', higherBetter: true },
+                { label: 'Profit Factor', key: 'profitFactor', type: 'num', higherBetter: true },
+                { label: 'Toplam İşlem Sayısı', key: 'totalTrades', type: 'int', higherBetter: true },
+            ];
+
+            // Build Rows HTML
+            tableBody.innerHTML = '';
+            rowsConfig.forEach(row => {
+                let html = `<tr class="hover:bg-slate-800/20"><td class="py-3.5 font-medium text-gray-400">${row.label}</td>`;
+                
+                // Find best value index to highlight it
+                let bestIdx = -1;
+                if (row.type !== 'string') {
+                    let bestVal = row.higherBetter ? -Infinity : Infinity;
+                    reportDataList.forEach((data, idx) => {
+                        const val = data[row.key] ?? 0;
+                        if (row.higherBetter) {
+                            if (val > bestVal) { bestVal = val; bestIdx = idx; }
+                        } else {
+                            if (val < bestVal) { bestVal = val; bestIdx = idx; }
+                        }
+                    });
+                }
+
+                reportDataList.forEach((data, idx) => {
+                    let val = data[row.key];
+                    let text = val;
+                    if (row.type === 'pct') text = `%${val?.toFixed(2)}`;
+                    else if (row.type === 'dd') text = `-%${val?.toFixed(2)}`;
+                    else if (row.type === 'num') text = val?.toFixed(3);
+                    else if (row.type === 'int') text = val?.toString();
+
+                    const highlightClass = idx === bestIdx ? 'text-accentGreen font-bold bg-accentGreen/5' : 'text-gray-200';
+                    html += `<td class="py-3.5 text-center font-mono ${highlightClass}">${text}</td>`;
+                });
+                html += '</tr>';
+                tableBody.innerHTML += html;
+            });
+
+            // Find overall winner based on Sharpe Ratio
+            let bestSharpe = -Infinity;
+            let winnerName = 'Bulunamadı';
+            reportDataList.forEach(data => {
+                if ((data.sharpeRatio ?? 0) > bestSharpe) {
+                    bestSharpe = data.sharpeRatio ?? 0;
+                    winnerName = data.strategyName;
+                }
+            });
+            document.getElementById('badge-winner').innerText = `🥇 Öneri: ${winnerName} (Yüksek Sharpe)`;
+        }
+
+        // ── POPULATE JOURNAL TABLE (Sekme 4) ──────────────────────────────────
+        let allTradesCache = [];
+        function populateJournalTable(trades) {
+            allTradesCache = trades;
+            filterTradesTable();
+        }
+
+        function filterTradesTable() {
+            const query = document.getElementById('journal-search').value.toLowerCase();
+            const tbody = document.getElementById('journal-table-body');
+            tbody.innerHTML = '';
+
+            const filtered = allTradesCache.filter(t => 
+                t.asset.toLowerCase().includes(query) ||
+                (t.exitReason && t.exitReason.toLowerCase().includes(query))
+            );
+
+            document.getElementById('journal-trades-subtitle').innerText = `${filtered.length} işlem filtrelendi (Toplam: ${allTradesCache.length})`;
+
+            filtered.forEach(t => {
                 const tr = document.createElement('tr');
-                tr.className = 'hover:bg-slate-800/40 transition-all';
+                tr.className = 'hover:bg-slate-800/30 transition-all';
                 
                 const sideColor = t.entryOrder.side === 'BUY' ? 'text-accentGreen' : 'text-accentRed';
-                const pnlColor = t.pnl >= 0 ? 'text-accentGreen' : 'text-accentRed';
+                const pnlColor = t.pnlPercent >= 0 ? 'text-accentGreen' : 'text-accentRed';
                 
                 tr.innerHTML = `
-                    <td class="py-3 font-semibold text-gray-200">${t.asset || data.coin}</td>
+                    <td class="py-3 font-semibold text-gray-200">${t.asset}</td>
                     <td class="py-3 font-bold ${sideColor}">${t.entryOrder.side}</td>
                     <td class="py-3 text-right text-gray-400 font-mono">${t.entryOrder.quantity.toFixed(4)}</td>
                     <td class="py-3 text-right text-gray-400 font-mono">${t.entryOrder.price.toFixed(2)}</td>
@@ -382,169 +983,77 @@
                 `;
                 tbody.appendChild(tr);
             });
-
-            // ── Render Charts ───────────────────────────────────────────────
-            renderEquityChart(data.equityCurve || []);
-            renderMonteCarloChart(data.monteCarlo || {}, data.initialCapital);
-            renderRegimeChart(data.trades || []);
         }
 
-        function renderEquityChart(curve) {
-            const ctx = document.getElementById('equityChart').getContext('2d');
-            if (equityChart) equityChart.destroy();
-            
-            const labels = curve.map(c => new Date(c.timestamp).toISOString().slice(0, 10));
-            const equities = curve.map(c => c.equity);
-            const drawdowns = curve.map(c => c.drawdownPercent || 0);
+        // ── LOAD DISCOVERY FUNNEL (Sekme 5) ──────────────────────────────────
+        async function loadDiscoveryFunnel() {
+            try {
+                const res = await fetch('/api/discovery');
+                const data = await res.json();
 
-            equityChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [
-                        {
-                            label: 'Portföy Sermayesi (USDT)',
-                            data: equities,
-                            borderColor: '#3b82f6',
-                            borderWidth: 2,
-                            yAxisID: 'y',
-                            pointRadius: 0,
-                            fill: false,
-                        },
-                        {
-                            label: 'Drawdown (%)',
-                            data: drawdowns,
-                            borderColor: '#ef4444',
-                            borderWidth: 1.5,
-                            backgroundColor: 'rgba(239, 68, 68, 0.15)',
-                            fill: true,
-                            yAxisID: 'y1',
-                            pointRadius: 0,
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        x: {
-                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                            ticks: { color: '#94a3b8', font: { size: 10 } }
-                        },
-                        y: {
-                            position: 'left',
-                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                            ticks: { color: '#3b82f6' }
-                        },
-                        y1: {
-                            position: 'right',
-                            grid: { drawOnChartArea: false },
-                            ticks: { color: '#ef4444' },
-                            reverse: true,
-                            min: 0,
-                            max: 100
-                        }
-                    },
-                    plugins: {
-                        legend: { labels: { color: '#e2e8f0' } }
-                    }
+                if (!data.results || data.results.length === 0) return;
+
+                // Simple stage count calculations based on discovery log results
+                const total = data.totalCandidates || 50;
+                
+                // Count passes per stage
+                let btCount = 0;
+                let mcCount = 0;
+                let wfCount = 0;
+
+                data.results.forEach(r => {
+                    // Passed backtest stage means stage is at least not BACKTEST_FAILED or INSUFFICIENT_TRADES
+                    if (r.stage !== 'BACKTEST_FAILED' && r.stage !== 'INSUFFICIENT_TRADES') btCount++;
+                    if (r.stage !== 'BACKTEST_FAILED' && r.stage !== 'INSUFFICIENT_TRADES' && r.stage !== 'MONTE_CARLO_FAILED') mcCount++;
+                    if (r.stage === 'PASSED') wfCount++;
+                });
+
+                // Update funnel width sizes
+                document.getElementById('funnel-total').style.width = '100%';
+                document.getElementById('funnel-total').innerText = `${total} Aday Arama`;
+
+                const btPct = total > 0 ? (btCount / total * 100).toFixed(0) : 0;
+                document.getElementById('funnel-bt').style.width = `${btPct}%`;
+                document.getElementById('funnel-bt').innerText = `${btCount} Aday (Kârlı Backtest) | %${btPct}`;
+
+                const mcPct = btCount > 0 ? (mcCount / total * 100).toFixed(0) : 0;
+                document.getElementById('funnel-mc').style.width = `${mcPct}%`;
+                document.getElementById('funnel-mc').innerText = `${mcCount} Aday (Monte Carlo Güvenli) | %${mcPct}`;
+
+                const wfPct = mcCount > 0 ? (wfCount / total * 100).toFixed(0) : 0;
+                document.getElementById('funnel-wf').style.width = `${wfPct}%`;
+                document.getElementById('funnel-wf').innerText = `${wfCount} Aday (Walk-Forward Robust) | %${wfPct}`;
+
+                // Discovery Leaderboard
+                const sorted = data.results.filter(r => r.stage === 'PASSED')
+                    .sort((a,b) => (b.score?.overall ?? 0) - (a.score?.overall ?? 0))
+                    .slice(0, 10);
+
+                const leaderboardEl = document.getElementById('discovery-leaderboard');
+                if (sorted.length === 0) {
+                    leaderboardEl.innerHTML = '<div class="text-gray-500 text-xs text-center py-8">Walk-Forward aşamasını geçen aday bulunamadı.</div>';
+                    return;
                 }
-            });
-        }
 
-        function renderMonteCarloChart(mc, initialCap) {
-            const ctx = document.getElementById('monteCarloChart').getContext('2d');
-            if (monteCarloChart) monteCarloChart.destroy();
+                leaderboardEl.innerHTML = '';
+                sorted.forEach((item, idx) => {
+                    const stars = '★'.repeat(Math.min(5, Math.ceil((item.score?.overall ?? 0) / 20)));
+                    const card = document.createElement('div');
+                    card.className = 'p-3 bg-black/30 border border-glassBorder rounded-lg flex items-center justify-between text-xs';
+                    card.innerHTML = `
+                        <div>
+                            <span class="font-bold text-gray-200 block">#${idx+1} ${item.id}</span>
+                            <span class="text-gray-500 mt-1 block">Sharpe: ${item.sharpeRatio?.toFixed(2)} | DD: -%${item.maxDrawdown?.toFixed(1)}</span>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-accentGreen font-bold block">+%${item.totalReturn?.toFixed(1)}</span>
+                            <span class="text-yellow-500 font-mono mt-1 block">${stars}</span>
+                        </div>
+                    `;
+                    leaderboardEl.appendChild(card);
+                });
 
-            // Handle empty Monte Carlo object
-            if (!mc || !mc.finalCapitalQuantiles) {
-                // draw empty state or dummy chart
-                return;
-            }
-
-            const quantiles = mc.finalCapitalQuantiles;
-            const labels = ['Worst', 'P5', 'P50 (Median)', 'P95', 'Best'];
-            const data = [
-                quantiles.worst,
-                quantiles.p5,
-                quantiles.p50,
-                quantiles.p95,
-                quantiles.best
-            ];
-
-            monteCarloChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Simüle Bitiş Sermayesi (USDT)',
-                        data: data,
-                        backgroundColor: [
-                            '#ef4444', // Worst
-                            '#f97316', // P5
-                            '#3b82f6', // P50
-                            '#10b981', // P95
-                            '#059669'  // Best
-                        ],
-                        borderWidth: 0,
-                        borderRadius: 6
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        x: {
-                            grid: { display: false },
-                            ticks: { color: '#94a3b8', font: { size: 10 } }
-                        },
-                        y: {
-                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                            ticks: { color: '#94a3b8' }
-                        }
-                    },
-                    plugins: {
-                        legend: { display: false }
-                    }
-                }
-            });
-        }
-
-        function renderRegimeChart(trades) {
-            const ctx = document.getElementById('regimeChart').getContext('2d');
-            if (regimeChart) regimeChart.destroy();
-
-            // Count returns grouped by exitReason/regime properties if logged
-            // Fallback: Group returns by positive vs negative exit trades
-            let profitCount = 0;
-            let lossCount = 0;
-            trades.forEach(t => {
-                if (t.pnlPercent >= 0) profitCount++;
-                else lossCount++;
-            });
-
-            regimeChart = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: ['Karlı İşlemler', 'Zararlı İşlemler'],
-                    datasets: [{
-                        data: [profitCount, lossCount],
-                        backgroundColor: ['#10b981', '#ef4444'],
-                        borderWidth: 1,
-                        borderColor: '#151c2c'
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'bottom',
-                            labels: { color: '#e2e8f0', font: { size: 11 } }
-                        }
-                    }
-                }
-            });
+            } catch (err) {}
         }
     </script>
 </body>

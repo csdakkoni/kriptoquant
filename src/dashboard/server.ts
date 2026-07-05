@@ -39,6 +39,9 @@ export function startDashboardServer(port: number = 3000): any {
 								const path = join(resultsDir, file);
 								const raw = readFileSync(path, 'utf-8');
 								const data = JSON.parse(raw);
+								if (data.initialCapital === undefined) {
+									continue;
+								}
 								reports.push({
 									filename: file,
 									strategyName: data.strategyName || 'N/A',
@@ -58,6 +61,20 @@ export function startDashboardServer(port: number = 3000): any {
 
 				res.writeHead(200, { 'Content-Type': 'application/json' });
 				res.end(JSON.stringify(reports));
+				return;
+			}
+ 
+			// ── 1b) GET /api/discovery ───────────────────────────────────────
+			if (url === '/api/discovery') {
+				const filePath = join(process.cwd(), 'results', 'alpha_discovery_registry.json');
+				if (existsSync(filePath)) {
+					const raw = readFileSync(filePath, 'utf-8');
+					res.writeHead(200, { 'Content-Type': 'application/json' });
+					res.end(raw);
+				} else {
+					res.writeHead(200, { 'Content-Type': 'application/json' });
+					res.end(JSON.stringify({ totalCandidates: 0, passedCandidates: 0, results: [] }));
+				}
 				return;
 			}
 
