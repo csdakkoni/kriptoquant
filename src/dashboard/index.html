@@ -121,6 +121,9 @@
                 <button onclick="switchTab('compare')" id="tab-compare" class="tab-btn px-6 py-3 border-b-2 border-transparent text-gray-400 hover:text-gray-200 transition-all">
                     ⚖️ Karşılaştır (<span id="compare-count">0</span>)
                 </button>
+                <button onclick="switchTab('builder')" id="tab-builder" class="tab-btn px-6 py-3 border-b-2 border-transparent text-gray-400 hover:text-gray-200 transition-all">
+                    🛠️ DSL Tasarımcısı
+                </button>
                 <button onclick="switchTab('journal')" id="tab-journal" class="tab-btn px-6 py-3 border-b-2 border-transparent text-gray-400 hover:text-gray-200 transition-all">
                     📋 İşlem Günlüğü
                 </button>
@@ -135,6 +138,155 @@
 
             <!-- ─── SEKME 1: GENEL BAKIŞ (OVERVIEW) ─────────────────────────────────── -->
             <div id="content-overview" class="tab-content space-y-6">
+                
+                <!-- TOP LEVEL PANEL: AI ANALYST & DEPLOY DECISION ROW -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    
+                    <!-- 1) AI ANALYST CARD (2/3 Width) -->
+                    <div class="glass-card p-6 flex flex-col justify-between lg:col-span-2 border-l-4 border-l-accentGreen" id="ai-insight-card">
+                        <div>
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center space-x-2">
+                                    <span class="text-xs font-bold uppercase tracking-wider text-gray-400">Yapay Zeka Analisti (AI Analyst)</span>
+                                    <span class="text-[10px] bg-accentGreen/10 text-accentGreen px-2 py-0.5 rounded font-mono font-bold" id="rec-confidence">Güven Seviyesi: --</span>
+                                </div>
+                                <span class="text-xs text-yellow-500 font-mono" id="rec-stars">--</span>
+                            </div>
+                            <p class="text-sm text-gray-200 mt-3 font-semibold" id="rec-text">--</p>
+                            
+                            <!-- Neden başarısız/başarılı? (Dynamic Why Bullets) -->
+                            <div class="mt-4 border-t border-glassBorder/40 pt-4">
+                                <span class="text-xs font-bold uppercase tracking-wider text-gray-400 block mb-2">Performans Gerekçeleri (Neden?)</span>
+                                <ul class="text-xs space-y-1.5 text-gray-300" id="ai-why-list">
+                                    <!-- Injected dynamically -->
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="mt-4 border-t border-glassBorder/40 pt-3 flex justify-between items-center text-xs">
+                            <span class="text-gray-400">Öneri Geliştirme: <strong class="text-accentBlue" id="rec-action">--</strong></span>
+                            <span class="text-xs font-bold" id="rec-badge">--</span>
+                        </div>
+                    </div>
+
+                    <!-- 2) DEV KARAR PANELİ ("Should I Deploy?") (1/3 Width) -->
+                    <div class="glass-card p-6 flex flex-col justify-between bg-gradient-to-br from-[#111827] to-[#0f172a] border border-glassBorder" id="deploy-decision-card">
+                        <div>
+                            <span class="text-xs font-bold uppercase tracking-wider text-gray-400">DEPLOY KARAR PANELİ</span>
+                            <div class="mt-4 text-center">
+                                <span class="text-xs text-gray-400 block">Canlı Dağıtım Tavsiyesi</span>
+                                <span class="text-3xl font-extrabold block mt-1 tracking-tight" id="deploy-badge">--</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Stats Grid -->
+                        <div class="grid grid-cols-2 gap-4 text-xs font-mono border-t border-b border-glassBorder/50 py-4 my-4">
+                            <div>
+                                <span class="text-gray-500 block">Sermaye Payı</span>
+                                <span class="font-bold text-gray-200" id="deploy-cap-rec">%--</span>
+                            </div>
+                            <div>
+                                <span class="text-gray-500 block">Beklenen DD</span>
+                                <span class="font-bold text-accentRed" id="deploy-exp-dd">-%--</span>
+                            </div>
+                            <div>
+                                <span class="text-gray-500 block">Tahmini CAGR</span>
+                                <span class="font-bold text-accentGreen" id="deploy-exp-cagr">%--</span>
+                              </div>
+                              <div>
+                                  <span class="text-gray-500 block">Güven Oranı</span>
+                                  <span class="font-bold text-accentBlue" id="deploy-confidence">%--</span>
+                              </div>
+                          </div>
+                          
+                          <div class="text-[10px] text-gray-500 text-center">
+                              Monte Carlo & Robustness skorlarına göre üretilmiştir.
+                          </div>
+                      </div>
+                  </div>
+
+                  <!-- SECOND LEVEL PANEL: CHECKLIST & SCORECARD (1/3) + METRICS CARDS (2/3) -->
+                  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                      
+                      <!-- 3) CHECKLIST & SCORECARD (1/3 Width) -->
+                      <div class="glass-card p-6 flex flex-col justify-between space-y-4">
+                          <div>
+                              <span class="text-xs font-bold uppercase tracking-wider text-gray-400 block mb-3">Araştırma Aşamaları (Research Status)</span>
+                              <div class="space-y-2 text-xs font-medium">
+                                  <div class="flex items-center space-x-2 text-accentGreen">
+                                      <span>✓</span> <span class="text-gray-300">Tarihsel Veri Yükleme</span>
+                                  </div>
+                                  <div class="flex items-center space-x-2 text-accentGreen">
+                                      <span>✓</span> <span class="text-gray-300">İndikatör Hesaplama</span>
+                                  </div>
+                                  <div class="flex items-center space-x-2 text-accentGreen">
+                                      <span>✓</span> <span class="text-gray-300">Backtest Simülasyonu</span>
+                                  </div>
+                                  <div class="flex items-center space-x-2" id="checklist-mc">
+                                      <span class="text-accentGreen">✓</span> <span class="text-gray-300">Monte Carlo Dayanıklılık</span>
+                                  </div>
+                                  <div class="flex items-center space-x-2" id="checklist-wf">
+                                      <span class="text-accentGreen">✓</span> <span class="text-gray-300">Walk-Forward Genelleme</span>
+                                  </div>
+                              </div>
+                          </div>
+                          
+                          <!-- Scorecard -->
+                          <div class="border-t border-glassBorder/50 pt-4">
+                              <span class="text-xs font-bold uppercase tracking-wider text-gray-400 block mb-2">Strateji Skor Kartı</span>
+                              <div class="grid grid-cols-2 gap-3 text-xs font-mono">
+                                  <div class="flex justify-between border-b border-glassBorder/30 pb-1">
+                                      <span class="text-gray-500">Getiri:</span> <span class="font-bold text-gray-300" id="score-ret">-/10</span>
+                                  </div>
+                                  <div class="flex justify-between border-b border-glassBorder/30 pb-1">
+                                      <span class="text-gray-500">Risk:</span> <span class="font-bold text-gray-300" id="score-risk">-/10</span>
+                                  </div>
+                                  <div class="flex justify-between border-b border-glassBorder/30 pb-1">
+                                      <span class="text-gray-500">Robust:</span> <span class="font-bold text-gray-300" id="score-robust">-/10</span>
+                                  </div>
+                                  <div class="flex justify-between border-b border-glassBorder/30 pb-1">
+                                      <span class="text-gray-500">Overfit:</span> <span class="font-bold text-gray-300" id="score-overfit">-/10</span>
+                                  </div>
+                              </div>
+                              <div class="flex items-center justify-between mt-3 bg-black/30 p-2 rounded">
+                                  <span class="text-xs font-bold text-gray-400">Deploy Score:</span>
+                                  <span class="text-sm font-extrabold text-accentGreen font-mono" id="score-total">--/100</span>
+                              </div>
+                          </div>
+                      </div>
+
+                      <!-- 4) OVERVIEW STATISTICS CARDS (2/3 Width) -->
+                      <div class="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div class="glass-card p-6 flex flex-col justify-between">
+                              <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Net Getiri</span>
+                              <div class="mt-2 flex items-baseline justify-between">
+                                  <span class="text-3xl font-extrabold text-accentGreen" id="card-capital-pct">--</span>
+                              </div>
+                              <span class="text-xs text-gray-500 mt-2" id="card-capital-val">Bitiş: --</span>
+                          </div>
+                          <div class="glass-card p-6 flex flex-col justify-between">
+                              <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Sharpe Raporu</span>
+                              <div class="mt-2 flex items-baseline justify-between">
+                                  <span class="text-2xl font-bold text-accentBlue" id="card-sharpe">--</span>
+                              </div>
+                              <span class="text-xs text-gray-500 mt-2" id="card-pf">Profit Factor: --</span>
+                          </div>
+                          <div class="glass-card p-6 flex flex-col justify-between">
+                              <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Kazanma Oranı</span>
+                              <div class="mt-2 flex items-baseline justify-between">
+                                  <span class="text-2xl font-bold text-emerald-400" id="card-winrate">--</span>
+                              </div>
+                              <span class="text-xs text-gray-500 mt-2" id="card-winloss">W: -- | L: --</span>
+                          </div>
+                          <div class="glass-card p-6 flex flex-col justify-between">
+                              <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Maksimum Çöküş</span>
+                              <div class="mt-2 flex items-baseline justify-between">
+                                  <span class="text-2xl font-bold text-accentRed" id="card-maxdd">--</span>
+                              </div>
+                              <span class="text-xs text-gray-500 mt-2" id="card-avgtrade">Expectancy: --</span>
+                          </div>
+                      </div>
+                  </div>
+
                 <!-- BENCHMARK DECISION BANNER (Outperform vs Underperform) -->
                 <div id="decision-banner" class="p-6 rounded-xl border flex items-center justify-between transition-all">
                     <div class="flex items-center space-x-4">
@@ -163,61 +315,11 @@
                     </div>
                 </div>
 
-                <!-- YAPAY ZEKA KARAR DESTEĞİ (AI INSIGHTS) -->
-                <div class="glass-card p-6 flex flex-col md:flex-row md:items-center md:justify-between border-l-4 border-l-accentGreen" id="ai-insight-card">
-                    <div>
-                        <div class="flex items-center space-x-2">
-                            <span class="text-xs font-bold uppercase tracking-wider text-gray-400">Karar Destek Sistemi (AI Analyst)</span>
-                            <span class="text-[10px] bg-accentGreen/10 text-accentGreen px-2 py-0.5 rounded font-mono font-bold" id="rec-confidence">Model Güven Skoru: --</span>
-                        </div>
-                        <p class="text-sm text-gray-200 mt-2 font-medium" id="rec-text">
-                            Veriler yüklenirken analiz yapılıyor...
-                        </p>
-                    </div>
-                    <div class="mt-4 md:mt-0 flex flex-col items-end">
-                        <span class="text-[10px] text-gray-500 font-mono tracking-wider font-semibold">TAVSİYE KARARI</span>
-                        <span class="text-lg font-bold text-accentGreen mt-1" id="rec-badge">--</span>
-                        <span class="text-xs text-yellow-500 font-mono mt-1" id="rec-stars">--</span>
-                    </div>
-                </div>
-
-                <!-- OVERVIEW STATISTICS CARDS -->
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
-                    <div class="glass-card p-6 flex flex-col justify-between">
-                        <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Net Getiri</span>
-                        <div class="mt-2 flex items-baseline justify-between">
-                            <span class="text-3xl font-extrabold text-accentGreen" id="card-capital-pct">--</span>
-                        </div>
-                        <span class="text-xs text-gray-500 mt-2" id="card-capital-val">Bitiş: --</span>
-                    </div>
-                    <div class="glass-card p-6 flex flex-col justify-between">
-                        <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Sharpe Raporu</span>
-                        <div class="mt-2 flex items-baseline justify-between">
-                            <span class="text-2xl font-bold text-accentBlue" id="card-sharpe">--</span>
-                        </div>
-                        <span class="text-xs text-gray-500 mt-2" id="card-pf">Profit Factor: --</span>
-                    </div>
-                    <div class="glass-card p-6 flex flex-col justify-between">
-                        <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Kazanma Oranı</span>
-                        <div class="mt-2 flex items-baseline justify-between">
-                            <span class="text-2xl font-bold text-emerald-400" id="card-winrate">--</span>
-                        </div>
-                        <span class="text-xs text-gray-500 mt-2" id="card-winloss">Win/Loss: --</span>
-                    </div>
-                    <div class="glass-card p-6 flex flex-col justify-between">
-                        <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Maksimum Çöküş</span>
-                        <div class="mt-2 flex items-baseline justify-between">
-                            <span class="text-2xl font-bold text-accentRed" id="card-maxdd">--</span>
-                        </div>
-                        <span class="text-xs text-gray-500 mt-2" id="card-avgtrade">Expectancy: --</span>
-                    </div>
-                </div>
-
                 <!-- MAIN EQUITY AND DRAWDOWN CHART (FULL WIDTH) -->
                 <div class="glass-card p-6 flex flex-col">
                     <div class="flex items-center justify-between mb-4">
                         <span class="text-sm font-semibold text-gray-300">Sermaye Büyüme ve Çöküş Grafiği</span>
-                        <span class="text-xs text-gray-500">Mavi: Sermaye | Kırmızı: Drawdown (%)</span>
+                        <span class="text-xs text-gray-500">Mavi: Strateji | Gri: Buy & Hold | Kırmızı: Drawdown (%)</span>
                     </div>
                     <div class="h-96 min-h-[380px]">
                         <canvas id="equityChartV2"></canvas>
@@ -357,6 +459,70 @@
                                 <!-- Dynamic comparison rows will be injected here -->
                             </tbody>
                         </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ─── SEKME 3b: DSL TASARIMCISI (BUILDER) ──────────────────────────────── -->
+            <div id="content-builder" class="tab-content space-y-6 hidden">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Form Editor Card -->
+                    <div class="glass-card p-6 flex flex-col justify-between">
+                        <div>
+                            <span class="text-sm font-semibold text-gray-300 block mb-1">Görsel Strateji Tasarımcısı (DSL Builder)</span>
+                            <p class="text-xs text-gray-500 mb-6">JSON yazmadan, indikatör parametrelerini seçerek stratejinizi oluşturun.</p>
+                            
+                            <div class="space-y-4">
+                                <!-- Name -->
+                                <div>
+                                    <label class="block text-xs text-gray-400 font-semibold mb-1.5 uppercase">Strateji Adı</label>
+                                    <input type="text" id="builder-name" oninput="generateDSL()" value="my-custom-strategy" class="w-full bg-[#090d16] border border-glassBorder px-4 py-2 rounded-lg text-sm focus:outline-none focus:border-accentBlue text-gray-200">
+                                </div>
+                                
+                                <!-- Indicator Family Select -->
+                                <div>
+                                    <label class="block text-xs text-gray-400 font-semibold mb-1.5 uppercase">Strateji Türü / İndikatör Ailesi</label>
+                                    <select id="builder-type" onchange="toggleBuilderFields(); generateDSL();" class="w-full bg-[#090d16] border border-glassBorder px-4 py-2 rounded-lg text-sm focus:outline-none focus:border-accentBlue text-gray-200">
+                                        <option value="ema-cross">EMA Cross (Moving Average Crossover)</option>
+                                        <option value="donchian">Donchian Breakout (Kanal Kırılımı)</option>
+                                        <option value="supertrend">Supertrend Trend Takibi</option>
+                                    </select>
+                                </div>
+                                
+                                <!-- Dynamic Fields Container -->
+                                <div id="builder-fields" class="p-4 bg-black/20 rounded-lg border border-glassBorder/50 space-y-4">
+                                    <!-- Dynamic parameters injected here -->
+                                </div>
+
+                                <!-- Stop Loss / Take Profit -->
+                                <div class="grid grid-cols-2 gap-4 pt-2">
+                                    <div>
+                                        <label class="block text-xs text-gray-400 font-semibold mb-1.5 uppercase">Stop Loss (%)</label>
+                                        <input type="number" id="builder-sl" oninput="generateDSL()" value="2.5" step="0.1" class="w-full bg-[#090d16] border border-glassBorder px-4 py-2 rounded-lg text-sm focus:outline-none focus:border-accentBlue text-gray-200">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs text-gray-400 font-semibold mb-1.5 uppercase">Take Profit (%)</label>
+                                        <input type="number" id="builder-tp" oninput="generateDSL()" value="6.0" step="0.1" class="w-full bg-[#090d16] border border-glassBorder px-4 py-2 rounded-lg text-sm focus:outline-none focus:border-accentBlue text-gray-200">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- JSON Viewer Card -->
+                    <div class="glass-card p-6 flex flex-col">
+                        <div class="flex items-center justify-between mb-4">
+                            <span class="text-sm font-semibold text-gray-300">Üretilen DSL Yapılandırması (config.json)</span>
+                            <button onclick="copyDSLJson()" class="px-3 py-1 bg-accentBlue/25 hover:bg-accentBlue/40 text-accentBlue border border-accentBlue/30 text-xs rounded transition-all font-semibold">
+                                JSON Kopyala
+                            </button>
+                        </div>
+                        <div class="flex-1 flex flex-col">
+                            <textarea id="builder-output" readonly class="w-full flex-1 bg-black/40 border border-glassBorder p-4 rounded-lg text-xs font-mono text-emerald-400 focus:outline-none resize-none min-h-[300px]"></textarea>
+                        </div>
+                        <p class="text-[10px] text-gray-500 mt-3">
+                            Bu JSON içeriğini kopyalayarak projenizin <code>config/strategy.json</code> dosyasına yapıştırıp backtest yapabilirsiniz.
+                        </p>
                     </div>
                 </div>
             </div>
@@ -601,62 +767,133 @@
                 decisionLabel.innerText = 'OUTPERFORM (Piyasayı Yendi)';
                 decisionLabel.className = 'text-xl font-bold mt-0.5 text-accentGreen';
             } else {
-                decisionBanner.className = 'p-6 rounded-xl border border-accentRed/30 bg-accentRed/5 flex items-center justify-between transition-all';
-                decisionIcon.innerHTML = '⚠️';
-                decisionLabel.innerText = 'UNDERPERFORM (Piyasa Gerisinde)';
-                decisionLabel.className = 'text-xl font-bold mt-0.5 text-accentRed';
-            }
-
-            // Populate Banner Metrics
-            document.getElementById('banner-strat-ret').innerText = `${stratRet >= 0 ? '+' : ''}${stratRet.toFixed(2)}%`;
-            document.getElementById('banner-strat-ret').className = `text-lg font-bold font-mono ${stratRet >= 0 ? 'text-accentGreen' : 'text-accentRed'}`;
-            document.getElementById('banner-bh-ret').innerText = `${bhRet >= 0 ? '+' : ''}${bhRet.toFixed(2)}%`;
-            document.getElementById('banner-alpha').innerText = `${alpha >= 0 ? '+' : ''}${alpha.toFixed(2)}%`;
-            document.getElementById('banner-alpha').className = `text-lg font-bold font-mono ${alpha >= 0 ? 'text-accentGreen' : 'text-accentRed'}`;
-
-            // AI Recommendation logic
+                decisionBanner.className = 'p-6 rounded-xl border border-accentRed/30 bg-accentRed            // AI Recommendation logic
             const sharpe = Number(data.sharpeRatio ?? 0);
             const aiInsightCard = document.getElementById('ai-insight-card');
             const recConfidence = document.getElementById('rec-confidence');
             const recText = document.getElementById('rec-text');
             const recBadge = document.getElementById('rec-badge');
             const recStars = document.getElementById('rec-stars');
+            const recAction = document.getElementById('rec-action');
+            const whyList = document.getElementById('ai-why-list');
 
             let confidenceStr = "Düşük (LOW)";
             let badgeText = "❌ AVOID (Uzak Dur)";
             let badgeClass = "text-accentRed";
             let stars = "★★☆☆☆";
             let reasoning = "";
+            let actionStr = "Yeniden optimize et";
 
             if (alpha > 0) {
                 if (sharpe >= 3.0) {
                     confidenceStr = "Mükemmel (EXCELLENT)";
-                    badgeText = "✅ DEPLOY (Yatırım Yap)";
+                    badgeText = "✅ DEPLOY";
                     badgeClass = "text-accentGreen";
                     stars = "★★★★★";
                     reasoning = `Strateji %${stratRet.toFixed(1)} getiri ile piyasayı (Buy & Hold: %${bhRet.toFixed(1)}) bariz bir şekilde yenmiştir. Sharpe oranı (${sharpe.toFixed(2)}) mükemmel seviyededir. Sistem güvenli limandadır ve kısıt olmaksızın fon yatırımına uygundur.`;
+                    actionStr = "Canlı yayına alınabilir";
                 } else if (sharpe >= 2.0) {
                     confidenceStr = "İyi (GOOD)";
-                    badgeText = "✅ DEPLOY (Yatırım Yap)";
+                    badgeText = "✅ DEPLOY";
                     badgeClass = "text-accentGreen";
                     stars = "★★★★☆";
                     reasoning = `Strateji benchmark'ı geride bırakmış ve %${stratRet.toFixed(1)} net getiri sağlamıştır. Sharpe oranı (${sharpe.toFixed(2)}) tatmin edici düzeydedir. Kontrollü bir şekilde canlı kullanıma alınması önerilir.`;
+                    actionStr = "Düşük sermaye ile başlat";
                 } else {
                     confidenceStr = "Orta (MODERATE)";
-                    badgeText = "⚠️ CAUTION (Kısıtlı Yatırım)";
+                    badgeText = "⚠️ CAUTION";
                     badgeClass = "text-orange-400";
                     stars = "★★★☆☆";
                     reasoning = `Strateji getiri olarak benchmark'ın üzerinde kalsa da, Sharpe oranı (${sharpe.toFixed(2)}) düşüktür. Bu durum piyasadaki yüksek oynaklık ve volatilite riskini gösterir. Düşük bütçeyle veya korumalı filtrelerle yatırım yapılabilir.`;
+                    actionStr = "Trend filtresi ekle";
                 }
             } else {
                 confidenceStr = "Yüksek (HIGH)";
-                badgeText = "❌ AVOID (Yatırım Yapma)";
+                badgeText = "❌ AVOID";
                 badgeClass = "text-accentRed";
                 stars = "★★☆☆☆";
                 reasoning = `Strateji getiri olarak pasif piyasa tutma getirisinin (Buy & Hold: %${bhRet.toFixed(1)}) gerisinde kalmıştır. Piyasa performansı stratejiden daha üstün olduğu için bu stratejinin bu haliyle çalıştırılması önerilmez.`;
+                actionStr = "Parametreleri sıfırla / optimize et";
             }
 
-            aiInsightCard.className = `glass-card p-6 flex flex-col md:flex-row md:items-center md:justify-between border-l-4 ${alpha > 0 ? (sharpe >= 2.0 ? 'border-l-accentGreen' : 'border-l-orange-400') : 'border-l-accentRed'} transition-all`;
+            aiInsightCard.className = `glass-card p-6 flex flex-col justify-between lg:col-span-2 border-l-4 ${alpha > 0 ? (sharpe >= 2.0 ? 'border-l-accentGreen' : 'border-l-orange-400') : 'border-l-accentRed'} transition-all`;
+            recConfidence.innerText = `Güven Seviyesi: ${confidenceStr}`;
+            recText.innerText = reasoning;
+            recBadge.innerText = badgeText;
+            recBadge.className = `text-sm font-extrabold px-3 py-1 rounded bg-black/20 ${badgeClass}`;
+            recStars.innerText = stars;
+            recAction.innerText = actionStr;
+
+            // Generate why bullets based on trades
+            const trades = data.trades || [];
+            const assetPnL = new Map();
+            trades.forEach(t => {
+                const current = assetPnL.get(t.asset) || 0;
+                assetPnL.set(t.asset, current + (t.pnl || 0));
+            });
+
+            // Find best and worst assets
+            let bestAsset = "";
+            let bestPnL = -Infinity;
+            let worstAsset = "";
+            let worstPnL = Infinity;
+            assetPnL.forEach((val, key) => {
+                if (val > bestPnL) { bestPnL = val; bestAsset = key; }
+                if (val < worstPnL) { worstPnL = val; worstAsset = key; }
+            });
+
+            const winRate = Number(data.winRate ?? 0);
+            const maxDd = Number(data.maxDrawdown ?? 0);
+
+            let whyHTML = "";
+            if (bestAsset && bestPnL > 0) {
+                whyHTML += `<li class="flex items-center space-x-2 text-accentGreen"><span>✓</span> <span>${bestAsset} varlığı portföy kârına en yüksek katkıyı sağladı (+${bestPnL.toFixed(0)} USDT).</span></li>`;
+            }
+            if (worstAsset && worstPnL < 0) {
+                whyHTML += `<li class="flex items-center space-x-2 text-accentRed"><span>✗</span> <span>${worstAsset} varlığı net zarar yazarak portföyü aşağı çekti (${worstPnL.toFixed(0)} USDT).</span></li>`;
+            }
+            if (winRate < 45) {
+                whyHTML += `<li class="flex items-center space-x-2 text-accentRed"><span>✗</span> <span>Düşük kazanma oranı (%${winRate.toFixed(1)}): Piyasanın kararsız/yatay olduğu dönemlerde çok sayıda sahte sinyalle (false break) stop olunmuş.</span></li>`;
+            } else {
+                whyHTML += `<li class="flex items-center space-x-2 text-accentGreen"><span>✓</span> <span>Güçlü kazanma oranı (%${winRate.toFixed(1)}): Trend dönüşleri kararlı bir şekilde yakalanmış.</span></li>`;
+            }
+            if (maxDd > 20) {
+                whyHTML += `<li class="flex items-center space-x-2 text-accentRed"><span>✗</span> <span>Maksimum Çöküş (%${maxDd.toFixed(1)}): Risk toleransı yüksek, kaldıraç veya pozisyon büyüklükleri düşürülmeli.</span></li>`;
+            }
+            whyList.innerHTML = whyHTML || '<li>Metrikler stabil görünüyor, sıra dışı bir sapma saptanmadı.</li>';
+
+            // Populate Deploy Decision Panel (Problem 8)
+            document.getElementById('deploy-badge').innerText = badgeText;
+            document.getElementById('deploy-badge').className = `text-2xl font-extrabold block mt-1 tracking-tight ${badgeClass}`;
+            document.getElementById('deploy-exp-dd').innerText = `-%${maxDd.toFixed(1)}`;
+            document.getElementById('deploy-exp-cagr').innerText = `%${stratRet.toFixed(1)}`;
+            
+            const deployScore = Math.round((Math.min(10, Math.max(1, stratRet / 10)) * 0.3 + Math.max(1, Math.min(10, 10 - maxDd / 3)) * 0.3 + Math.max(1, Math.min(10, sharpe * 2)) * 0.4) * 10);
+            document.getElementById('deploy-confidence').innerText = `%${deployScore}`;
+            
+            const capRec = alpha > 0 ? Math.min(40, Math.max(5, Math.round(sharpe * 10))) : 0;
+            document.getElementById('deploy-cap-rec').innerText = `%${capRec}`;
+
+            // Strategy Scorecard (Problem 4)
+            const scoreRetVal = Math.min(10, Math.max(1, Math.round(stratRet / 10)));
+            const scoreRiskVal = Math.max(1, Math.min(10, Math.round(10 - maxDd / 3)));
+            const scoreRobustVal = Math.max(1, Math.min(10, Math.round(sharpe * 2)));
+            const scoreOverfitVal = Math.max(1, Math.min(10, Math.round(10 - sharpe / 1.5)));
+
+            document.getElementById('score-ret').innerText = `${scoreRetVal}/10`;
+            document.getElementById('score-risk').innerText = `${scoreRiskVal}/10`;
+            document.getElementById('score-robust').innerText = `${scoreRobustVal}/10`;
+            document.getElementById('score-overfit').innerText = `${scoreOverfitVal}/10`;
+            document.getElementById('score-total').innerText = `${deployScore}/100`;
+
+            // Metrics Cards
+            const capPct = `${stratRet >= 0 ? '+' : ''}${stratRet.toFixed(2)}%`;
+            document.getElementById('card-capital-pct').innerText = capPct;
+            document.getElementById('card-capital-pct').className = `text-3xl font-extrabold ${stratRet >= 0 ? 'text-accentGreen' : 'text-accentRed'}`;
+            document.getElementById('card-capital-val').innerText = `Bitiş: ${(data.finalCapital ?? 0).toLocaleString()} USDT | Başlangıç: ${(data.initialCapital ?? 0).toLocaleString()} USDT`;
+
+            document.getElementById('card-sharpe').innerText = Number(data.sharpeRatio ?? 0).toFixed(3);
+            document.getElementById('card-pf').innerText = `Profit Factor: ${Number(data.profitFactor ?? 0).toFixed(3)}`;tGreen' : 'border-l-orange-400') : 'border-l-accentRed'} transition-all`;
             recConfidence.innerText = `Yapay Zeka Güven Seviyesi: ${confidenceStr}`;
             recText.innerText = reasoning;
             recBadge.innerText = badgeText;
@@ -807,16 +1044,34 @@
             const equities = curve.map(c => c.equity);
             const drawdowns = curve.map(c => c.drawdownPercent || 0);
 
+            // Calculate Buy & Hold benchmark line
+            const bhRet = Number(mainReportData?.buyAndHoldReturn ?? 0);
+            const initialCapital = Number(mainReportData?.initialCapital ?? 10000);
+            const bhCurve = curve.map((c, i) => {
+                const ratio = i / (curve.length - 1 || 1);
+                return initialCapital * (1 + (bhRet / 100) * ratio);
+            });
+
             myEquityChart = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: labels,
                     datasets: [
                         {
-                            label: 'Portföy Sermayesi (USDT)',
+                            label: 'Strateji Sermayesi (USDT)',
                             data: equities,
                             borderColor: '#3b82f6',
                             borderWidth: 2.5,
+                            yAxisID: 'y',
+                            pointRadius: 0,
+                            fill: false
+                        },
+                        {
+                            label: 'Buy & Hold Benchmark (USDT)',
+                            data: bhCurve,
+                            borderColor: '#4b5563',
+                            borderWidth: 1.5,
+                            borderDash: [5, 5],
                             yAxisID: 'y',
                             pointRadius: 0,
                             fill: false
@@ -1107,11 +1362,29 @@
                 leaderboardEl.innerHTML = '';
                 sorted.forEach((item, idx) => {
                     const stars = '★'.repeat(Math.min(5, Math.ceil((item.score?.overall ?? 0) / 20)));
+                    
+                    // Check if we can find a matching filename in cache
+                    let filename = "";
+                    for (const key of allReportsCache.keys()) {
+                        if (key.includes(item.id) || key.includes(item.strategyName)) {
+                            filename = key;
+                            break;
+                        }
+                    }
+
                     const card = document.createElement('div');
-                    card.className = 'p-3 bg-black/30 border border-glassBorder rounded-lg flex items-center justify-between text-xs';
+                    card.className = 'p-3 bg-black/30 border border-glassBorder rounded-lg flex items-center justify-between text-xs transition-all ' + (filename ? 'cursor-pointer hover:border-accentBlue hover:bg-black/50' : '');
+                    if (filename) {
+                        card.onclick = () => {
+                            switchTab('overview');
+                            selectReport(filename);
+                        };
+                        card.title = "Ayrıntılı Raporu Yükle";
+                    }
+
                     card.innerHTML = `
                         <div>
-                            <span class="font-bold text-gray-200 block">#${idx+1} ${item.id}</span>
+                            <span class="font-bold text-gray-200 block">${idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx+1}`} ${item.id}</span>
                             <span class="text-gray-500 mt-1 block">Sharpe: ${item.sharpeRatio?.toFixed(2)} | DD: -%${item.maxDrawdown?.toFixed(1)}</span>
                         </div>
                         <div class="text-right">
@@ -1124,6 +1397,96 @@
 
             } catch (err) {}
         }
+
+        // ── DSL BUILDER JS LOGIC ──────────────────────────────────────────────
+        function toggleBuilderFields() {
+            const type = document.getElementById('builder-type').value;
+            const fieldsEl = document.getElementById('builder-fields');
+            
+            if (type === 'ema-cross') {
+                fieldsEl.innerHTML = `
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-[10px] text-gray-400 font-semibold mb-1 uppercase font-mono">Hızlı EMA Periyodu</label>
+                            <input type="number" id="builder-ema-fast" oninput="generateDSL()" value="9" class="w-full bg-[#090d16] border border-glassBorder px-3 py-1.5 rounded text-xs text-gray-200">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-gray-400 font-semibold mb-1 uppercase font-mono">Yavaş EMA Periyodu</label>
+                            <input type="number" id="builder-ema-slow" oninput="generateDSL()" value="21" class="w-full bg-[#090d16] border border-glassBorder px-3 py-1.5 rounded text-xs text-gray-200">
+                        </div>
+                    </div>
+                `;
+            } else if (type === 'donchian') {
+                fieldsEl.innerHTML = `
+                    <div>
+                        <label class="block text-[10px] text-gray-400 font-semibold mb-1 uppercase font-mono">Kanal Periyodu (Period)</label>
+                        <input type="number" id="builder-donchian-period" oninput="generateDSL()" value="20" class="w-full bg-[#090d16] border border-glassBorder px-3 py-1.5 rounded text-xs text-gray-200">
+                    </div>
+                `;
+            } else if (type === 'supertrend') {
+                fieldsEl.innerHTML = `
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-[10px] text-gray-400 font-semibold mb-1 uppercase font-mono">ATR Periyodu</label>
+                            <input type="number" id="builder-st-period" oninput="generateDSL()" value="10" class="w-full bg-[#090d16] border border-glassBorder px-3 py-1.5 rounded text-xs text-gray-200">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-gray-400 font-semibold mb-1 uppercase font-mono">Çarpan (Multiplier)</label>
+                            <input type="number" id="builder-st-mult" oninput="generateDSL()" value="3.0" step="0.1" class="w-full bg-[#090d16] border border-glassBorder px-3 py-1.5 rounded text-xs text-gray-200">
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        function generateDSL() {
+            const name = document.getElementById('builder-name').value;
+            const type = document.getElementById('builder-type').value;
+            const sl = parseFloat(document.getElementById('builder-sl').value);
+            const tp = parseFloat(document.getElementById('builder-tp').value);
+            
+            let params = {};
+            if (type === 'ema-cross') {
+                params = {
+                    fastPeriod: parseInt(document.getElementById('builder-ema-fast')?.value || 9),
+                    slowPeriod: parseInt(document.getElementById('builder-ema-slow')?.value || 21)
+                };
+            } else if (type === 'donchian') {
+                params = {
+                    period: parseInt(document.getElementById('builder-donchian-period')?.value || 20)
+                };
+            } else if (type === 'supertrend') {
+                params = {
+                    period: parseInt(document.getElementById('builder-st-period')?.value || 10),
+                    multiplier: parseFloat(document.getElementById('builder-st-mult')?.value || 3.0)
+                };
+            }
+
+            const config = {
+                name: name,
+                indicator: type,
+                params: params,
+                risk: {
+                    stopLossPercent: sl,
+                    takeProfitPercent: tp
+                }
+            };
+
+            document.getElementById('builder-output').value = JSON.stringify(config, null, 4);
+        }
+
+        function copyDSLJson() {
+            const output = document.getElementById('builder-output');
+            output.select();
+            document.execCommand('copy');
+            alert('Strateji JSON yapılandırması panoya kopyalandı!');
+        }
+
+        // Initialize Builder dynamically
+        document.addEventListener('DOMContentLoaded', () => {
+            toggleBuilderFields();
+            generateDSL();
+        });
     </script>
 </body>
 </html>
