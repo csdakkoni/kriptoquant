@@ -130,6 +130,9 @@
                 <button onclick="switchTab('discovery')" id="tab-discovery" class="tab-btn px-6 py-3 border-b-2 border-transparent text-gray-400 hover:text-gray-200 transition-all">
                     ⚗️ Discovery Hunisi
                 </button>
+                <button onclick="switchTab('live')" id="tab-live" class="tab-btn px-6 py-3 border-b-2 border-transparent text-gray-400 hover:text-gray-200 transition-all">
+                    ⚡ Canlı Takip (Live Paper)
+                </button>
             </div>
         </header>
 
@@ -605,6 +608,187 @@
                 </div>
             </div>
 
+            <!-- ─── SEKME 6: CANLI TAKİP (LIVE PAPER) ───────────────────────────── -->
+            <div id="content-live" class="tab-content space-y-6 hidden">
+                <!-- Deploy Control Panel Card -->
+                <div class="glass-card p-6 grid grid-cols-1 lg:grid-cols-4 gap-6 items-center">
+                    <div class="lg:col-span-2">
+                        <div class="flex items-center space-x-3">
+                            <span class="text-sm font-semibold text-gray-300">Live Paper Trading Control</span>
+                            <span id="live-status-badge" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-gray-800 text-gray-400">Stopped</span>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">Stratejilerinizi Binance WebSocket verileriyle kağıt üzerinde canlı test edin.</p>
+                        
+                        <!-- Parameter Inputs -->
+                        <div class="grid grid-cols-3 gap-3 mt-4">
+                            <div>
+                                <label class="block text-[10px] text-gray-400 font-semibold mb-1 uppercase">Strateji</label>
+                                <select id="live-strategy-select" class="w-full bg-[#090d16] border border-glassBorder px-2 py-1 rounded text-xs text-gray-200">
+                                    <option value="ema-cross">EMA Cross (9/21)</option>
+                                    <option value="sma-cross">SMA Cross (12/26)</option>
+                                    <option value="donchian-breakout">Donchian Breakout</option>
+                                    <option value="config/strategy.json">Custom (strategy.json)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] text-gray-400 font-semibold mb-1 uppercase">Varlıklar</label>
+                                <input type="text" id="live-coins-input" value="BTCUSDT,ETHUSDT,SOLUSDT" class="w-full bg-[#090d16] border border-glassBorder px-2 py-1 rounded text-xs text-gray-200">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] text-gray-400 font-semibold mb-1 uppercase">Interval</label>
+                                <select id="live-interval-select" class="w-full bg-[#090d16] border border-glassBorder px-2 py-1 rounded text-xs text-gray-200">
+                                    <option value="1m">1 Dakika (1m)</option>
+                                    <option value="5m">5 Dakika (5m)</option>
+                                    <option value="1h">1 Saat (1h)</option>
+                                    <option value="1d">1 Gün (1d)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="flex items-center space-x-3 justify-start lg:justify-end">
+                        <button id="btn-deploy-paper" onclick="deployPaperEngine()" class="px-5 py-2.5 bg-accentGreen hover:bg-accentGreen/80 text-black font-bold text-xs rounded-lg transition-all flex items-center space-x-2">
+                            <span>🚀 Deploy to Paper</span>
+                        </button>
+                        <button id="btn-stop-paper" onclick="stopPaperEngine()" disabled class="px-5 py-2.5 bg-accentRed hover:bg-accentRed/80 text-white font-bold text-xs rounded-lg transition-all flex items-center space-x-2 disabled:opacity-30 disabled:cursor-not-allowed">
+                            <span>🛑 Stop Paper</span>
+                        </button>
+                    </div>
+
+                    <!-- Statistics / Heartbeat Info -->
+                    <div class="bg-black/20 border border-glassBorder/50 rounded-lg p-3 text-xs space-y-2 font-mono text-gray-400">
+                        <div class="flex justify-between">
+                            <span>Uptime:</span>
+                            <span id="live-uptime-val" class="text-gray-200">00:00:00</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Last Candle:</span>
+                            <span id="live-lastcandle-val" class="text-gray-200">--:--:--</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span>Heartbeat:</span>
+                            <span class="flex items-center space-x-1">
+                                <span id="live-heartbeat-dot" class="w-2 h-2 rounded-full bg-gray-500"></span>
+                                <span id="live-heartbeat-val">--</span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Account Equity & Active Positions Grid -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- Account info (1/3) -->
+                    <div class="glass-card p-6 flex flex-col justify-between space-y-6">
+                        <div>
+                            <span class="text-sm font-semibold text-gray-300">Hesap Bakiyesi & Portföy</span>
+                            <p class="text-xs text-gray-500 mt-0.5">Canlı kağıt işlemleri hesap durumu.</p>
+                        </div>
+                        <div class="space-y-4">
+                            <div>
+                                <span class="text-[10px] text-gray-400 font-semibold uppercase font-mono">Toplam Bakiye (Net Equity)</span>
+                                <div id="live-equity-val" class="text-3xl font-extrabold text-gray-100 tracking-tight">$10,000.00</div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4 border-t border-glassBorder/50 pt-4">
+                                <div>
+                                    <span class="text-[10px] text-gray-400 font-semibold uppercase font-mono">Serbest Cash</span>
+                                    <div id="live-cash-val" class="text-base font-bold text-gray-300">$10,000.00</div>
+                                </div>
+                                <div>
+                                    <span class="text-[10px] text-gray-400 font-semibold uppercase font-mono">Gerçekleşen Kar (Realized)</span>
+                                    <div id="live-realized-val" class="text-base font-bold text-gray-300">$0.00</div>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4 border-t border-glassBorder/50 pt-4">
+                                <div>
+                                    <span class="text-[10px] text-gray-400 font-semibold uppercase font-mono">Açık Kar/Zarar (Unrealized)</span>
+                                    <div id="live-unrealized-val" class="text-base font-bold text-gray-300">$0.00</div>
+                                </div>
+                                <div>
+                                    <span class="text-[10px] text-gray-400 font-semibold uppercase font-mono">Toplam İşlem</span>
+                                    <div id="live-trades-count" class="text-base font-bold text-gray-300">0</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Active Positions Table (2/3) -->
+                    <div class="glass-card p-6 lg:col-span-2 flex flex-col justify-between">
+                        <div>
+                            <span class="text-sm font-semibold text-gray-300">Aktif Açık Pozisyonlar (Active Positions)</span>
+                            <p class="text-xs text-gray-500 mt-0.5">Binance WebSocket fiyat akışıyla anlık olarak takip edilmektedir.</p>
+                        </div>
+                        <div class="overflow-x-auto mt-4 min-h-[150px]">
+                            <table class="w-full text-left border-collapse text-xs">
+                                <thead>
+                                    <tr class="border-b border-glassBorder text-gray-500 uppercase tracking-wider">
+                                        <th class="pb-2 font-semibold">Varlık</th>
+                                        <th class="pb-2 font-semibold">Strateji</th>
+                                        <th class="pb-2 font-semibold text-right">Giriş Fiyatı</th>
+                                        <th class="pb-2 font-semibold text-right">Güncel Fiyat</th>
+                                        <th class="pb-2 font-semibold text-right">Miktar (Qty)</th>
+                                        <th class="pb-2 font-semibold text-right">Stop Loss</th>
+                                        <th class="pb-2 font-semibold text-right">Take Profit</th>
+                                        <th class="pb-2 font-semibold text-right">MAE</th>
+                                        <th class="pb-2 font-semibold text-right">MFE</th>
+                                        <th class="pb-2 font-semibold text-right">Kar / Zarar %</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="live-positions-body" class="divide-y divide-glassBorder">
+                                    <tr>
+                                        <td colspan="10" class="py-6 text-center text-gray-500">Açık pozisyon bulunmuyor.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Signal Watchdog & Trade Journal Grid -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- Signal Watchdog (1/3) -->
+                    <div class="glass-card p-6 flex flex-col justify-between">
+                        <div>
+                            <span class="text-sm font-semibold text-gray-300">Sinyal Takip Panel Listesi</span>
+                            <p class="text-xs text-gray-500 mt-0.5">Sistem kline kapanışlarında üretilen son sinyalleri izler.</p>
+                        </div>
+                        <div class="overflow-y-auto mt-4 max-h-[250px] space-y-2 pr-2" id="live-signals-list">
+                            <div class="text-gray-500 text-xs text-center py-8">Henüz üretilmiş bir sinyal bulunmuyor.</div>
+                        </div>
+                    </div>
+
+                    <!-- Live Trade Journal (2/3) -->
+                    <div class="glass-card p-6 lg:col-span-2 flex flex-col justify-between">
+                        <div>
+                            <span class="text-sm font-semibold text-gray-300">Live Trade Journal (Kapatılan İşlemler)</span>
+                            <p class="text-xs text-gray-500 mt-0.5">Tamamlanmış canlı paper trading emirleri günlüğü.</p>
+                        </div>
+                        <div class="overflow-x-auto mt-4 max-h-[250px]">
+                            <table class="w-full text-left border-collapse text-xs">
+                                <thead>
+                                    <tr class="border-b border-glassBorder text-gray-500 uppercase tracking-wider">
+                                        <th class="pb-2 font-semibold">Varlık</th>
+                                        <th class="pb-2 font-semibold">Giriş Fiyatı</th>
+                                        <th class="pb-2 font-semibold">Çıkış Fiyatı</th>
+                                        <th class="pb-2 font-semibold">Net P&L %</th>
+                                        <th class="pb-2 font-semibold">Çıkış Nedeni</th>
+                                        <th class="pb-2 font-semibold text-right">Süre</th>
+                                        <th class="pb-2 font-semibold text-right">MAE</th>
+                                        <th class="pb-2 font-semibold text-right">MFE</th>
+                                        <th class="pb-2 font-semibold text-right">R-Mult</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="live-journal-body" class="divide-y divide-glassBorder">
+                                    <tr>
+                                        <td colspan="9" class="py-6 text-center text-gray-500">Tamamlanmış işlem bulunmuyor.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </main>
 
@@ -889,11 +1073,9 @@
             document.getElementById('card-sharpe').innerText = Number(data.sharpeRatio ?? 0).toFixed(3);
             document.getElementById('card-pf').innerText = `Profit Factor: ${Number(data.profitFactor ?? 0).toFixed(3)}`;
 
-            const winRate = Number(data.winRate ?? 0);
             document.getElementById('card-winrate').innerText = `%${winRate.toFixed(1)}`;
             document.getElementById('card-winloss').innerText = `W: ${data.winningTrades ?? 0} | L: ${data.losingTrades ?? 0}`;
 
-            const maxDd = Number(data.maxDrawdown ?? 0);
             document.getElementById('card-maxdd').innerText = `-%${maxDd.toFixed(2)}`;
             const expectancy = Number(data.analytics?.expectancyUsdt ?? 0);
             document.getElementById('card-avgtrade').innerText = `Expectancy: ${expectancy.toFixed(1)} USDT`;
@@ -910,15 +1092,7 @@
             document.getElementById('score-overfit').innerText = `${scoreOverfitVal}/10`;
             document.getElementById('score-total').innerText = `${deployScore}/100`;
 
-            document.getElementById('card-winrate').innerText = `%${winRate.toFixed(1)}`;
-            document.getElementById('card-winloss').innerText = `W: ${data.winningTrades ?? 0} | L: ${data.losingTrades ?? 0}`;
 
-            document.getElementById('card-maxdd').innerText = `-%${maxDd.toFixed(2)}`;
-            const expectancy = Number(data.analytics?.expectancyUsdt ?? 0);
-            document.getElementById('card-avgtrade').innerText = `Expectancy: ${expectancy.toFixed(1)} USDT`;
-
-            // Dynamic Asset and Yearly breakdowns
-            const trades = data.trades || [];
             calculateAndRenderAssetBreakdown(trades);
             calculateAndRenderYearlyBreakdown(trades);
 
@@ -1479,10 +1653,207 @@
             alert('Strateji JSON yapılandırması panoya kopyalandı!');
         }
 
+        // ── LIVE PAPER TRADING JS LOGIC ──────────────────────────────────────────
+        let liveSocket = null;
+
+        function connectLiveWebSocket() {
+            const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+            const wsUrl = proto + '://' + location.host + '/ws/live';
+            console.log("Connecting to Live Event Bus WS...", wsUrl);
+            
+            liveSocket = new WebSocket(wsUrl);
+
+            liveSocket.onmessage = (event) => {
+                try {
+                    const state = JSON.parse(event.data);
+                    renderLiveState(state);
+                } catch (e) {
+                    console.error("Failed to parse live state message:", e);
+                }
+            };
+
+            liveSocket.onclose = () => {
+                console.log("Live WS closed. Reconnecting in 3s...");
+                setTimeout(connectLiveWebSocket, 3000);
+            };
+        }
+
+        async function deployPaperEngine() {
+            const strategy = document.getElementById('live-strategy-select').value;
+            const coins = document.getElementById('live-coins-input').value.split(',').map(c => c.trim());
+            const interval = document.getElementById('live-interval-select').value;
+
+            try {
+                const res = await fetch('/api/live-paper/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ strategy, coins, interval })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert('Live Paper Trading Engine başarıyla başlatıldı!');
+                } else {
+                    alert('Hata: ' + data.message);
+                }
+            } catch (e) {
+                alert('Motor başlatılamadı: ' + e.message);
+            }
+        }
+
+        async function stopPaperEngine() {
+            try {
+                const res = await fetch('/api/live-paper/stop', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    alert('Live Paper Trading Engine durduruldu.');
+                } else {
+                    alert('Hata: ' + data.message);
+                }
+            } catch (e) {
+                alert('Motor durdurulamadı: ' + e.message);
+            }
+        }
+
+        function renderLiveState(state) {
+            // 1) Status Badge & Uptime & heartbeat
+            const badge = document.getElementById('live-status-badge');
+            const btnDeploy = document.getElementById('btn-deploy-paper');
+            const btnStop = document.getElementById('btn-stop-paper');
+
+            if (state.engineStatus === 'running') {
+                badge.innerText = 'CANLI ÇALIŞIYOR';
+                badge.className = 'px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-accentGreen/20 text-accentGreen animate-pulse';
+                btnDeploy.disabled = true;
+                btnDeploy.className = 'px-5 py-2.5 bg-accentGreen/20 text-gray-500 font-bold text-xs rounded-lg cursor-not-allowed';
+                btnStop.disabled = false;
+                btnStop.className = 'px-5 py-2.5 bg-accentRed hover:bg-accentRed/80 text-white font-bold text-xs rounded-lg transition-all';
+                
+                // Blink heartbeat green
+                document.getElementById('live-heartbeat-dot').className = 'w-2 h-2 rounded-full bg-accentGreen animate-ping';
+            } else {
+                badge.innerText = 'DURDURULDU';
+                badge.className = 'px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-gray-800 text-gray-400';
+                btnDeploy.disabled = false;
+                btnDeploy.className = 'px-5 py-2.5 bg-accentGreen hover:bg-accentGreen/80 text-black font-bold text-xs rounded-lg transition-all';
+                btnStop.disabled = true;
+                btnStop.className = 'px-5 py-2.5 bg-accentRed/20 text-gray-500 font-bold text-xs rounded-lg cursor-not-allowed';
+                
+                document.getElementById('live-heartbeat-dot').className = 'w-2 h-2 rounded-full bg-gray-500';
+            }
+
+            // Format uptime
+            const u = state.uptime || 0;
+            const hrs = String(Math.floor(u / 3600)).padStart(2, '0');
+            const mins = String(Math.floor((u % 3600) / 60)).padStart(2, '0');
+            const secs = String(u % 60).padStart(2, '0');
+            document.getElementById('live-uptime-val').innerText = hrs + ':' + mins + ':' + secs;
+            document.getElementById('live-lastcandle-val').innerText = state.lastCandleTime ? new Date(state.lastCandleTime).toLocaleTimeString() : '--:--:--';
+            document.getElementById('live-heartbeat-val').innerText = state.heartbeat ? new Date(state.heartbeat).toLocaleTimeString() : '--';
+
+            // 2) Account info
+            document.getElementById('live-equity-val').innerText = '$' + (state.currentEquity ?? 10000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            document.getElementById('live-cash-val').innerText = '$' + (state.cash ?? 10000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            
+            const realizedColor = (state.realizedPnL ?? 0) >= 0 ? 'text-accentGreen' : 'text-accentRed';
+            document.getElementById('live-realized-val').innerText = '$' + (state.realizedPnL ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            document.getElementById('live-realized-val').className = 'text-base font-bold ' + realizedColor;
+
+            const unrealizedColor = (state.unrealizedPnL ?? 0) >= 0 ? 'text-accentGreen' : 'text-accentRed';
+            document.getElementById('live-unrealized-val').innerText = '$' + (state.unrealizedPnL ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            document.getElementById('live-unrealized-val').className = 'text-base font-bold ' + unrealizedColor;
+            document.getElementById('live-trades-count').innerText = state.closedTrades ? state.closedTrades.length : 0;
+
+            // 3) Active positions table
+            const posBody = document.getElementById('live-positions-body');
+            posBody.innerHTML = '';
+            if (!state.activePositions || state.activePositions.length === 0) {
+                posBody.innerHTML = '<tr><td colspan="10" class="py-6 text-center text-gray-500">Açık pozisyon bulunmuyor.</td></tr>';
+            } else {
+                state.activePositions.forEach(p => {
+                    const tr = document.createElement('tr');
+                    tr.className = 'hover:bg-slate-800/30 transition-all font-mono';
+                    
+                    const pnlColor = p.currentPnLPercent >= 0 ? 'text-accentGreen font-bold' : 'text-accentRed font-bold';
+                    const sign = p.currentPnLPercent >= 0 ? '+' : '';
+                    
+                    tr.innerHTML = '<td>' + p.coin + '</td>' +
+                        '<td class="py-3 text-gray-400 font-sans">' + p.strategyName + '</td>' +
+                        '<td class="py-3 text-right text-gray-300 font-mono">' + p.entryPrice.toFixed(2) + '</td>' +
+                        '<td class="py-3 text-right text-gray-300 font-mono">' + p.currentPrice.toFixed(2) + '</td>' +
+                        '<td class="py-3 text-right text-gray-400 font-mono">' + p.quantity.toFixed(4) + '</td>' +
+                        '<td class="py-3 text-right text-accentRed font-mono">' + p.stopLoss.toFixed(2) + '</td>' +
+                        '<td class="py-3 text-right text-accentGreen font-mono">' + p.takeProfit.toFixed(2) + '</td>' +
+                        '<td class="py-3 text-right text-gray-400 font-mono">' + (p.mae ?? 0).toFixed(2) + '%</td>' +
+                        '<td class="py-3 text-right text-gray-400 font-mono">' + (p.mfe ?? 0).toFixed(2) + '%</td>' +
+                        '<td class="py-3 text-right font-bold font-mono ' + pnlColor + '">' + sign + p.currentPnLPercent.toFixed(2) + '% ($' + sign + p.currentPnLUsdt.toFixed(2) + ')</td>';
+                    posBody.appendChild(tr);
+                });
+            }
+
+            // 4) Signals watch list
+            const signalList = document.getElementById('live-signals-list');
+            signalList.innerHTML = '';
+            if (!state.pendingSignals || state.pendingSignals.length === 0) {
+                signalList.innerHTML = '<div class="text-gray-500 text-xs text-center py-8">Henüz üretilmiş bir sinyal bulunmuyor.</div>';
+            } else {
+                const reversedSignals = [...state.pendingSignals].reverse();
+                reversedSignals.forEach(s => {
+                    const sideColor = s.side === 'BUY' ? 'text-accentGreen' : 'text-accentRed';
+                    const badge = document.createElement('div');
+                    badge.className = 'p-2.5 bg-black/30 border border-glassBorder rounded-lg flex items-center justify-between text-xs font-mono';
+                    badge.innerHTML = '<div class="flex items-center space-x-2">' +
+                            '<span class="font-bold text-gray-200">' + s.coin + '</span>' +
+                            '<span class="text-gray-500">|</span>' +
+                            '<span class="text-gray-400">' + new Date(s.time).toLocaleTimeString() + '</span>' +
+                        '</div>' +
+                        '<div class="flex items-center space-x-2">' +
+                            '<span class="' + sideColor + ' font-bold">' + s.side + '</span>' +
+                            '<span class="text-gray-500">@</span>' +
+                            '<span class="text-gray-200">' + s.price.toFixed(2) + '</span>' +
+                        '</div>';
+                    signalList.appendChild(badge);
+                });
+            }
+
+            // 5) Live Trade journal
+            const journalBody = document.getElementById('live-journal-body');
+            journalBody.innerHTML = '';
+            if (!state.closedTrades || state.closedTrades.length === 0) {
+                journalBody.innerHTML = '<tr><td colspan="9" class="py-6 text-center text-gray-500">Tamamlanmış işlem bulunmuyor.</td></tr>';
+            } else {
+                const reversedTrades = [...state.closedTrades].reverse();
+                reversedTrades.forEach(t => {
+                    const tr = document.createElement('tr');
+                    tr.className = 'hover:bg-slate-800/30 transition-all font-mono';
+                    
+                    const pnlColor = t.realizedPnLPercent >= 0 ? 'text-accentGreen' : 'text-accentRed';
+                    const sign = t.realizedPnLPercent >= 0 ? '+' : '';
+                    
+                    const dur = t.holdingDurationSeconds || 0;
+                    let durStr = dur + 's';
+                    if (dur > 60) {
+                        durStr = Math.floor(dur / 60) + 'dk ' + (dur % 60) + 's';
+                    }
+                    
+                    tr.innerHTML = '<td class="py-3 font-semibold text-gray-200">' + t.coin + '</td>' +
+                        '<td class="py-3 text-gray-400 font-mono">' + t.entryPrice.toFixed(2) + '</td>' +
+                        '<td class="py-3 text-gray-400 font-mono">' + t.exitPrice.toFixed(2) + '</td>' +
+                        '<td class="py-3 font-bold font-mono ' + pnlColor + '">' + sign + t.realizedPnLPercent.toFixed(2) + '% ($' + sign + t.realizedPnLUsdt.toFixed(2) + ')</td>' +
+                        '<td class="py-3 text-gray-400 max-w-[120px] truncate" title="' + t.exitReason + '">' + t.exitReason + '</td>' +
+                        '<td class="py-3 text-right text-gray-400 font-mono">' + durStr + '</td>' +
+                        '<td class="py-3 text-right text-accentRed font-mono">' + (t.mae ?? 0).toFixed(2) + '%</td>' +
+                        '<td class="py-3 text-right text-accentGreen font-mono">' + (t.mfe ?? 0).toFixed(2) + '%</td>' +
+                        '<td class="py-3 text-right font-bold text-gray-200 font-mono">' + (t.rMultiple ?? 0).toFixed(2) + 'R</td>';
+                    journalBody.appendChild(tr);
+                });
+            }
+        }
+
         // Initialize Builder dynamically
         document.addEventListener('DOMContentLoaded', () => {
             toggleBuilderFields();
             generateDSL();
+            connectLiveWebSocket();
         });
     </script>
 </body>

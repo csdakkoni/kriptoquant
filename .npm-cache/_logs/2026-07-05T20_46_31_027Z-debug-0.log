@@ -1,14 +1,14 @@
-0 verbose cli /usr/local/bin/node /usr/local/lib/node_modules/npm/bin/npm-cli.js
+0 verbose cli /usr/local/bin/node /usr/local/bin/npm
 1 info using npm@11.6.2
 2 info using node@v24.12.0
 3 silly config load:file:/usr/local/lib/node_modules/npm/npmrc
 4 silly config load:file:/Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant/.npmrc
 5 silly config load:file:/Users/erdemaslan/.npmrc
 6 silly config load:file:/usr/local/etc/npmrc
-7 verbose title npm exec tsx src/cli.ts verify-e2e
-8 verbose argv "exec" "--" "tsx" "src/cli.ts" "verify-e2e"
-9 verbose logfile logs-max:10 dir:/Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant/.npm-cache/_logs/2026-07-05T18_02_50_006Z-
-10 verbose logfile /Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant/.npm-cache/_logs/2026-07-05T18_02_50_006Z-debug-0.log
+7 verbose title npm test
+8 verbose argv "test"
+9 verbose logfile logs-max:10 dir:/Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant/.npm-cache/_logs/2026-07-05T20_46_31_027Z-
+10 verbose logfile /Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant/.npm-cache/_logs/2026-07-05T20_46_31_027Z-debug-0.log
 11 silly logfile start cleaning logs, removing 1 files
 12 silly logfile done cleaning log files
 13 verbose cwd /Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant

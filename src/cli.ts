@@ -43,6 +43,7 @@ import { runDiscoveryPipeline } from './research/discovery/pipeline.js';
 import type { DiscoveryReport } from './research/discovery/types.js';
 import { runMonteCarlo } from './research/analytics/monte-carlo.js';
 import { startDashboardServer } from './dashboard/server.js';
+import { startExecutionEngine } from './live/live-engine.js';
 
 // Konfigürasyonları yükle
 import defaultConfig from '../config/default.json' with { type: 'json' };
@@ -376,7 +377,7 @@ async function commandRollingWalkForward(strategyName: string, coin: string, int
 	const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
 	const csvPath = `results/rolling_walkforward_${coin}_${interval}_${timestamp}.csv`;
 	exportRollingCSV(result, csvPath);
-	console.log(`\n  💾 CSV : ${csvPath}`);
+	console.log(`\n  💾 CSV: ${csvPath}`);
 
 	const jsonPath = `results/rolling_summary_${coin}_${interval}_${timestamp}.json`;
 	exportRollingSummaryJSON(result, jsonPath);
@@ -384,35 +385,31 @@ async function commandRollingWalkForward(strategyName: string, coin: string, int
 }
 
 async function commandPaperTrade(strategyName: string, coin: string, interval: string): Promise<void> {
-	const provider = new CSVProvider();
-	const candles = await provider.getHistory(coin, interval);
+	log(`\n================================================================`);
+	log(`  🚀 STARTING LIVE PAPER TRADING ENGINE (DAEMON MODE)`);
+	log(`  Strateji: ${strategyName}`);
+	log(`  Coin     : ${coin}`);
+	log(`  Interval : ${interval}`);
+	log(`================================================================\n`);
 
-	if (candles.length === 0) {
-		logError(`${coin} için veri bulunamadı.`);
-		process.exit(1);
-	}
+	const coins = coin.split(',');
 
-	log(`${coin} verisi yüklendi: ${candles.length} mum`);
+	// 1) Start the Dashboard server on port 3008 (custom clean port)
+	startDashboardServer(3008);
 
-	const strategy = resolveStrategy(strategyName);
-	if (!strategy) {
-		logError(`Bilinmeyen strateji: ${strategyName}`);
-		logError('Mevcut stratejiler: sma-cross, ema-cross, donchian-breakout');
-		process.exit(1);
-	}
-	const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-	const logPath = `results/paper_trades_${strategy.name}_${coin}_${timestamp}.csv`;
+	// 2) Start the in-process ExecutionEngine
+	await startExecutionEngine(coins, interval, strategyName, (state) => {
+		// Periodically print update status to console
+		if (state.uptime % 10 === 0) {
+			log(`[Live Engine Uptime: ${state.uptime}s] Equity: ${state.currentEquity.toFixed(2)} USDT | Cash: ${state.cash.toFixed(2)} | Active Positions: ${state.activePositions.length}`);
+		}
+	});
 
-	const broker = new PaperBroker(platformConfig.commissionPercent, platformConfig.slippagePercent);
-	const logger = new CSVTradeLogger(logPath);
-	const result = runExecution(candles, strategy, broker, platformConfig, riskParams, coin, strategyDefaults, logger);
-
-	printReport(result);
-
-	console.log('');
-	console.log(`  📋 Paper Trade Log: ${logPath}`);
-	console.log(`  📊 Fills: ${broker.getFills().length}`);
-	console.log(`  🏷️  Mode: PAPER (para kullanılmadı)`);
+	log(`Live Paper Trading daemon is active. Visit: http://localhost:3008`);
+	log(`Press Ctrl+C to terminate.`);
+	
+	// Keep process alive indefinitely
+	await new Promise(() => {});
 }
 
 async function commandMultiAsset(strategyName: string, coinsStr?: string, intervalsStr?: string): Promise<void> {
