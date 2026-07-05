@@ -5,9 +5,9 @@
 4 silly config load:file:/Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant/.npmrc
 5 silly config load:file:/Users/erdemaslan/.npmrc
 6 silly config load:file:/usr/local/etc/npmrc
-7 verbose title npm exec tsx src/cli.ts dashboard --port 3000
-8 verbose argv "exec" "--" "tsx" "src/cli.ts" "dashboard" "--port" "3000"
-9 verbose logfile logs-max:10 dir:/Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant/.npm-cache/_logs/2026-07-05T18_17_11_171Z-
-10 verbose logfile /Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant/.npm-cache/_logs/2026-07-05T18_17_11_171Z-debug-0.log
+7 verbose title npm exec tsx src/cli.ts dashboard --port 3008
+8 verbose argv "exec" "--" "tsx" "src/cli.ts" "dashboard" "--port" "3008"
+9 verbose logfile logs-max:10 dir:/Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant/.npm-cache/_logs/2026-07-05T20_46_43_560Z-
+10 verbose logfile /Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant/.npm-cache/_logs/2026-07-05T20_46_43_560Z-debug-0.log
 11 silly logfile start cleaning logs, removing 1 files
 12 silly logfile done cleaning log files
