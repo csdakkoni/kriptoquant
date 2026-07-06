@@ -468,6 +468,19 @@ export class ExecutionEngine {
 			return createStrategyFromConfig(configJson, candles).strategy;
 		}
 
+		if (strategyPath === 'vwap-zscore') {
+			const resolvedPath = join(process.cwd(), 'config', 'strategies', 'strategy_vwap_zscore.json');
+			const raw = readFileSync(resolvedPath, 'utf-8');
+			const configJson = JSON.parse(raw) as StrategyConfig;
+			return createStrategyFromConfig(configJson, candles).strategy;
+		}
+		if (strategyPath === 'bollinger-bands') {
+			const resolvedPath = join(process.cwd(), 'config', 'strategies', 'strategy_bollinger_bands.json');
+			const raw = readFileSync(resolvedPath, 'utf-8');
+			const configJson = JSON.parse(raw) as StrategyConfig;
+			return createStrategyFromConfig(configJson, candles).strategy;
+		}
+
 		if (strategyPath === 'ema-cross') return createEmaCrossStrategy();
 		if (strategyPath === 'fast-ema-cross') return createEmaCrossStrategy(2, 3);
 		if (strategyPath === 'sma-cross') return createSmaCrossStrategy();
@@ -596,8 +609,6 @@ export function getAllExecutionEnginesSummary(): StrategySummary[] {
 		{ name: 'a2', label: 'A2 15m Scalper' },
 		{ name: 'donchian-breakout', label: 'Donchian Breakout' },
 		{ name: 'ema-cross', label: 'EMA Crossover' },
-		{ name: 'sma-cross', label: 'SMA Crossover' },
-		{ name: 'supertrend', label: 'Supertrend' },
 		{ name: 'vwap-zscore', label: 'VWAP Z-Score' },
 		{ name: 'bollinger-bands', label: 'Bollinger Bands' }
 	];

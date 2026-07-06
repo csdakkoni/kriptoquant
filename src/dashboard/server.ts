@@ -746,7 +746,7 @@ export function startDashboardServer(port: number = 3000): any {
 
 		// Check for auto-resume on server startup for all strategies
 		try {
-			const registeredStrategies = ['consensus', 'a1', 'a2', 'donchian-breakout', 'ema-cross', 'sma-cross', 'supertrend', 'vwap-zscore', 'bollinger-bands'];
+			const registeredStrategies = ['consensus', 'a1', 'a2', 'donchian-breakout', 'ema-cross', 'vwap-zscore', 'bollinger-bands'];
 			for (const strat of registeredStrategies) {
 				const state = getExecutionEngineState(strat);
 				if (state && state.engineStatus === 'running' && state.coins && state.interval && state.strategyPath) {

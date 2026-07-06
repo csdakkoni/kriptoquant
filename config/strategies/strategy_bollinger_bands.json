@@ -1,0 +1,30 @@
+{
+    "metadata": {
+        "name": "bollinger-bands-lego",
+        "version": "1.0.0",
+        "tags": ["mean-reversion", "bollinger"],
+        "category": "Mean Reversion",
+        "author": "KriptoQuant Scratch"
+    },
+    "warmupPeriod": 20,
+    "indicators": [
+        {
+            "id": "bb",
+            "type": "bollinger",
+            "params": [20, 2.0]
+        }
+    ],
+    "filters": [],
+    "entry": {
+        "type": "comparison",
+        "operator": "<",
+        "left": { "type": "indicator", "id": "close" },
+        "right": { "type": "indicator", "id": "bb.lower" }
+    },
+    "exit": {
+        "type": "comparison",
+        "operator": ">",
+        "left": { "type": "indicator", "id": "close" },
+        "right": { "type": "indicator", "id": "bb.upper" }
+    }
+}

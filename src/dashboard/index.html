@@ -109,8 +109,8 @@
                 <span>🤖 Aktif Paralel Otopilot Stratejileri</span>
                 <span class="text-[10px] text-slate-600 font-semibold normal-case">Strateji kartlarına tıklayarak detayları (Grafik, Pozisyonlar, Loglar, Geçmiş) aşağıda görüntüleyebilirsiniz</span>
             </h2>
-            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-9 gap-3.5" id="strategy-cards-grid">
-                <!-- 9 cards will be dynamically rendered here -->
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3.5" id="strategy-cards-grid">
+                <!-- 7 cards will be dynamically rendered here -->
             </div>
         </div>
 
@@ -345,12 +345,11 @@
                     <div class="space-y-2">
                         <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Strateji</label>
                         <select id="autopilot-strategy" class="w-full bg-slate-950 border border-slate-800/80 rounded-xl px-4 py-3 text-slate-200 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 transition duration-300 text-sm font-semibold">
-                            <option value="a2">A2 Scalper (EMA & RSI & Volume)</option>
-                            <option value="a1">A1 Scalper (Sweep & Breakout)</option>
                             <option value="consensus">Consensus Ensemble (Hibrit Mod)</option>
+                            <option value="a1">A1 Scalper (Sweep & Breakout)</option>
+                            <option value="a2">A2 Scalper (EMA & RSI & Volume)</option>
                             <option value="donchian-breakout">Donchian Breakout</option>
                             <option value="ema-cross">EMA Crossover</option>
-                            <option value="supertrend">Supertrend</option>
                             <option value="vwap-zscore">VWAP Z-Score</option>
                             <option value="bollinger-bands">Bollinger Bands</option>
                         </select>
@@ -486,8 +485,6 @@
             'a2': { label: 'A2 Scalper', icon: '🔥' },
             'donchian-breakout': { label: 'Donchian Breakout', icon: '🐢' },
             'ema-cross': { label: 'EMA Crossover', icon: '📈' },
-            'sma-cross': { label: 'SMA Crossover', icon: '📉' },
-            'supertrend': { label: 'Supertrend', icon: '🦅' },
             'vwap-zscore': { label: 'VWAP Z-Score', icon: '⚖️' },
             'bollinger-bands': { label: 'Bollinger Bands', icon: '📊' }
         };
