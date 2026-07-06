@@ -421,6 +421,40 @@
             </div>
         </section>
 
+        <!-- FULL WIDTH: TRANSACTION HISTORY -->
+        <div class="lg:col-span-12 flex flex-col mt-4">
+            <section class="glass-panel p-6 rounded-2xl flex flex-col shadow-2xl relative overflow-hidden transition-all duration-300">
+                <div class="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-emerald-500 to-teal-500"></div>
+                
+                <h2 class="text-xl font-bold text-slate-100 flex items-center space-x-2 mb-6">
+                    <span class="text-lg">📜</span>
+                    <span>İşlem Geçmişi (Kapanan Pozisyonlar)</span>
+                </h2>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="border-b border-slate-900 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                <th class="pb-3.5 pl-2">Zaman (Giriş / Çıkış)</th>
+                                <th class="pb-3.5">Coin</th>
+                                <th class="pb-3.5">Yön</th>
+                                <th class="pb-3.5">Strateji</th>
+                                <th class="pb-3.5">Çıkış / Giriş Fiyatı</th>
+                                <th class="pb-3.5">Süre</th>
+                                <th class="pb-3.5 text-right">Kâr / Zarar ($)</th>
+                                <th class="pb-3.5 text-right pr-2">Kâr / Zarar (%)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="closed-trades-list" class="divide-y divide-slate-900/60 text-xs">
+                            <tr>
+                                <td colspan="8" class="text-slate-500 text-center py-8">Kapanan pozisyon bulunmuyor.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
     </main>
 
     <!-- FOOTER -->
@@ -667,6 +701,67 @@
             
             // Render Live Chart
             updateChart(state.equityCurveLive || []);
+
+            // Render Closed Trades (Transaction History)
+            const closedTradesContainer = document.getElementById('closed-trades-list');
+            if (closedTradesContainer) {
+                const closedTrades = state.closedTrades || [];
+                if (closedTrades.length === 0) {
+                    closedTradesContainer.innerHTML = `
+                        <tr>
+                            <td colspan="8" class="text-slate-500 text-center py-8">Kapanan pozisyon bulunmuyor.</td>
+                        </tr>
+                    `;
+                } else {
+                    closedTradesContainer.innerHTML = '';
+                    const sortedTrades = [...closedTrades].sort((a, b) => new Date(b.exitTime).getTime() - new Date(a.exitTime).getTime());
+                    
+                    sortedTrades.forEach(trade => {
+                        const tr = document.createElement('tr');
+                        tr.className = 'hover:bg-slate-900/10 border-b border-slate-900/60 transition-colors duration-150';
+                        
+                        const pnlPct = trade.realizedPnLPercent ?? 0;
+                        const pnlVal = trade.realizedPnLUsdt ?? 0;
+                        
+                        const pnlPctClass = pnlPct >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-500 font-bold';
+                        const pnlValClass = pnlVal >= 0 ? 'text-emerald-400 font-black' : 'text-rose-500 font-black';
+                        
+                        const pnlPctSign = pnlPct >= 0 ? '+' : '';
+                        const pnlValSign = pnlVal >= 0 ? '+' : '';
+                        
+                        const durationSec = trade.holdingDurationSeconds ?? 0;
+                        const durationStr = durationSec < 60 ? `${durationSec}s` : `${Math.round(durationSec / 60)} dk`;
+                        
+                        const formatTime = (isoStr) => {
+                            if (!isoStr) return '-';
+                            const d = new Date(isoStr);
+                            const pad = (n) => String(n).padStart(2, '0');
+                            return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+                        };
+                        
+                        const entryTimeStr = formatTime(trade.entryTime);
+                        const exitTimeStr = formatTime(trade.exitTime);
+
+                        tr.innerHTML = `
+                            <td class="py-3.5 pl-2 text-slate-500 font-mono text-[10px]">
+                                <div class="text-slate-300 font-bold">${exitTimeStr}</div>
+                                <div class="text-slate-600">Giriş: ${entryTimeStr}</div>
+                            </td>
+                            <td class="py-3.5 font-bold text-slate-200">${trade.coin.replace('USDT', '')}</td>
+                            <td class="py-3.5 text-slate-400 font-semibold text-[10px]"><span class="px-1.5 py-0.5 rounded bg-emerald-950/40 text-emerald-400 border border-emerald-900/30">LONG</span></td>
+                            <td class="py-3.5 font-mono text-slate-400 text-[10px]">${trade.strategyName || '-'}</td>
+                            <td class="py-3.5 font-mono text-slate-300">
+                                <div>$${trade.exitPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                                <div class="text-[10px] text-slate-500">Giriş: $${trade.entryPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                            </td>
+                            <td class="py-3.5 font-mono text-slate-400">${durationStr}</td>
+                            <td class="py-3.5 text-right font-mono ${pnlValClass}">${pnlValSign}$${pnlVal.toFixed(2)}</td>
+                            <td class="py-3.5 text-right font-mono ${pnlPctClass} pr-2">${pnlPctSign}${pnlPct.toFixed(2)}%</td>
+                        `;
+                        closedTradesContainer.appendChild(tr);
+                    });
+                }
+            }
 
             const positionsContainer = document.getElementById('positions-list');
             positionsContainer.innerHTML = '';
