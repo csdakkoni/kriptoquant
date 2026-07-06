@@ -598,8 +598,11 @@ export interface StrategySummary {
 	status: 'running' | 'stopped';
 	equity: number;
 	positionsCount: number;
+	positions: string[];
 	pnlUsdt: number;
 	pnlPercent: number;
+	uptime: number;
+	lastCandleTime: string;
 }
 
 export function getAllExecutionEnginesSummary(): StrategySummary[] {
@@ -620,13 +623,17 @@ export function getAllExecutionEnginesSummary(): StrategySummary[] {
 			const equity = state.currentEquity ?? state.cash ?? startCash;
 			const pnlUsdt = equity - startCash;
 			const pnlPercent = (pnlUsdt / startCash) * 100;
+			const positions = (state.activePositions || []).map(p => `${p.coin.replace('USDT', '')} (${p.direction === 'LONG' ? 'L' : 'S'})`);
 			return {
 				name: strat.name,
 				status: state.engineStatus,
 				equity,
 				positionsCount: state.activePositions?.length || 0,
+				positions,
 				pnlUsdt,
-				pnlPercent
+				pnlPercent,
+				uptime: state.uptime || 0,
+				lastCandleTime: state.lastCandleTime || ''
 			};
 		}
 		return {
@@ -634,8 +641,11 @@ export function getAllExecutionEnginesSummary(): StrategySummary[] {
 			status: 'stopped',
 			equity: 10000,
 			positionsCount: 0,
+			positions: [],
 			pnlUsdt: 0,
-			pnlPercent: 0
+			pnlPercent: 0,
+			uptime: 0,
+			lastCandleTime: ''
 		};
 	});
 }

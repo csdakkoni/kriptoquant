@@ -109,45 +109,16 @@
                 <span>🤖 Aktif Paralel Otopilot Stratejileri</span>
                 <span class="text-[10px] text-slate-600 font-semibold normal-case">Strateji kartlarına tıklayarak detayları (Grafik, Pozisyonlar, Loglar, Geçmiş) aşağıda görüntüleyebilirsiniz</span>
             </h2>
-            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3.5" id="strategy-cards-grid">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5" id="strategy-cards-grid">
                 <!-- 7 cards will be dynamically rendered here -->
             </div>
         </div>
 
-        <!-- LEFT COLUMN (5 Columns on Large screens: Backtest + Market Watch) -->
-        <div class="lg:col-span-5 flex flex-col space-y-6">
-            
-            <!-- PANEL 3 - LIVE MARKET WATCH -->
-            <section class="glass-panel p-5 rounded-2xl flex flex-col shadow-2xl relative overflow-hidden group transition-all duration-300 glow-border-blue">
-                <div class="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-teal-500 to-emerald-500"></div>
-                
-                <h2 class="text-md font-bold text-slate-100 flex items-center space-x-2 mb-4">
-                    <span class="text-sm">📈</span>
-                    <span>Canlı Piyasa Fiyatları (Binance TR)</span>
-                </h2>
-
-                <div class="max-h-[520px] overflow-y-auto pr-1">
-                    <table class="w-full text-left text-xs text-slate-300 border-collapse">
-                        <thead>
-                            <tr class="border-b border-slate-800/80 text-slate-500 text-[9px] uppercase font-bold tracking-wider sticky top-0 bg-[#0c1424] py-1 z-10">
-                                <th class="pb-2">Coin</th>
-                                <th class="pb-2">Fiyat (USDT)</th>
-                                <th class="pb-2 text-right">24s Değişim</th>
-                            </tr>
-                        </thead>
-                        <tbody id="market-watch-body" class="divide-y divide-slate-900/40">
-                            <!-- Populated dynamically via MiniTickers WebSocket -->
-                        </tbody>
-                    </table>
-                </div>
-            </section>
-        </div>
-
-        <!-- PANEL 2 - LIVE AUTOPILOT (7 Columns on Large screens) -->
-        <section class="lg:col-span-7 glass-panel p-6 md:p-8 rounded-2xl flex flex-col shadow-2xl relative overflow-hidden group transition-all duration-300 glow-border-emerald">
+        <!-- PANEL 2 - LIVE AUTOPILOT (Full Widescreen Hub) -->
+        <section class="lg:col-span-12 glass-panel p-6 md:p-8 rounded-2xl flex flex-col shadow-2xl relative overflow-hidden group transition-all duration-300 glow-border-emerald">
             <div class="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-emerald-500 to-teal-500"></div>
 
-            <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center justify-between mb-6 border-b border-white/5 pb-4">
                 <h2 class="text-xl font-bold text-slate-100 flex items-center space-x-2">
                     <span class="text-lg">⚡</span>
                     <span id="active-strategy-title">Canlı Otopilot (Paper Trading)</span>
@@ -158,173 +129,183 @@
                 </div>
             </div>
 
-            <div class="space-y-5">
-                <!-- Coin Checkboxes Selection -->
-                <div class="space-y-2">
-                    <div class="flex items-center justify-between">
-                        <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Takip Edilecek Coinler</label>
-                        <button id="toggle-all-btn" onclick="toggleAllCoins()" class="text-[9px] text-emerald-400 hover:text-emerald-300 font-bold bg-slate-900/60 px-2 py-0.5 rounded border border-white/5 active:scale-95 transition-all">Tümünü Kaldır</button>
-                    </div>
-                    <div class="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 bg-slate-950/60 p-4 rounded-xl border border-slate-800/80">
-                        <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                            <input type="checkbox" name="autopilot-coins" value="BTCUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                            <span class="font-semibold text-[11px] tracking-wide">BTC</span>
-                        </label>
-                        <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                            <input type="checkbox" name="autopilot-coins" value="ETHUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                            <span class="font-semibold text-[11px] tracking-wide">ETH</span>
-                        </label>
-                        <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                            <input type="checkbox" name="autopilot-coins" value="BNBUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                            <span class="font-semibold text-[11px] tracking-wide">BNB</span>
-                        </label>
-                        <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                            <input type="checkbox" name="autopilot-coins" value="SOLUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                            <span class="font-semibold text-[11px] tracking-wide">SOL</span>
-                        </label>
-                        <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                            <input type="checkbox" name="autopilot-coins" value="XRPUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                            <span class="font-semibold text-[11px] tracking-wide">XRP</span>
-                        </label>
-                        <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                            <input type="checkbox" name="autopilot-coins" value="ADAUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                            <span class="font-semibold text-[11px] tracking-wide">ADA</span>
-                        </label>
-                        <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                            <input type="checkbox" name="autopilot-coins" value="AVAXUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                            <span class="font-semibold text-[11px] tracking-wide">AVAX</span>
-                        </label>
-                        <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                            <input type="checkbox" name="autopilot-coins" value="LINKUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                            <span class="font-semibold text-[11px] tracking-wide">LINK</span>
-                        </label>
-                        <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                            <input type="checkbox" name="autopilot-coins" value="NEARUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                            <span class="font-semibold text-[11px] tracking-wide">NEAR</span>
-                        </label>
-                        <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                            <input type="checkbox" name="autopilot-coins" value="SUIUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                            <span class="font-semibold text-[11px] tracking-wide">SUI</span>
-                        </label>
-                        <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                            <input type="checkbox" name="autopilot-coins" value="APTUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                            <span class="font-semibold text-[11px] tracking-wide">APT</span>
-                        </label>
-                        <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                            <input type="checkbox" name="autopilot-coins" value="DOTUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                            <span class="font-semibold text-[11px] tracking-wide">DOT</span>
-                        </label>
-                        <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                            <input type="checkbox" name="autopilot-coins" value="LTCUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                            <span class="font-semibold text-[11px] tracking-wide">LTC</span>
-                        </label>
-                        <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                            <input type="checkbox" name="autopilot-coins" value="POLUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                            <span class="font-semibold text-[11px] tracking-wide">POL</span>
-                        </label>
-                        <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                            <input type="checkbox" name="autopilot-coins" value="FTMUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                            <span class="font-semibold text-[11px] tracking-wide">FTM</span>
-                        </label>
-                        <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                            <input type="checkbox" name="autopilot-coins" value="ARBUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                            <span class="font-semibold text-[11px] tracking-wide">ARB</span>
-                        </label>
-                        <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                            <input type="checkbox" name="autopilot-coins" value="OPUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                            <span class="font-semibold text-[11px] tracking-wide">OP</span>
-                        </label>
-                    </div>
-                </div>
-
-                <!-- Strategy & Timeframe Select Grid -->
-                <div class="grid grid-cols-2 gap-4">
+            <!-- Two-Column Grid Layout for Controls vs Metrics -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                
+                <!-- Controls Column (Left 5 cols) -->
+                <div class="lg:col-span-5 flex flex-col space-y-5">
+                    <!-- Coin Checkboxes Selection -->
                     <div class="space-y-2">
-                        <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Strateji</label>
-                        <select id="autopilot-strategy" class="w-full bg-slate-950 border border-slate-800/80 rounded-xl px-4 py-3 text-slate-200 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 transition duration-300 text-sm font-semibold">
-                            <option value="consensus">Consensus Ensemble (Hibrit Mod)</option>
-                            <option value="a1">A1 Scalper (Sweep & Breakout)</option>
-                            <option value="a2">A2 Scalper (EMA & RSI & Volume)</option>
-                            <option value="donchian-breakout">Donchian Breakout</option>
-                            <option value="ema-cross">EMA Crossover</option>
-                            <option value="vwap-zscore">VWAP Z-Score</option>
-                            <option value="bollinger-bands">Bollinger Bands</option>
-                        </select>
+                        <div class="flex items-center justify-between">
+                            <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Takip Edilecek Coinler</label>
+                            <button id="toggle-all-btn" onclick="toggleAllCoins()" class="text-[9px] text-emerald-400 hover:text-emerald-300 font-bold bg-slate-900/60 px-2 py-0.5 rounded border border-white/5 active:scale-95 transition-all">Tümünü Kaldır</button>
+                        </div>
+                        <div class="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 bg-slate-950/60 p-4 rounded-xl border border-slate-800/80">
+                            <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                                <input type="checkbox" name="autopilot-coins" value="BTCUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                                <span class="font-semibold text-[11px] tracking-wide">BTC</span>
+                            </label>
+                            <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                                <input type="checkbox" name="autopilot-coins" value="ETHUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                                <span class="font-semibold text-[11px] tracking-wide">ETH</span>
+                            </label>
+                            <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                                <input type="checkbox" name="autopilot-coins" value="BNBUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                                <span class="font-semibold text-[11px] tracking-wide">BNB</span>
+                            </label>
+                            <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                                <input type="checkbox" name="autopilot-coins" value="SOLUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                                <span class="font-semibold text-[11px] tracking-wide">SOL</span>
+                            </label>
+                            <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                                <input type="checkbox" name="autopilot-coins" value="XRPUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                                <span class="font-semibold text-[11px] tracking-wide">XRP</span>
+                            </label>
+                            <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                                <input type="checkbox" name="autopilot-coins" value="ADAUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                                <span class="font-semibold text-[11px] tracking-wide">ADA</span>
+                            </label>
+                            <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                                <input type="checkbox" name="autopilot-coins" value="AVAXUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                                <span class="font-semibold text-[11px] tracking-wide">AVAX</span>
+                            </label>
+                            <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                                <input type="checkbox" name="autopilot-coins" value="LINKUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                                <span class="font-semibold text-[11px] tracking-wide">LINK</span>
+                            </label>
+                            <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                                <input type="checkbox" name="autopilot-coins" value="NEARUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                                <span class="font-semibold text-[11px] tracking-wide">NEAR</span>
+                            </label>
+                            <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                                <input type="checkbox" name="autopilot-coins" value="SUIUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                                <span class="font-semibold text-[11px] tracking-wide">SUI</span>
+                            </label>
+                            <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                                <input type="checkbox" name="autopilot-coins" value="APTUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                                <span class="font-semibold text-[11px] tracking-wide">APT</span>
+                            </label>
+                            <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                                <input type="checkbox" name="autopilot-coins" value="DOTUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                                <span class="font-semibold text-[11px] tracking-wide">DOT</span>
+                            </label>
+                            <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                                <input type="checkbox" name="autopilot-coins" value="LTCUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                                <span class="font-semibold text-[11px] tracking-wide">LTC</span>
+                            </label>
+                            <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                                <input type="checkbox" name="autopilot-coins" value="POLUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                                <span class="font-semibold text-[11px] tracking-wide">POL</span>
+                            </label>
+                            <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                                <input type="checkbox" name="autopilot-coins" value="FTMUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                                <span class="font-semibold text-[11px] tracking-wide">FTM</span>
+                            </label>
+                            <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                                <input type="checkbox" name="autopilot-coins" value="ARBUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                                <span class="font-semibold text-[11px] tracking-wide">ARB</span>
+                            </label>
+                            <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                                <input type="checkbox" name="autopilot-coins" value="OPUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                                <span class="font-semibold text-[11px] tracking-wide">OP</span>
+                            </label>
+                        </div>
                     </div>
-                    <div class="space-y-2">
-                        <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Mum Periyodu</label>
-                        <select id="autopilot-interval" class="w-full bg-slate-950 border border-slate-800/80 rounded-xl px-4 py-3 text-slate-200 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 transition duration-300 text-sm font-semibold">
-                            <option value="1m">1 Dakika (1m)</option>
-                            <option value="15m">15 Dakika (15m)</option>
-                            <option value="1h">1 Saat (1h)</option>
-                            <option value="4h">4 Saat (4h)</option>
-                        </select>
+
+                    <!-- Strategy & Timeframe Select Grid -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="space-y-2">
+                            <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Strateji</label>
+                            <select id="autopilot-strategy" class="w-full bg-slate-950 border border-slate-800/80 rounded-xl px-4 py-3 text-slate-200 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 transition duration-300 text-sm font-semibold">
+                                <option value="consensus">Consensus Ensemble (Hibrit Mod)</option>
+                                <option value="a1">A1 Scalper (Sweep & Breakout)</option>
+                                <option value="a2">A2 Scalper (EMA & RSI & Volume)</option>
+                                <option value="donchian-breakout">Donchian Breakout</option>
+                                <option value="ema-cross">EMA Crossover</option>
+                                <option value="vwap-zscore">VWAP Z-Score</option>
+                                <option value="bollinger-bands">Bollinger Bands</option>
+                            </select>
+                        </div>
+                        <div class="space-y-2">
+                            <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Mum Periyodu</label>
+                            <select id="autopilot-interval" class="w-full bg-slate-950 border border-slate-800/80 rounded-xl px-4 py-3 text-slate-200 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 transition duration-300 text-sm font-semibold">
+                                <option value="1m">1 Dakika (1m)</option>
+                                <option value="15m">15 Dakika (15m)</option>
+                                <option value="1h">1 Saat (1h)</option>
+                                <option value="4h">4 Saat (4h)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- ML Veto Checkbox -->
+                    <div class="flex items-center space-x-3 bg-slate-950/40 p-3.5 rounded-xl border border-slate-900/60 mt-1">
+                        <input type="checkbox" id="autopilot-ml-veto" checked class="w-4 h-4 rounded border-slate-850 bg-slate-950 text-emerald-500 focus:ring-emerald-500/25 focus:ring-offset-slate-950">
+                        <div class="flex flex-col">
+                            <label for="autopilot-ml-veto" class="text-xs font-bold text-slate-300 cursor-pointer select-none">Makine Öğrenmesi Filtresi (ML Veto)</label>
+                            <span class="text-[9px] text-slate-500">Düşük olasılıklı alım sinyallerini ML modeliyle engelle</span>
+                        </div>
+                    </div>
+
+                    <!-- Autopilot Start/Stop Control Buttons -->
+                    <div class="flex space-x-4">
+                        <button onclick="startAutopilot()" class="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-emerald-500/10 hover:shadow-emerald-500/20 active:scale-[0.98] transition-all duration-300 text-sm">
+                            Otopilotu Başlat
+                        </button>
+                        <button onclick="stopAutopilot()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-3.5 px-6 rounded-xl border border-white/5 active:scale-[0.98] transition-all duration-300 text-sm">
+                            Durdur
+                        </button>
+                    </div>
+
+                    <!-- Active Positions List -->
+                    <div class="flex flex-col pt-2">
+                        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">Açık Pozisyonlar</h3>
+                        <div id="positions-list">
+                            <div class="text-slate-500 text-xs text-center py-6 bg-slate-950/40 rounded-xl border border-slate-900/80">
+                                Açık pozisyon bulunmuyor.
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <!-- ML Veto Checkbox -->
-                <div class="flex items-center space-x-3 bg-slate-950/40 p-3.5 rounded-xl border border-slate-900/60 mt-1">
-                    <label class="flex items-center space-x-2.5 cursor-pointer text-sm text-slate-300 hover:text-white select-none">
-                        <input type="checkbox" id="autopilot-ml-veto" checked class="w-4 h-4 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                        <span class="font-bold text-xs text-slate-200">🤖 Yapay Zeka Süzgeci (ML Meta-Labeling Veto)</span>
-                    </label>
-                </div>
+                <!-- Metrics & Analytics Column (Right 7 cols) -->
+                <div class="lg:col-span-7 flex flex-col space-y-6">
+                    <!-- Sanal Kasa Bakiyesi (Virtual Balance) & Stats Cards Grid -->
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div class="bg-slate-950/60 p-4 rounded-xl border border-slate-800 flex flex-col">
+                            <span class="text-[9px] font-bold uppercase tracking-wider text-slate-500">Kasa (Equity)</span>
+                            <span id="virtual-balance" class="text-md font-black text-emerald-400 font-mono mt-1">10.000,00 USDT</span>
+                        </div>
+                        <div class="bg-slate-950/60 p-4 rounded-xl border border-slate-800 flex flex-col">
+                            <span class="text-[9px] font-bold uppercase tracking-wider text-slate-500">Gerçekleşen Kar/Zarar</span>
+                            <span id="realized-pnl" class="text-md font-black text-slate-300 font-mono mt-1">0,00 USDT</span>
+                        </div>
+                        <div class="bg-slate-950/60 p-4 rounded-xl border border-slate-800 flex flex-col">
+                            <span class="text-[9px] font-bold uppercase tracking-wider text-slate-500">Açık İşlem PnL</span>
+                            <span id="unrealized-pnl" class="text-md font-black text-slate-300 font-mono mt-1">0,00 USDT</span>
+                        </div>
+                        <div class="bg-slate-950/60 p-4 rounded-xl border border-slate-800 flex flex-col">
+                            <span class="text-[9px] font-bold uppercase tracking-wider text-slate-500">Çalışma Süresi</span>
+                            <span id="engine-uptime" class="text-md font-black text-blue-400 font-mono mt-1">00:00:00</span>
+                        </div>
+                    </div>
 
-                <!-- Autopilot Start/Stop Control Buttons -->
-                <div class="flex space-x-4">
-                    <button onclick="startAutopilot()" class="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-emerald-500/10 hover:shadow-emerald-500/20 active:scale-[0.98] transition-all duration-300 text-sm">
-                        Otopilotu Başlat
-                    </button>
-                    <button onclick="stopAutopilot()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-3.5 px-6 rounded-xl border border-white/5 active:scale-[0.98] transition-all duration-300 text-sm">
-                        Durdur
-                    </button>
-                </div>
-            </div>
+                    <!-- REAL-TIME GRAPH (Chart.js) -->
+                    <div class="bg-slate-950/50 p-4 rounded-xl border border-slate-900/60">
+                        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Canlı Bakiye Eğrisi (Equity Curve)</h3>
+                        <div class="h-44 w-full relative">
+                            <canvas id="equity-chart"></canvas>
+                        </div>
+                    </div>
 
-            <!-- Sanal Kasa Bakiyesi (Virtual Balance) & Stats Cards Grid -->
-            <div class="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div class="bg-slate-950/60 p-4 rounded-xl border border-slate-800 flex flex-col">
-                    <span class="text-[9px] font-bold uppercase tracking-wider text-slate-500">Kasa (Equity)</span>
-                    <span id="virtual-balance" class="text-md font-black text-emerald-400 font-mono mt-1">10.000,00 USDT</span>
-                </div>
-                <div class="bg-slate-950/60 p-4 rounded-xl border border-slate-800 flex flex-col">
-                    <span class="text-[9px] font-bold uppercase tracking-wider text-slate-500">Gerçekleşen Kar/Zarar</span>
-                    <span id="realized-pnl" class="text-md font-black text-slate-300 font-mono mt-1">0,00 USDT</span>
-                </div>
-                <div class="bg-slate-950/60 p-4 rounded-xl border border-slate-800 flex flex-col">
-                    <span class="text-[9px] font-bold uppercase tracking-wider text-slate-500">Açık İşlem PnL</span>
-                    <span id="unrealized-pnl" class="text-md font-black text-slate-300 font-mono mt-1">0,00 USDT</span>
-                </div>
-                <div class="bg-slate-950/60 p-4 rounded-xl border border-slate-800 flex flex-col">
-                    <span class="text-[9px] font-bold uppercase tracking-wider text-slate-500">Çalışma Süresi</span>
-                    <span id="engine-uptime" class="text-md font-black text-blue-400 font-mono mt-1">00:00:00</span>
-                </div>
-            </div>
-
-            <!-- REAL-TIME GRAPH (Chart.js) -->
-            <div class="mt-6 bg-slate-950/50 p-4 rounded-xl border border-slate-900/60">
-                <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Canlı Bakiye Eğrisi (Equity Curve)</h3>
-                <div class="h-28 w-full relative">
-                    <canvas id="equity-chart"></canvas>
-                </div>
-            </div>
-
-            <!-- Active Positions List -->
-            <div class="mt-6 flex flex-col">
-                <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Açık Pozisyonlar</h3>
-                <div id="positions-list">
-                    <div class="text-slate-500 text-xs text-center py-6 bg-slate-950/40 rounded-xl border border-slate-900/80">
-                        Açık pozisyon bulunmuyor.
+                    <!-- System Activity Terminal Console Log -->
+                    <div class="flex flex-col">
+                        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Sistem Konsolu (Canlı Günlük)</h3>
+                        <div id="terminal-console" class="h-32 bg-slate-950 border border-slate-900 rounded-xl p-3.5 font-mono text-[10px] text-teal-400/90 overflow-y-auto space-y-1.5 scroll-smooth">
+                            <div class="text-slate-500">[19:53:35] Sistem hazır. Otopilot başlatılmayı bekliyor...</div>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- System Activity Terminal Console Log -->
-            <div class="mt-6 flex flex-col">
-                <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Sistem Konsolu (Canlı Günlük)</h3>
-                <div id="terminal-console" class="h-28 bg-slate-950 border border-slate-900 rounded-xl p-3.5 font-mono text-[10px] text-teal-400/90 overflow-y-auto space-y-1.5 scroll-smooth">
-                    <div class="text-slate-500">[19:53:35] Sistem hazır. Otopilot başlatılmayı bekliyor...</div>
-                </div>
             </div>
         </section>
 
@@ -630,22 +611,54 @@
                 const isRunning = strat.status === 'running';
                 
                 const card = document.createElement('div');
-                card.className = `strategy-card p-3 rounded-xl border ${isSelected ? 'border-emerald-500/80 shadow-emerald-500/10 glow-border-emerald' : 'border-slate-800/80'} bg-slate-950/40 hover:bg-slate-900/20 cursor-pointer transition-all duration-300 flex flex-col justify-between relative group select-none`;
+                card.className = `strategy-card p-5 rounded-2xl border ${isSelected ? 'border-emerald-500/80 shadow-emerald-500/10 glow-border-emerald bg-slate-900/10' : 'border-slate-800/80 bg-slate-950/40'} hover:border-slate-700 hover:bg-slate-900/20 cursor-pointer transition-all duration-300 flex flex-col justify-between relative group select-none min-h-[160px]`;
                 card.dataset.strategy = strat.name;
                 card.onclick = () => selectStrategy(strat.name);
 
                 const statusDotClass = isRunning ? 'bg-emerald-500 shadow-md shadow-emerald-500/40 animate-pulse' : 'bg-slate-600';
+                const statusText = isRunning ? 'Aktif' : 'Pasif';
+                const statusTextClass = isRunning ? 'text-emerald-400 font-bold' : 'text-slate-500';
                 
+                // Format positions badges
+                let positionsHtml = '';
+                if (strat.positions && strat.positions.length > 0) {
+                    strat.positions.forEach(pos => {
+                        positionsHtml += `<span class="px-2 py-0.5 rounded bg-emerald-950/40 text-emerald-400 border border-emerald-900/30 text-[9px] font-bold">${pos}</span>`;
+                    });
+                } else {
+                    positionsHtml = '<span class="text-slate-600 italic text-[9px]">Açık pozisyon yok</span>';
+                }
+
+                const uptimeStr = isRunning ? formatUptime(strat.uptime) : '00:00:00';
+                const pnlSign = strat.pnlUsdt >= 0 ? '+' : '';
+                const pnlClass = strat.pnlUsdt >= 0 ? 'text-emerald-400' : 'text-rose-500';
+
                 card.innerHTML = `
-                    <div class="flex items-center justify-between mb-1.5">
-                        <span class="text-base">${info.icon}</span>
-                        <span class="w-1.5 h-1.5 rounded-full ${statusDotClass}"></span>
+                    <div class="flex items-center justify-between border-b border-white/5 pb-2">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-lg">${info.icon}</span>
+                            <span class="text-[12px] font-black text-slate-200">${info.label}</span>
+                        </div>
+                        <div class="flex items-center space-x-1.5 bg-slate-900/60 px-2 py-0.5 rounded-full border border-slate-800/80">
+                            <span class="w-1.5 h-1.5 rounded-full ${statusDotClass}"></span>
+                            <span class="text-[9px] ${statusTextClass}">${statusText}</span>
+                        </div>
                     </div>
-                    <div class="text-[11px] font-bold text-slate-100 truncate">${info.label}</div>
-                    <div class="text-[10px] font-mono text-slate-400 mt-1 font-semibold">$${strat.equity.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
-                    <div class="flex items-center justify-between text-[9px] text-slate-500 mt-1.5">
-                        <span>Poz: ${strat.positionsCount}</span>
-                        <span class="${strat.pnlUsdt >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}">${strat.pnlUsdt >= 0 ? '+' : ''}${strat.pnlPercent.toFixed(1)}%</span>
+                    
+                    <div class="py-2">
+                        <div class="text-[15px] font-black text-slate-100 font-mono tracking-tight">$${strat.equity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                        <div class="text-[10px] ${pnlClass} font-bold mt-0.5">${pnlSign}${strat.pnlPercent.toFixed(2)}% (${pnlSign}$${strat.pnlUsdt.toFixed(2)})</div>
+                    </div>
+
+                    <div class="border-t border-white/5 pt-2 flex flex-col space-y-1.5">
+                        <div class="flex flex-wrap gap-1 items-center">
+                            <span class="text-[9px] text-slate-500 font-bold uppercase tracking-wider mr-1">Pozlar:</span>
+                            ${positionsHtml}
+                        </div>
+                        <div class="flex items-center justify-between text-[9px] text-slate-500">
+                            <span>Süre: <span class="font-mono font-bold text-slate-400">${uptimeStr}</span></span>
+                            <span>Sinyal: <span class="font-mono text-slate-400">${strat.lastCandleTime ? strat.lastCandleTime.substring(11, 16) : '-'}</span></span>
+                        </div>
                     </div>
                 `;
                 grid.appendChild(card);
