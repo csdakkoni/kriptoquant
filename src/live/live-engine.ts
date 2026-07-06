@@ -541,9 +541,15 @@ export async function startExecutionEngine(
 	return engine;
 }
 
+// In-memory state cache to prevent blocking file readFileSync during API polling
+const stateCache = new Map<string, EngineState>();
+
 export function stopExecutionEngine(strategyPath: string): void {
 	const engine = activeEngines.get(strategyPath);
 	if (engine) {
+		const finalState = engine.getState();
+		finalState.engineStatus = 'stopped';
+		stateCache.set(strategyPath, finalState);
 		engine.stop();
 		activeEngines.delete(strategyPath);
 	}
@@ -552,13 +558,23 @@ export function stopExecutionEngine(strategyPath: string): void {
 export function getExecutionEngineState(strategyPath: string): EngineState | null {
 	const engine = activeEngines.get(strategyPath);
 	if (engine) {
-		return engine.getState();
+		const state = engine.getState();
+		stateCache.set(strategyPath, state); // keep cache warm
+		return state;
 	}
+	
+	const cached = stateCache.get(strategyPath);
+	if (cached) {
+		return cached;
+	}
+
 	const statePath = join(process.cwd(), 'results', `live_paper_state_${strategyPath}.json`);
 	if (existsSync(statePath)) {
 		try {
 			const raw = readFileSync(statePath, 'utf-8');
-			return JSON.parse(raw) as EngineState;
+			const parsed = JSON.parse(raw) as EngineState;
+			stateCache.set(strategyPath, parsed);
+			return parsed;
 		} catch {}
 	}
 	return null;

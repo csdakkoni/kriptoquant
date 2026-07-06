@@ -824,7 +824,7 @@
                     `;
                 } else {
                     closedTradesContainer.innerHTML = '';
-                    const sortedTrades = [...closedTrades].sort((a, b) => new Date(b.exitTime).getTime() - new Date(a.exitTime).getTime());
+                    const sortedTrades = [...closedTrades].sort((a, b) => new Date(b.exitTime).getTime() - new Date(a.exitTime).getTime()).slice(0, 15);
                     
                     sortedTrades.forEach(trade => {
                         const tr = document.createElement('tr');
