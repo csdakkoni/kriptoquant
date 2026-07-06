@@ -103,6 +103,17 @@
     <!-- CONTENT WRAPPER -->
     <main class="flex-1 max-w-7xl w-full mx-auto p-6 md:p-10 grid grid-cols-1 lg:grid-cols-12 gap-8 z-10">
 
+        <!-- STRATEGY CONCURRENT CARDS GRID -->
+        <div class="lg:col-span-12 flex flex-col space-y-3 mb-2">
+            <h2 class="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
+                <span>🤖 Aktif Paralel Otopilot Stratejileri</span>
+                <span class="text-[10px] text-slate-600 font-semibold normal-case">Strateji kartlarına tıklayarak detayları (Grafik, Pozisyonlar, Loglar, Geçmiş) aşağıda görüntüleyebilirsiniz</span>
+            </h2>
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-9 gap-3.5" id="strategy-cards-grid">
+                <!-- 9 cards will be dynamically rendered here -->
+            </div>
+        </div>
+
         <!-- LEFT COLUMN (5 Columns on Large screens: Backtest + Market Watch) -->
         <div class="lg:col-span-5 flex flex-col space-y-6">
             
@@ -242,7 +253,7 @@
             <div class="flex items-center justify-between mb-6">
                 <h2 class="text-xl font-bold text-slate-100 flex items-center space-x-2">
                     <span class="text-lg">⚡</span>
-                    <span>Canlı Otopilot (Paper Trading)</span>
+                    <span id="active-strategy-title">Canlı Otopilot (Paper Trading)</span>
                 </h2>
                 <div class="flex items-center space-x-2 bg-slate-950/40 px-3 py-1.5 rounded-full border border-slate-800">
                     <span id="autopilot-status-dot" class="w-2.5 h-2.5 rounded-full bg-slate-600 transition-all duration-300"></span>
@@ -468,6 +479,18 @@
         let consoleLogs = [];
         let previousStatus = 'stopped';
         let previousPositionsCount = 0;
+
+        const strategyMetadata = {
+            'consensus': { label: 'Consensus Hybrid', icon: '🤖' },
+            'a1': { label: 'A1 Scalper', icon: '⚡' },
+            'a2': { label: 'A2 Scalper', icon: '🔥' },
+            'donchian-breakout': { label: 'Donchian Breakout', icon: '🐢' },
+            'ema-cross': { label: 'EMA Crossover', icon: '📈' },
+            'sma-cross': { label: 'SMA Crossover', icon: '📉' },
+            'supertrend': { label: 'Supertrend', icon: '🦅' },
+            'vwap-zscore': { label: 'VWAP Z-Score', icon: '⚖️' },
+            'bollinger-bands': { label: 'Bollinger Bands', icon: '📊' }
+        };
         
         const watchCoins = [
             "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", 
@@ -580,7 +603,10 @@
                 try {
                     const msg = JSON.parse(event.data);
                     if (msg.type === 'engine') {
-                        renderAutopilotState(msg.data);
+                        if (msg.data.strategyPath === selectedStrategy) {
+                            renderAutopilotState(msg.data);
+                        }
+                        fetchStrategySummaries();
                     }
                 } catch (e) {}
             };
@@ -647,13 +673,97 @@
             };
         }
 
+        let selectedStrategy = 'consensus';
+
         // Fetch current autopilot state via REST API on startup or ws reconnect
         async function fetchInitialState() {
+            fetchStrategySummaries();
+            fetchStrategyDetails(selectedStrategy);
+        }
+
+        async function fetchStrategySummaries() {
             try {
                 const res = await fetch('/api/live-paper');
+                const summaries = await res.json();
+                renderStrategyCards(summaries);
+            } catch (e) {
+                console.error('Failed to fetch strategy summaries', e);
+            }
+        }
+
+        async function fetchStrategyDetails(strategy) {
+            try {
+                const res = await fetch(`/api/live-paper/details?strategy=${strategy}`);
                 const state = await res.json();
-                renderAutopilotState(state);
-            } catch (e) {}
+                if (strategy === selectedStrategy) {
+                    renderAutopilotState(state);
+                }
+            } catch (e) {
+                console.error('Failed to fetch strategy details', e);
+            }
+        }
+
+        function selectStrategy(strategy) {
+            selectedStrategy = strategy;
+            
+            // Highlight selected card
+            const cards = document.querySelectorAll('.strategy-card');
+            cards.forEach(card => {
+                if (card.dataset.strategy === strategy) {
+                    card.className = card.className.replace('border-slate-800/80', 'border-emerald-500/80 shadow-emerald-500/10 glow-border-emerald');
+                } else {
+                    card.className = card.className.replace('border-emerald-500/80 shadow-emerald-500/10 glow-border-emerald', 'border-slate-800/80');
+                }
+            });
+
+            // Update active strategy panel title
+            const info = strategyMetadata[strategy] || { label: strategy };
+            const titleEl = document.getElementById('active-strategy-title');
+            if (titleEl) {
+                titleEl.innerText = `Canlı Otopilot: ${info.label}`;
+            }
+
+            // Update UI dropdown value if they want to start it
+            const stratDropdown = document.getElementById('autopilot-strategy');
+            if (stratDropdown) {
+                stratDropdown.value = strategy;
+            }
+
+            // Immediately load details
+            fetchStrategyDetails(strategy);
+        }
+
+        function renderStrategyCards(summaries) {
+            const grid = document.getElementById('strategy-cards-grid');
+            if (!grid) return;
+
+            grid.innerHTML = '';
+            summaries.forEach(strat => {
+                const info = strategyMetadata[strat.name] || { label: strat.name, icon: '⚙️' };
+                const isSelected = strat.name === selectedStrategy;
+                const isRunning = strat.status === 'running';
+                
+                const card = document.createElement('div');
+                card.className = `strategy-card p-3 rounded-xl border ${isSelected ? 'border-emerald-500/80 shadow-emerald-500/10 glow-border-emerald' : 'border-slate-800/80'} bg-slate-950/40 hover:bg-slate-900/20 cursor-pointer transition-all duration-300 flex flex-col justify-between relative group select-none`;
+                card.dataset.strategy = strat.name;
+                card.onclick = () => selectStrategy(strat.name);
+
+                const statusDotClass = isRunning ? 'bg-emerald-500 shadow-md shadow-emerald-500/40 animate-pulse' : 'bg-slate-600';
+                
+                card.innerHTML = `
+                    <div class="flex items-center justify-between mb-1.5">
+                        <span class="text-base">${info.icon}</span>
+                        <span class="w-1.5 h-1.5 rounded-full ${statusDotClass}"></span>
+                    </div>
+                    <div class="text-[11px] font-bold text-slate-100 truncate">${info.label}</div>
+                    <div class="text-[10px] font-mono text-slate-400 mt-1 font-semibold">$${strat.equity.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                    <div class="flex items-center justify-between text-[9px] text-slate-500 mt-1.5">
+                        <span>Poz: ${strat.positionsCount}</span>
+                        <span class="${strat.pnlUsdt >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}">${strat.pnlUsdt >= 0 ? '+' : ''}${strat.pnlPercent.toFixed(1)}%</span>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
         }
 
         // Format uptime seconds into HH:MM:SS
@@ -858,7 +968,8 @@
                 });
                 const data = await res.json();
                 if (data.success) {
-                    updateEngineUIState('running');
+                    fetchStrategySummaries();
+                    selectStrategy(strategy);
                 } else {
                     alert(`Başlatma Hatası: ${data.message}`);
                 }
@@ -868,14 +979,17 @@
         }
 
         async function stopAutopilot() {
+            const strategy = selectedStrategy || 'consensus';
             try {
                 const res = await fetch('/api/live-paper/stop', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ strategy })
                 });
                 const data = await res.json();
                 if (data.success) {
-                    updateEngineUIState('stopped');
+                    fetchStrategySummaries();
+                    fetchStrategyDetails(strategy);
                 }
             } catch (err) {
                 alert(`Sunucu Hatası: ${err.message}`);
@@ -942,6 +1056,7 @@
         // Start connection on page load
         setupWebsocket();
         setupMarketWatchWebsocket();
+        setInterval(fetchStrategySummaries, 5000);
     </script>
 </body>
 </html>

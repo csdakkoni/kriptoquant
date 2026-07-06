@@ -11,6 +11,7 @@ import {
 	startExecutionEngine,
 	stopExecutionEngine,
 	getExecutionEngineState,
+	getAllExecutionEnginesSummary,
 	EngineState,
 } from '../live/live-engine.js';
 import { ScreenerEngine } from '../decision/screener.js';
@@ -71,7 +72,7 @@ export function startDashboardServer(port: number = 3000): any {
 		log(`[WebSocket] New client connected. Total clients: ${connectedClients.size}`);
 
 		// Immediately push current states to newly connected client
-		const engineState = getExecutionEngineState();
+		const engineState = getExecutionEngineState('consensus');
 		if (engineState) {
 			ws.send(JSON.stringify({ type: 'engine', data: engineState }));
 		}
@@ -429,9 +430,19 @@ export function startDashboardServer(port: number = 3000): any {
 				return;
 			}
 
-			// ── 1c) GET /api/live-paper ➔ Canlı Paper Trading Durumu ──────────
+			// ── 1c) GET /api/live-paper ➔ Canlı Paper Trading Durumu (Summary) ──
 			if (url === '/api/live-paper' && req.method === 'GET') {
-				const state = getExecutionEngineState();
+				const summaries = getAllExecutionEnginesSummary();
+				res.writeHead(200, { 'Content-Type': 'application/json' });
+				res.end(JSON.stringify(summaries));
+				return;
+			}
+
+			// ── 1cc) GET /api/live-paper/details ➔ Detaylı Strateji Durumu ──────
+			if (url.startsWith('/api/live-paper/details') && req.method === 'GET') {
+				const queryParams = new URL(`http://localhost${url}`).searchParams;
+				const strategy = queryParams.get('strategy') || 'consensus';
+				const state = getExecutionEngineState(strategy);
 				res.writeHead(200, { 'Content-Type': 'application/json' });
 				res.end(JSON.stringify(state || { engineStatus: 'stopped' }));
 				return;
@@ -470,21 +481,28 @@ export function startDashboardServer(port: number = 3000): any {
 
 			// ── 1e) POST /api/live-paper/stop ➔ Motoru Durdur ─────────────────
 			if (url === '/api/live-paper/stop' && req.method === 'POST') {
-				try {
-					stopExecutionEngine();
-					const stoppedState = getExecutionEngineState();
-					if (stoppedState) {
-						broadcastEngineState(stoppedState);
-					}
-					broadcastPortfolioState(portfolio.getPortfolioAllocations());
+				let body = '';
+				req.on('data', chunk => { body += chunk; });
+				req.on('end', () => {
+					try {
+						const params = JSON.parse(body || '{}');
+						const strategy = params.strategy || 'ema-cross';
+						
+						stopExecutionEngine(strategy);
+						const stoppedState = getExecutionEngineState(strategy);
+						if (stoppedState) {
+							broadcastEngineState(stoppedState);
+						}
+						broadcastPortfolioState(portfolio.getPortfolioAllocations());
 
-					res.writeHead(200, { 'Content-Type': 'application/json' });
-					res.end(JSON.stringify({ success: true, message: 'Execution Engine stopped' }));
-				} catch (e) {
-					logError(`Failed to stop execution engine: ${e}`);
-					res.writeHead(500, { 'Content-Type': 'text/plain' });
-					res.end(`Stop Engine Failed: ${e}`);
-				}
+						res.writeHead(200, { 'Content-Type': 'application/json' });
+						res.end(JSON.stringify({ success: true, message: `Execution Engine stopped for ${strategy}` }));
+					} catch (e) {
+						logError(`Failed to stop execution engine: ${e}`);
+						res.writeHead(500, { 'Content-Type': 'text/plain' });
+						res.end(`Stop Engine Failed: ${e}`);
+					}
+				});
 				return;
 			}
 
@@ -726,17 +744,20 @@ export function startDashboardServer(port: number = 3000): any {
 		log(`  🚀 URL: http://localhost:${port}`);
 		log(`================================================================\n`);
 
-		// Check for auto-resume on server startup
+		// Check for auto-resume on server startup for all strategies
 		try {
-			const state = getExecutionEngineState();
-			if (state && state.engineStatus === 'running' && state.coins && state.interval && state.strategyPath) {
-				log(`[Auto-Resume] Resuming previously running ExecutionEngine with ${state.coins.length} coins on interval ${state.interval}...`);
-				startExecutionEngine(state.coins, state.interval, state.strategyPath, !!state.mlVeto, (updatedState) => {
-					broadcastEngineState(updatedState);
-					broadcastPortfolioState(portfolio.getPortfolioAllocations());
-				}).catch(e => {
-					logError(`[Auto-Resume] Failed to resume ExecutionEngine: ${e}`);
-				});
+			const registeredStrategies = ['consensus', 'a1', 'a2', 'donchian-breakout', 'ema-cross', 'sma-cross', 'supertrend', 'vwap-zscore', 'bollinger-bands'];
+			for (const strat of registeredStrategies) {
+				const state = getExecutionEngineState(strat);
+				if (state && state.engineStatus === 'running' && state.coins && state.interval && state.strategyPath) {
+					log(`[Auto-Resume] Resuming previously running ExecutionEngine for ${strat} with ${state.coins.length} coins on interval ${state.interval}...`);
+					startExecutionEngine(state.coins, state.interval, state.strategyPath, !!state.mlVeto, (updatedState) => {
+						broadcastEngineState(updatedState);
+						broadcastPortfolioState(portfolio.getPortfolioAllocations());
+					}).catch(e => {
+						logError(`[Auto-Resume] Failed to resume ExecutionEngine for ${strat}: ${e}`);
+					});
+				}
 			}
 		} catch (e) {
 			logError(`[Auto-Resume] Error during checking auto-resume state: ${e}`);

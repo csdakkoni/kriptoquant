@@ -99,7 +99,7 @@ export class ExecutionEngine {
 		this.interval = interval;
 		this.strategyPath = strategyPath;
 		this.mlVeto = mlVeto;
-		this.statePath = join(process.cwd(), 'results', 'live_paper_state.json');
+		this.statePath = join(process.cwd(), 'results', `live_paper_state_${strategyPath}.json`);
 		this.broker = new BinanceTrBroker();
 
 		// Load or initialize state
@@ -521,7 +521,7 @@ function posTotalValue(positions: ActivePosition[]): number {
 
 // ─── Global singleton management ─────────────────────────────────────────────
 
-let activeEngine: ExecutionEngine | null = null;
+export const activeEngines = new Map<string, ExecutionEngine>();
 
 export async function startExecutionEngine(
 	coins: string[],
@@ -530,27 +530,31 @@ export async function startExecutionEngine(
 	mlVeto: boolean,
 	cb: (state: EngineState) => void
 ): Promise<ExecutionEngine> {
-	if (activeEngine) {
-		activeEngine.stop();
+	let engine = activeEngines.get(strategyPath);
+	if (engine) {
+		engine.stop();
 	}
-	activeEngine = new ExecutionEngine(coins, interval, strategyPath, mlVeto);
-	activeEngine.registerUpdateCallback(cb);
-	await activeEngine.start();
-	return activeEngine;
+	engine = new ExecutionEngine(coins, interval, strategyPath, mlVeto);
+	engine.registerUpdateCallback(cb);
+	await engine.start();
+	activeEngines.set(strategyPath, engine);
+	return engine;
 }
 
-export function stopExecutionEngine(): void {
-	if (activeEngine) {
-		activeEngine.stop();
-		activeEngine = null;
+export function stopExecutionEngine(strategyPath: string): void {
+	const engine = activeEngines.get(strategyPath);
+	if (engine) {
+		engine.stop();
+		activeEngines.delete(strategyPath);
 	}
 }
 
-export function getExecutionEngineState(): EngineState | null {
-	if (activeEngine) {
-		return activeEngine.getState();
+export function getExecutionEngineState(strategyPath: string): EngineState | null {
+	const engine = activeEngines.get(strategyPath);
+	if (engine) {
+		return engine.getState();
 	}
-	const statePath = join(process.cwd(), 'results', 'live_paper_state.json');
+	const statePath = join(process.cwd(), 'results', `live_paper_state_${strategyPath}.json`);
 	if (existsSync(statePath)) {
 		try {
 			const raw = readFileSync(statePath, 'utf-8');
@@ -558,4 +562,53 @@ export function getExecutionEngineState(): EngineState | null {
 		} catch {}
 	}
 	return null;
+}
+
+export interface StrategySummary {
+	name: string;
+	status: 'running' | 'stopped';
+	equity: number;
+	positionsCount: number;
+	pnlUsdt: number;
+	pnlPercent: number;
+}
+
+export function getAllExecutionEnginesSummary(): StrategySummary[] {
+	const registeredStrategies = [
+		{ name: 'consensus', label: 'Consensus Hybrid' },
+		{ name: 'a1', label: 'A1 Scalper' },
+		{ name: 'a2', label: 'A2 15m Scalper' },
+		{ name: 'donchian-breakout', label: 'Donchian Breakout' },
+		{ name: 'ema-cross', label: 'EMA Crossover' },
+		{ name: 'sma-cross', label: 'SMA Crossover' },
+		{ name: 'supertrend', label: 'Supertrend' },
+		{ name: 'vwap-zscore', label: 'VWAP Z-Score' },
+		{ name: 'bollinger-bands', label: 'Bollinger Bands' }
+	];
+
+	return registeredStrategies.map(strat => {
+		const state = getExecutionEngineState(strat.name);
+		if (state) {
+			const startCash = 10000;
+			const equity = state.currentEquity ?? state.cash ?? startCash;
+			const pnlUsdt = equity - startCash;
+			const pnlPercent = (pnlUsdt / startCash) * 100;
+			return {
+				name: strat.name,
+				status: state.engineStatus,
+				equity,
+				positionsCount: state.activePositions?.length || 0,
+				pnlUsdt,
+				pnlPercent
+			};
+		}
+		return {
+			name: strat.name,
+			status: 'stopped',
+			equity: 10000,
+			positionsCount: 0,
+			pnlUsdt: 0,
+			pnlPercent: 0
+		};
+	});
 }
