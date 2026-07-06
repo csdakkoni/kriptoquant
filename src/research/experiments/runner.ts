@@ -16,6 +16,8 @@ import type {
 import { runBacktest } from '../backtester.js';
 import { createEmaCrossStrategy } from '../strategies/ema-cross/index.js';
 import { createDonchianBreakoutStrategy } from '../strategies/donchian-breakout/index.js';
+import { runMonteCarlo } from '../analytics/monte-carlo.js';
+
 
 // ─── Tipler ──────────────────────────────────────────────────────────────────
 
@@ -44,6 +46,7 @@ export interface ExperimentResult {
 	readonly acceptedSignals: number;
 	readonly totalSignals: number;
 	readonly alpha: number;
+	readonly quantScore: number;
 }
 
 export interface SweepConfig {
@@ -178,6 +181,7 @@ export function runExperiment(
 	};
 
 	const result = runBacktest(strategy, candles, platformConfig, riskConfig, coin, strategyDefaults);
+	const scoreVal = calculateQuantScore(result);
 
 	return {
 		params,
@@ -191,5 +195,57 @@ export function runExperiment(
 		acceptedSignals: result.filterStats?.accepted ?? 0,
 		totalSignals: result.filterStats?.totalSignals ?? 0,
 		alpha: result.alpha,
+		quantScore: scoreVal,
 	};
+}
+
+export function calculateQuantScore(result: any): number {
+	const trades = result.trades || [];
+	if (trades.length < 3) return 0;
+
+	// 1) Expectancy in R-multiple
+	const winRate = result.winRate / 100;
+	const winningTrades = trades.filter((t: any) => t.pnlPercent > 0);
+	const losingTrades = trades.filter((t: any) => t.pnlPercent <= 0);
+
+	const avgWin = winningTrades.length > 0
+		? winningTrades.reduce((sum: number, t: any) => sum + t.pnlPercent, 0) / winningTrades.length
+		: 0;
+	const avgLoss = losingTrades.length > 0
+		? Math.abs(losingTrades.reduce((sum: number, t: any) => sum + t.pnlPercent, 0) / losingTrades.length)
+		: 0;
+
+	const rMultiple = avgLoss > 0 ? avgWin / avgLoss : avgWin;
+	const expectancy = winRate * rMultiple - (1 - winRate);
+
+	// Optimization: negative expectancy immediately scores 0
+	if (expectancy <= 0) return 0;
+
+	// 2) Trade Count factor: sqrt(N)
+	const tradeCountFactor = Math.sqrt(trades.length);
+
+	// 3) Risk of Ruin (using Monte Carlo Shuffle, 100 iterations for speed)
+	const pnlList = trades.map((t: any) => t.pnlPercent);
+	const mc = runMonteCarlo(pnlList, 10000, { method: 'shuffle', simulationsCount: 100 });
+	const riskOfRuin = mc.riskOfRuinPercent / 100;
+
+	// 4) Stability: Profitability fraction of 4 chunks of equity timeline
+	let stability = 0;
+	if (result.timeline && result.timeline.length > 4) {
+		const chunkSize = Math.floor(result.timeline.length / 4);
+		let profitableChunks = 0;
+		for (let i = 0; i < 4; i++) {
+			const startVal = result.timeline[i * chunkSize]?.equity || 10000;
+			const endVal = result.timeline[Math.min(result.timeline.length - 1, (i + 1) * chunkSize)]?.equity || startVal;
+			if (endVal > startVal) {
+				profitableChunks++;
+			}
+		}
+		stability = profitableChunks / 4;
+	} else {
+		stability = 0.5;
+	}
+
+	const rawScore = expectancy * tradeCountFactor * (1 - riskOfRuin) * stability;
+	return Math.max(0, parseFloat(rawScore.toFixed(4)));
 }

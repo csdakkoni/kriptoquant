@@ -197,14 +197,21 @@ export async function runSweep(
 export function printLeaderboard(results: ExperimentResult[], topN: number = 20): void {
 	const sorted = [...results]
 		.filter((r) => r.totalTrades > 0)
-		.sort((a, b) => b.sharpeRatio - a.sharpeRatio);
+		.sort((a, b) => {
+			const scoreA = a.quantScore ?? 0;
+			const scoreB = b.quantScore ?? 0;
+			if (scoreB !== scoreA) {
+				return scoreB - scoreA;
+			}
+			return b.sharpeRatio - a.sharpeRatio;
+		});
 
 	const divider = '═'.repeat(64);
 	const thinDivider = '─'.repeat(64);
 
 	console.log('');
 	console.log(divider);
-	console.log(`  🏆 PARAMETER SWEEP — Top ${Math.min(topN, sorted.length)} Leaderboard`);
+	console.log(`  🏆 PARAMETER SWEEP — Top ${Math.min(topN, sorted.length)} Leaderboard (Sorted by Quant Score)`);
 	console.log(divider);
 
 	if (sorted.length === 0) {
@@ -250,6 +257,7 @@ export function printLeaderboard(results: ExperimentResult[], topN: number = 20)
 		console.log(`  RVOL Threshold: ${p.rvolVetoThreshold}`);
 		console.log(`  Min Confidence: ${p.minimumConfidence}`);
 		console.log(`  ────────────────────────────`);
+		console.log(`  Quant Score   : ${r.quantScore ?? 0}`);
 		console.log(`  Return        : ${r.totalReturn > 0 ? '+' : ''}${r.totalReturn}%`);
 		console.log(`  Alpha         : ${r.alpha > 0 ? '+' : ''}${r.alpha}%`);
 		console.log(`  Sharpe        : ${r.sharpeRatio}`);
@@ -296,7 +304,7 @@ export function exportSweepCSV(
 	const dir = dirname(filepath);
 	if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 
-	const header = 'Strategy,emaFast,emaSlow,donchianPeriod,adxThreshold,rvolThreshold,minConfidence,Return,Sharpe,ProfitFactor,MaxDrawdown,Trades,WinRate,Alpha,Signals,Accepted,Rejected';
+	const header = 'Strategy,emaFast,emaSlow,donchianPeriod,adxThreshold,rvolThreshold,minConfidence,Return,Sharpe,ProfitFactor,MaxDrawdown,Trades,WinRate,Alpha,Signals,Accepted,Rejected,QuantScore';
 
 	const rows = results.map((r) => {
 		const p = r.params;
@@ -318,6 +326,7 @@ export function exportSweepCSV(
 			r.totalSignals,
 			r.acceptedSignals,
 			r.rejectedSignals,
+			r.quantScore ?? 0,
 		].join(',');
 	});
 

@@ -157,7 +157,7 @@ describe('Portfolio & PositionManager', () => {
 		const p = new Portfolio(10000);
 		const buyFill: Fill = { timestamp: 1000, side: 'BUY', price: 100, quantity: 50, commission: 5 };
 		p.positions.open(buyFill, 5000, 10, 90);
-		p.deductCapital(5000);
+		p.deductCapital(5005); // 5000 + 5 buy commission
 
 		const sellFill: Fill = { timestamp: 2000, side: 'SELL', price: 110, quantity: 50, commission: 5.5 };
 		const trade = p.positions.close(sellFill, 'Test close', 'TESTUSDT');
@@ -165,8 +165,8 @@ describe('Portfolio & PositionManager', () => {
 		p.addCapital(50 * 110 - 5.5);
 
 		expect(p.positions.hasOpen()).toBe(false);
-		expect(p.getCapital()).toBeCloseTo(10494.5, 2);
-		expect(trade.pnl).toBeCloseTo(494.5, 2);
+		expect(p.getCapital()).toBeCloseTo(10489.5, 2); // 10000 - 5005 + 5494.5 = 10489.5
+		expect(trade.pnl).toBeCloseTo(489.5, 2); // 500 - 5.5 - 5 = 489.5
 	});
 
 	it('should evaluate stop loss rules', () => {

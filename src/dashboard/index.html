@@ -1,31 +1,24 @@
 <!DOCTYPE html>
-<html lang="tr" class="h-full">
+<html lang="tr" class="h-full bg-slate-950 text-slate-100">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KriptoQuant — Quant Research Workspace</title>
-    <!-- Google Fonts Inter -->
+    <title>KriptoQuant — Binance TR Otopilot & Backtest Hub</title>
+    <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
     <!-- Chart.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- TailwindCSS CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
             theme: {
                 extend: {
                     fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
-                    },
-                    colors: {
-                        darkBg: '#090d16',
-                        darkCard: '#111827',
-                        accentGreen: '#10b981',
-                        accentRed: '#ef4444',
-                        accentBlue: '#3b82f6',
-                        glassBorder: 'rgba(255, 255, 255, 0.06)',
+                        sans: ['Outfit', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
                     }
                 }
             }
@@ -33,1828 +26,827 @@
     </script>
     <style>
         body {
-            background-color: #090d16;
-            color: #f1f5f9;
+            background-color: #030712;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(16, 185, 129, 0.04) 0px, transparent 50%),
+                radial-gradient(at 100% 0%, rgba(59, 130, 246, 0.04) 0px, transparent 50%),
+                radial-gradient(at 50% 100%, rgba(99, 102, 241, 0.02) 0px, transparent 50%);
+        }
+        .glass-panel {
+            background: rgba(17, 24, 39, 0.45);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+        .glow-border-blue:hover {
+            border-color: rgba(59, 130, 246, 0.4);
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.1);
+        }
+        .glow-border-emerald:hover {
+            border-color: rgba(16, 185, 129, 0.4);
+            box-shadow: 0 0 20px rgba(16, 185, 129, 0.1);
         }
         /* Custom scrollbar */
         ::-webkit-scrollbar {
             width: 6px;
-            height: 6px;
         }
         ::-webkit-scrollbar-track {
-            background: #090d16;
+            background: rgba(15, 23, 42, 0.3);
         }
         ::-webkit-scrollbar-thumb {
-            background: #1f2937;
-            border-radius: 3px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 9999px;
         }
         ::-webkit-scrollbar-thumb:hover {
-            background: #374151;
+            background: rgba(255, 255, 255, 0.2);
         }
-        .glass-card {
-            background: #111827;
-            border: 1px solid rgba(255, 255, 255, 0.06);
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+        .price-flash-up {
+            animation: flashUp 0.6s ease-out;
         }
-        .tab-btn.active {
-            border-color: #3b82f6;
-            color: #3b82f6;
-            background: rgba(59, 130, 246, 0.05);
+        .price-flash-down {
+            animation: flashDown 0.6s ease-out;
+        }
+        @keyframes flashUp {
+            0% { background-color: rgba(16, 185, 129, 0.2); }
+            100% { background-color: transparent; }
+        }
+        @keyframes flashDown {
+            0% { background-color: rgba(244, 63, 94, 0.2); }
+            100% { background-color: transparent; }
         }
     </style>
 </head>
-<body class="h-full flex overflow-hidden">
+<body class="h-full flex flex-col font-sans antialiased overflow-x-hidden">
 
-    <!-- SIDEBAR -->
-    <aside class="w-80 bg-[#0b0f19] border-r border-glassBorder flex flex-col flex-shrink-0">
-        <!-- Logo Header -->
-        <div class="p-6 border-b border-glassBorder flex items-center justify-between">
-            <div class="flex items-center space-x-2">
-                <span class="text-xl font-bold tracking-tight bg-gradient-to-r from-accentGreen to-accentBlue bg-clip-text text-transparent">
-                    📊 KriptoQuant
-                </span>
-                <span class="text-xs bg-[#1f2937] px-2 py-0.5 rounded text-gray-400 font-mono">v2.0</span>
-            </div>
+    <!-- AMBIENT GLOWS -->
+    <div class="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-500/5 rounded-full blur-[120px] pointer-events-none"></div>
+    <div class="absolute bottom-1/3 right-1/4 w-[500px] h-[500px] bg-emerald-500/3 rounded-full blur-[150px] pointer-events-none"></div>
+
+    <!-- HEADER -->
+    <header class="border-b border-white/5 py-4 px-6 md:px-12 flex items-center justify-between bg-gray-950/40 backdrop-blur-md sticky top-0 z-50">
+        <div class="flex items-center space-x-3">
+            <span class="text-2xl font-black tracking-tight bg-gradient-to-r from-emerald-400 via-teal-400 to-blue-500 bg-clip-text text-transparent">
+                📊 KriptoQuant
+            </span>
+            <span class="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-400 font-mono font-bold">v2.0</span>
+            <span class="text-[10px] bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded text-emerald-400 font-mono font-bold flex items-center space-x-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                <span>Binance TR Active</span>
+            </span>
         </div>
-
-        <!-- Sidebar Actions & Compare Mode Toggle -->
-        <div class="p-4 border-b border-glassBorder space-y-2">
-            <div class="flex items-center justify-between text-xs text-gray-400">
-                <span>Rapor Seçimi & Karşılaştırma</span>
-                <button onclick="clearComparison()" class="text-accentBlue hover:underline">Seçimleri Temizle</button>
-            </div>
+        <div class="flex items-center space-x-2 bg-slate-900/40 px-3.5 py-1.5 rounded-full border border-white/5">
+            <span id="ws-connection-dot" class="w-2.5 h-2.5 rounded-full bg-rose-500 transition-colors duration-500"></span>
+            <span class="text-xs font-semibold text-slate-400">Sunucu Bağlantısı</span>
         </div>
+    </header>
 
-        <!-- Reports List -->
-        <div class="flex-1 overflow-y-auto p-4 space-y-3" id="reports-list">
-            <div class="text-gray-500 text-sm text-center py-8">Raporlar yükleniyor...</div>
-        </div>
-    </aside>
+    <!-- CONTENT WRAPPER -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-6 md:p-10 grid grid-cols-1 lg:grid-cols-12 gap-8 z-10">
 
-    <!-- MAIN APP CONTAINER -->
-    <main class="flex-1 flex flex-col overflow-hidden">
-        <!-- Top Nav & Tabs -->
-        <header class="border-b border-glassBorder flex flex-col flex-shrink-0 bg-[#0b0f19]/60 backdrop-blur-md">
-            <!-- Header Title -->
-            <div class="flex items-center justify-between px-8 pt-6 pb-4">
-                <div>
-                    <h1 class="text-lg font-bold" id="active-strategy-title">Lütfen Bir Rapor Seçin</h1>
-                    <p class="text-xs text-gray-400" id="active-coin-subtitle">Varlık ve periyot verisi sol listeden seçilir.</p>
+        <!-- LEFT COLUMN (5 Columns on Large screens: Backtest + Market Watch) -->
+        <div class="lg:col-span-5 flex flex-col space-y-6">
+            
+            <!-- PANEL 1 - BACKTEST -->
+            <section class="glass-panel p-6 rounded-2xl flex flex-col shadow-2xl relative overflow-hidden group transition-all duration-300 glow-border-blue">
+                <div class="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-blue-500 to-indigo-500"></div>
+                
+                <h2 class="text-xl font-bold text-slate-100 flex items-center space-x-2 mb-6">
+                    <span class="text-lg">🔍</span>
+                    <span>Geçmişi Test Et (Backtest)</span>
+                </h2>
+
+                <div class="space-y-4">
+                    <!-- Coin Select -->
+                    <div class="space-y-1.5">
+                        <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">İşlem Çifti</label>
+                        <select id="backtest-coin" class="w-full bg-slate-950 border border-slate-800/80 rounded-xl px-4 py-2.5 text-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition duration-300 text-sm font-semibold">
+                            <option value="BTCUSDT">BTCUSDT (Bitcoin)</option>
+                            <option value="ETHUSDT">ETHUSDT (Ethereum)</option>
+                            <option value="BNBUSDT">BNBUSDT (Binance Coin)</option>
+                            <option value="SOLUSDT">SOLUSDT (Solana)</option>
+                            <option value="XRPUSDT">XRPUSDT (Ripple)</option>
+                            <option value="ADAUSDT">ADAUSDT (Cardano)</option>
+                            <option value="AVAXUSDT">AVAXUSDT (Avalanche)</option>
+                            <option value="LINKUSDT">LINKUSDT (Chainlink)</option>
+                            <option value="NEARUSDT">NEARUSDT (Near Protocol)</option>
+                            <option value="SUIUSDT">SUIUSDT (Sui)</option>
+                            <option value="APTUSDT">APTUSDT (Aptos)</option>
+                            <option value="DOTUSDT">DOTUSDT (Polkadot)</option>
+                            <option value="LTCUSDT">LTCUSDT (Litecoin)</option>
+                            <option value="POLUSDT">POLUSDT (Polygon)</option>
+                            <option value="FTMUSDT">FTMUSDT (Fantom)</option>
+                            <option value="ARBUSDT">ARBUSDT (Arbitrum)</option>
+                            <option value="OPUSDT">OPUSDT (Optimism)</option>
+                        </select>
+                    </div>
+
+                    <!-- Strategy Select -->
+                    <div class="space-y-1.5">
+                        <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Strateji Modeli</label>
+                        <select id="backtest-strategy" class="w-full bg-slate-950 border border-slate-800/80 rounded-xl px-4 py-2.5 text-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition duration-300 text-sm font-semibold">
+                            <option value="a2">A2 Scalper (EMA & RSI & Volume)</option>
+                            <option value="a1">A1 Scalper (Sweep & Breakout)</option>
+                            <option value="consensus">Consensus Ensemble (Hibrit Mod)</option>
+                            <option value="donchian-breakout">Donchian Breakout (Kanal Kırılımı)</option>
+                            <option value="ema-cross">EMA Crossover (Model 9/21)</option>
+                            <option value="supertrend">Supertrend (Trend Takipçisi)</option>
+                            <option value="vwap-zscore">VWAP Z-Score (Mean Reversion)</option>
+                            <option value="bollinger-bands">Bollinger Bands (Volatilite Bandı)</option>
+                        </select>
+                    </div>
+
+                    <!-- Timeframe Select -->
+                    <div class="space-y-1.5">
+                        <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Zaman Dilimi</label>
+                        <select id="backtest-interval" class="w-full bg-slate-950 border border-slate-800/80 rounded-xl px-4 py-2.5 text-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition duration-300 text-sm font-semibold">
+                            <option value="1m">1 Dakika (1m)</option>
+                            <option value="15m">15 Dakika (15m)</option>
+                            <option value="1h">1 Saat (1h)</option>
+                            <option value="4h">4 Saat (4h)</option>
+                        </select>
+                    </div>
+
+                    <!-- Run Button -->
+                    <button onclick="runBacktest()" class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-3 px-4 rounded-xl shadow-lg shadow-blue-500/10 hover:shadow-blue-500/20 active:scale-[0.98] transition-all duration-300 text-sm">
+                        Test Et
+                    </button>
                 </div>
-                <div class="flex items-center space-x-6">
-                    <span class="text-xs text-gray-400 font-mono" id="active-date-range">-- → --</span>
-                    <button onclick="loadReportList()" class="px-3 py-1.5 bg-accentBlue/20 text-accentBlue border border-accentBlue/30 rounded-md text-xs hover:bg-accentBlue/30 transition-all font-medium">
-                        Listeyi Yenile
+
+                <!-- Loader -->
+                <div id="backtest-loader" class="hidden flex flex-col items-center justify-center py-8 space-y-3">
+                    <div class="w-7 h-7 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                    <span class="text-xs text-slate-400 font-semibold tracking-wide">Binance verileri çekilip test ediliyor...</span>
+                </div>
+
+                <!-- Backtest Results Box -->
+                <div id="backtest-results" class="hidden mt-4 bg-slate-950/60 p-4 rounded-xl border border-slate-800/80 space-y-3.5">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Backtest Analiz Sonuçları</h3>
+                    <div class="grid grid-cols-3 gap-2.5">
+                        <div class="bg-slate-900/40 p-2.5 rounded-lg border border-white/5 flex flex-col items-center">
+                            <span class="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Net Getiri</span>
+                            <span id="result-return" class="text-md font-black text-emerald-400 mt-1 font-mono">-%0.0</span>
+                        </div>
+                        <div class="bg-slate-900/40 p-2.5 rounded-lg border border-white/5 flex flex-col items-center">
+                            <span class="text-[9px] text-slate-500 font-bold uppercase tracking-wider">İşlem</span>
+                            <span id="result-trades" class="text-md font-black text-slate-200 mt-1 font-mono">0</span>
+                        </div>
+                        <div class="bg-slate-900/40 p-2.5 rounded-lg border border-white/5 flex flex-col items-center">
+                            <span class="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Kazanma %</span>
+                            <span id="result-winrate" class="text-md font-black text-slate-200 mt-1 font-mono">%0.0</span>
+                        </div>
+                    </div>
+                    <!-- Additional Quant Stats -->
+                    <div class="grid grid-cols-2 gap-2.5 pt-0.5">
+                        <div class="bg-slate-900/20 px-3 py-1.5 rounded-lg border border-white/5 flex justify-between items-center text-[10px]">
+                            <span class="text-slate-500 font-bold">Maks Düşüş:</span>
+                            <span id="result-maxdd" class="font-bold text-rose-400 font-mono">0.00%</span>
+                        </div>
+                        <div class="bg-slate-900/20 px-3 py-1.5 rounded-lg border border-white/5 flex justify-between items-center text-[10px]">
+                            <span class="text-slate-500 font-bold">Sharpe Oranı:</span>
+                            <span id="result-sharpe" class="font-bold text-blue-400 font-mono">0.00</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- PANEL 3 - LIVE MARKET WATCH -->
+            <section class="glass-panel p-5 rounded-2xl flex flex-col shadow-2xl relative overflow-hidden group transition-all duration-300 glow-border-blue">
+                <div class="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-teal-500 to-emerald-500"></div>
+                
+                <h2 class="text-md font-bold text-slate-100 flex items-center space-x-2 mb-4">
+                    <span class="text-sm">📈</span>
+                    <span>Canlı Piyasa Fiyatları (Binance TR)</span>
+                </h2>
+
+                <div class="max-h-[310px] overflow-y-auto pr-1">
+                    <table class="w-full text-left text-xs text-slate-300 border-collapse">
+                        <thead>
+                            <tr class="border-b border-slate-800/80 text-slate-500 text-[9px] uppercase font-bold tracking-wider sticky top-0 bg-[#0c1424] py-1 z-10">
+                                <th class="pb-2">Coin</th>
+                                <th class="pb-2">Fiyat (USDT)</th>
+                                <th class="pb-2 text-right">24s Değişim</th>
+                            </tr>
+                        </thead>
+                        <tbody id="market-watch-body" class="divide-y divide-slate-900/40">
+                            <!-- Populated dynamically via MiniTickers WebSocket -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
+        <!-- PANEL 2 - LIVE AUTOPILOT (7 Columns on Large screens) -->
+        <section class="lg:col-span-7 glass-panel p-6 md:p-8 rounded-2xl flex flex-col shadow-2xl relative overflow-hidden group transition-all duration-300 glow-border-emerald">
+            <div class="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-emerald-500 to-teal-500"></div>
+
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-xl font-bold text-slate-100 flex items-center space-x-2">
+                    <span class="text-lg">⚡</span>
+                    <span>Canlı Otopilot (Paper Trading)</span>
+                </h2>
+                <div class="flex items-center space-x-2 bg-slate-950/40 px-3 py-1.5 rounded-full border border-slate-800">
+                    <span id="autopilot-status-dot" class="w-2.5 h-2.5 rounded-full bg-slate-600 transition-all duration-300"></span>
+                    <span id="autopilot-status-text" class="text-xs font-bold text-slate-400">Pasif (Durduruldu)</span>
+                </div>
+            </div>
+
+            <div class="space-y-5">
+                <!-- Coin Checkboxes Selection -->
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between">
+                        <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Takip Edilecek Coinler</label>
+                        <button id="toggle-all-btn" onclick="toggleAllCoins()" class="text-[9px] text-emerald-400 hover:text-emerald-300 font-bold bg-slate-900/60 px-2 py-0.5 rounded border border-white/5 active:scale-95 transition-all">Tümünü Kaldır</button>
+                    </div>
+                    <div class="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 bg-slate-950/60 p-4 rounded-xl border border-slate-800/80">
+                        <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                            <input type="checkbox" name="autopilot-coins" value="BTCUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                            <span class="font-semibold text-[11px] tracking-wide">BTC</span>
+                        </label>
+                        <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                            <input type="checkbox" name="autopilot-coins" value="ETHUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                            <span class="font-semibold text-[11px] tracking-wide">ETH</span>
+                        </label>
+                        <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                            <input type="checkbox" name="autopilot-coins" value="BNBUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                            <span class="font-semibold text-[11px] tracking-wide">BNB</span>
+                        </label>
+                        <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                            <input type="checkbox" name="autopilot-coins" value="SOLUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                            <span class="font-semibold text-[11px] tracking-wide">SOL</span>
+                        </label>
+                        <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                            <input type="checkbox" name="autopilot-coins" value="XRPUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                            <span class="font-semibold text-[11px] tracking-wide">XRP</span>
+                        </label>
+                        <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                            <input type="checkbox" name="autopilot-coins" value="ADAUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                            <span class="font-semibold text-[11px] tracking-wide">ADA</span>
+                        </label>
+                        <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                            <input type="checkbox" name="autopilot-coins" value="AVAXUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                            <span class="font-semibold text-[11px] tracking-wide">AVAX</span>
+                        </label>
+                        <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                            <input type="checkbox" name="autopilot-coins" value="LINKUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                            <span class="font-semibold text-[11px] tracking-wide">LINK</span>
+                        </label>
+                        <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                            <input type="checkbox" name="autopilot-coins" value="NEARUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                            <span class="font-semibold text-[11px] tracking-wide">NEAR</span>
+                        </label>
+                        <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                            <input type="checkbox" name="autopilot-coins" value="SUIUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                            <span class="font-semibold text-[11px] tracking-wide">SUI</span>
+                        </label>
+                        <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                            <input type="checkbox" name="autopilot-coins" value="APTUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                            <span class="font-semibold text-[11px] tracking-wide">APT</span>
+                        </label>
+                        <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                            <input type="checkbox" name="autopilot-coins" value="DOTUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                            <span class="font-semibold text-[11px] tracking-wide">DOT</span>
+                        </label>
+                        <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                            <input type="checkbox" name="autopilot-coins" value="LTCUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                            <span class="font-semibold text-[11px] tracking-wide">LTC</span>
+                        </label>
+                        <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                            <input type="checkbox" name="autopilot-coins" value="POLUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                            <span class="font-semibold text-[11px] tracking-wide">POL</span>
+                        </label>
+                        <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                            <input type="checkbox" name="autopilot-coins" value="FTMUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                            <span class="font-semibold text-[11px] tracking-wide">FTM</span>
+                        </label>
+                        <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                            <input type="checkbox" name="autopilot-coins" value="ARBUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                            <span class="font-semibold text-[11px] tracking-wide">ARB</span>
+                        </label>
+                        <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                            <input type="checkbox" name="autopilot-coins" value="OPUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                            <span class="font-semibold text-[11px] tracking-wide">OP</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Strategy & Timeframe Select Grid -->
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-2">
+                        <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Strateji</label>
+                        <select id="autopilot-strategy" class="w-full bg-slate-950 border border-slate-800/80 rounded-xl px-4 py-3 text-slate-200 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 transition duration-300 text-sm font-semibold">
+                            <option value="a2">A2 Scalper (EMA & RSI & Volume)</option>
+                            <option value="a1">A1 Scalper (Sweep & Breakout)</option>
+                            <option value="consensus">Consensus Ensemble (Hibrit Mod)</option>
+                            <option value="donchian-breakout">Donchian Breakout</option>
+                            <option value="ema-cross">EMA Crossover</option>
+                            <option value="supertrend">Supertrend</option>
+                            <option value="vwap-zscore">VWAP Z-Score</option>
+                            <option value="bollinger-bands">Bollinger Bands</option>
+                        </select>
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Mum Periyodu</label>
+                        <select id="autopilot-interval" class="w-full bg-slate-950 border border-slate-800/80 rounded-xl px-4 py-3 text-slate-200 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 transition duration-300 text-sm font-semibold">
+                            <option value="1m">1 Dakika (1m)</option>
+                            <option value="15m">15 Dakika (15m)</option>
+                            <option value="1h">1 Saat (1h)</option>
+                            <option value="4h">4 Saat (4h)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- ML Veto Checkbox -->
+                <div class="flex items-center space-x-3 bg-slate-950/40 p-3.5 rounded-xl border border-slate-900/60 mt-1">
+                    <label class="flex items-center space-x-2.5 cursor-pointer text-sm text-slate-300 hover:text-white select-none">
+                        <input type="checkbox" id="autopilot-ml-veto" checked class="w-4 h-4 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                        <span class="font-bold text-xs text-slate-200">🤖 Yapay Zeka Süzgeci (ML Meta-Labeling Veto)</span>
+                    </label>
+                </div>
+
+                <!-- Autopilot Start/Stop Control Buttons -->
+                <div class="flex space-x-4">
+                    <button onclick="startAutopilot()" class="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-emerald-500/10 hover:shadow-emerald-500/20 active:scale-[0.98] transition-all duration-300 text-sm">
+                        Otopilotu Başlat
+                    </button>
+                    <button onclick="stopAutopilot()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-3.5 px-6 rounded-xl border border-white/5 active:scale-[0.98] transition-all duration-300 text-sm">
+                        Durdur
                     </button>
                 </div>
             </div>
 
-            <!-- Tab Buttons Navigation -->
-            <div class="flex border-t border-glassBorder/50 px-8 text-sm font-medium">
-                <button onclick="switchTab('overview')" id="tab-overview" class="tab-btn px-6 py-3 border-b-2 border-transparent text-gray-400 hover:text-gray-200 transition-all active">
-                    📈 Genel Bakış
-                </button>
-                <button onclick="switchTab('risk')" id="tab-risk" class="tab-btn px-6 py-3 border-b-2 border-transparent text-gray-400 hover:text-gray-200 transition-all">
-                    🎲 Risk & MC
-                </button>
-                <button onclick="switchTab('compare')" id="tab-compare" class="tab-btn px-6 py-3 border-b-2 border-transparent text-gray-400 hover:text-gray-200 transition-all">
-                    ⚖️ Karşılaştır (<span id="compare-count">0</span>)
-                </button>
-                <button onclick="switchTab('builder')" id="tab-builder" class="tab-btn px-6 py-3 border-b-2 border-transparent text-gray-400 hover:text-gray-200 transition-all">
-                    🛠️ DSL Tasarımcısı
-                </button>
-                <button onclick="switchTab('journal')" id="tab-journal" class="tab-btn px-6 py-3 border-b-2 border-transparent text-gray-400 hover:text-gray-200 transition-all">
-                    📋 İşlem Günlüğü
-                </button>
-                <button onclick="switchTab('discovery')" id="tab-discovery" class="tab-btn px-6 py-3 border-b-2 border-transparent text-gray-400 hover:text-gray-200 transition-all">
-                    ⚗️ Discovery Hunisi
-                </button>
-                <button onclick="switchTab('live')" id="tab-live" class="tab-btn px-6 py-3 border-b-2 border-transparent text-gray-400 hover:text-gray-200 transition-all">
-                    ⚡ Canlı Takip (Live Paper)
-                </button>
+            <!-- Sanal Kasa Bakiyesi (Virtual Balance) & Stats Cards Grid -->
+            <div class="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div class="bg-slate-950/60 p-4 rounded-xl border border-slate-800 flex flex-col">
+                    <span class="text-[9px] font-bold uppercase tracking-wider text-slate-500">Kasa (Equity)</span>
+                    <span id="virtual-balance" class="text-md font-black text-emerald-400 font-mono mt-1">10.000,00 USDT</span>
+                </div>
+                <div class="bg-slate-950/60 p-4 rounded-xl border border-slate-800 flex flex-col">
+                    <span class="text-[9px] font-bold uppercase tracking-wider text-slate-500">Gerçekleşen Kar/Zarar</span>
+                    <span id="realized-pnl" class="text-md font-black text-slate-300 font-mono mt-1">0,00 USDT</span>
+                </div>
+                <div class="bg-slate-950/60 p-4 rounded-xl border border-slate-800 flex flex-col">
+                    <span class="text-[9px] font-bold uppercase tracking-wider text-slate-500">Açık İşlem PnL</span>
+                    <span id="unrealized-pnl" class="text-md font-black text-slate-300 font-mono mt-1">0,00 USDT</span>
+                </div>
+                <div class="bg-slate-950/60 p-4 rounded-xl border border-slate-800 flex flex-col">
+                    <span class="text-[9px] font-bold uppercase tracking-wider text-slate-500">Çalışma Süresi</span>
+                    <span id="engine-uptime" class="text-md font-black text-blue-400 font-mono mt-1">00:00:00</span>
+                </div>
             </div>
-        </header>
 
-        <!-- DASHBOARD SCROLL CONTENT -->
-        <div class="flex-1 overflow-y-auto p-8">
-
-            <!-- ─── SEKME 1: GENEL BAKIŞ (OVERVIEW) ─────────────────────────────────── -->
-            <div id="content-overview" class="tab-content space-y-6">
-                
-                <!-- TOP LEVEL PANEL: AI ANALYST & DEPLOY DECISION ROW -->
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    
-                    <!-- 1) AI ANALYST CARD (2/3 Width) -->
-                    <div class="glass-card p-6 flex flex-col justify-between lg:col-span-2 border-l-4 border-l-accentGreen" id="ai-insight-card">
-                        <div>
-                            <div class="flex items-center justify-between">
-                                <div class="flex items-center space-x-2">
-                                    <span class="text-xs font-bold uppercase tracking-wider text-gray-400">Yapay Zeka Analisti (AI Analyst)</span>
-                                    <span class="text-[10px] bg-accentGreen/10 text-accentGreen px-2 py-0.5 rounded font-mono font-bold" id="rec-confidence">Güven Seviyesi: --</span>
-                                </div>
-                                <span class="text-xs text-yellow-500 font-mono" id="rec-stars">--</span>
-                            </div>
-                            <p class="text-sm text-gray-200 mt-3 font-semibold" id="rec-text">--</p>
-                            
-                            <!-- Neden başarısız/başarılı? (Dynamic Why Bullets) -->
-                            <div class="mt-4 border-t border-glassBorder/40 pt-4">
-                                <span class="text-xs font-bold uppercase tracking-wider text-gray-400 block mb-2">Performans Gerekçeleri (Neden?)</span>
-                                <ul class="text-xs space-y-1.5 text-gray-300" id="ai-why-list">
-                                    <!-- Injected dynamically -->
-                                </ul>
-                            </div>
-                        </div>
-                        <div class="mt-4 border-t border-glassBorder/40 pt-3 flex justify-between items-center text-xs">
-                            <span class="text-gray-400">Öneri Geliştirme: <strong class="text-accentBlue" id="rec-action">--</strong></span>
-                            <span class="text-xs font-bold" id="rec-badge">--</span>
-                        </div>
-                    </div>
-
-                    <!-- 2) DEV KARAR PANELİ ("Should I Deploy?") (1/3 Width) -->
-                    <div class="glass-card p-6 flex flex-col justify-between bg-gradient-to-br from-[#111827] to-[#0f172a] border border-glassBorder" id="deploy-decision-card">
-                        <div>
-                            <span class="text-xs font-bold uppercase tracking-wider text-gray-400">DEPLOY KARAR PANELİ</span>
-                            <div class="mt-4 text-center">
-                                <span class="text-xs text-gray-400 block">Canlı Dağıtım Tavsiyesi</span>
-                                <span class="text-3xl font-extrabold block mt-1 tracking-tight" id="deploy-badge">--</span>
-                            </div>
-                        </div>
-                        
-                        <!-- Stats Grid -->
-                        <div class="grid grid-cols-2 gap-4 text-xs font-mono border-t border-b border-glassBorder/50 py-4 my-4">
-                            <div>
-                                <span class="text-gray-500 block">Sermaye Payı</span>
-                                <span class="font-bold text-gray-200" id="deploy-cap-rec">%--</span>
-                            </div>
-                            <div>
-                                <span class="text-gray-500 block">Beklenen DD</span>
-                                <span class="font-bold text-accentRed" id="deploy-exp-dd">-%--</span>
-                            </div>
-                            <div>
-                                <span class="text-gray-500 block">Tahmini CAGR</span>
-                                <span class="font-bold text-accentGreen" id="deploy-exp-cagr">%--</span>
-                              </div>
-                              <div>
-                                  <span class="text-gray-500 block">Güven Oranı</span>
-                                  <span class="font-bold text-accentBlue" id="deploy-confidence">%--</span>
-                              </div>
-                          </div>
-                          
-                          <div class="text-[10px] text-gray-500 text-center">
-                              Monte Carlo & Robustness skorlarına göre üretilmiştir.
-                          </div>
-                      </div>
-                  </div>
-
-                  <!-- SECOND LEVEL PANEL: CHECKLIST & SCORECARD (1/3) + METRICS CARDS (2/3) -->
-                  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                      
-                      <!-- 3) CHECKLIST & SCORECARD (1/3 Width) -->
-                      <div class="glass-card p-6 flex flex-col justify-between space-y-4">
-                          <div>
-                              <span class="text-xs font-bold uppercase tracking-wider text-gray-400 block mb-3">Araştırma Aşamaları (Research Status)</span>
-                              <div class="space-y-2 text-xs font-medium">
-                                  <div class="flex items-center space-x-2 text-accentGreen">
-                                      <span>✓</span> <span class="text-gray-300">Tarihsel Veri Yükleme</span>
-                                  </div>
-                                  <div class="flex items-center space-x-2 text-accentGreen">
-                                      <span>✓</span> <span class="text-gray-300">İndikatör Hesaplama</span>
-                                  </div>
-                                  <div class="flex items-center space-x-2 text-accentGreen">
-                                      <span>✓</span> <span class="text-gray-300">Backtest Simülasyonu</span>
-                                  </div>
-                                  <div class="flex items-center space-x-2" id="checklist-mc">
-                                      <span class="text-accentGreen">✓</span> <span class="text-gray-300">Monte Carlo Dayanıklılık</span>
-                                  </div>
-                                  <div class="flex items-center space-x-2" id="checklist-wf">
-                                      <span class="text-accentGreen">✓</span> <span class="text-gray-300">Walk-Forward Genelleme</span>
-                                  </div>
-                              </div>
-                          </div>
-                          
-                          <!-- Scorecard -->
-                          <div class="border-t border-glassBorder/50 pt-4">
-                              <span class="text-xs font-bold uppercase tracking-wider text-gray-400 block mb-2">Strateji Skor Kartı</span>
-                              <div class="grid grid-cols-2 gap-3 text-xs font-mono">
-                                  <div class="flex justify-between border-b border-glassBorder/30 pb-1">
-                                      <span class="text-gray-500">Getiri:</span> <span class="font-bold text-gray-300" id="score-ret">-/10</span>
-                                  </div>
-                                  <div class="flex justify-between border-b border-glassBorder/30 pb-1">
-                                      <span class="text-gray-500">Risk:</span> <span class="font-bold text-gray-300" id="score-risk">-/10</span>
-                                  </div>
-                                  <div class="flex justify-between border-b border-glassBorder/30 pb-1">
-                                      <span class="text-gray-500">Robust:</span> <span class="font-bold text-gray-300" id="score-robust">-/10</span>
-                                  </div>
-                                  <div class="flex justify-between border-b border-glassBorder/30 pb-1">
-                                      <span class="text-gray-500">Overfit:</span> <span class="font-bold text-gray-300" id="score-overfit">-/10</span>
-                                  </div>
-                              </div>
-                              <div class="flex items-center justify-between mt-3 bg-black/30 p-2 rounded">
-                                  <span class="text-xs font-bold text-gray-400">Deploy Score:</span>
-                                  <span class="text-sm font-extrabold text-accentGreen font-mono" id="score-total">--/100</span>
-                              </div>
-                          </div>
-                      </div>
-
-                      <!-- 4) OVERVIEW STATISTICS CARDS (2/3 Width) -->
-                      <div class="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <div class="glass-card p-6 flex flex-col justify-between">
-                              <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Net Getiri</span>
-                              <div class="mt-2 flex items-baseline justify-between">
-                                  <span class="text-3xl font-extrabold text-accentGreen" id="card-capital-pct">--</span>
-                              </div>
-                              <span class="text-xs text-gray-500 mt-2" id="card-capital-val">Bitiş: --</span>
-                          </div>
-                          <div class="glass-card p-6 flex flex-col justify-between">
-                              <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Sharpe Raporu</span>
-                              <div class="mt-2 flex items-baseline justify-between">
-                                  <span class="text-2xl font-bold text-accentBlue" id="card-sharpe">--</span>
-                              </div>
-                              <span class="text-xs text-gray-500 mt-2" id="card-pf">Profit Factor: --</span>
-                          </div>
-                          <div class="glass-card p-6 flex flex-col justify-between">
-                              <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Kazanma Oranı</span>
-                              <div class="mt-2 flex items-baseline justify-between">
-                                  <span class="text-2xl font-bold text-emerald-400" id="card-winrate">--</span>
-                              </div>
-                              <span class="text-xs text-gray-500 mt-2" id="card-winloss">W: -- | L: --</span>
-                          </div>
-                          <div class="glass-card p-6 flex flex-col justify-between">
-                              <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Maksimum Çöküş</span>
-                              <div class="mt-2 flex items-baseline justify-between">
-                                  <span class="text-2xl font-bold text-accentRed" id="card-maxdd">--</span>
-                              </div>
-                              <span class="text-xs text-gray-500 mt-2" id="card-avgtrade">Expectancy: --</span>
-                          </div>
-                      </div>
-                  </div>
-
-                <!-- BENCHMARK DECISION BANNER (Outperform vs Underperform) -->
-                <div id="decision-banner" class="p-6 rounded-xl border flex items-center justify-between transition-all">
-                    <div class="flex items-center space-x-4">
-                        <div class="p-3 rounded-full bg-black/20" id="decision-icon">
-                            <!-- JS Icon -->
-                        </div>
-                        <div>
-                            <div class="text-xs uppercase tracking-wider text-gray-400 font-semibold">Portföy Karşılaştırma Kararı</div>
-                            <div class="text-xl font-bold mt-0.5" id="decision-label">--</div>
-                        </div>
-                    </div>
-                    <!-- Banner Mini Stats Grid -->
-                    <div class="grid grid-cols-3 gap-8 text-right">
-                        <div>
-                            <span class="text-xs text-gray-400 block">Strateji Getirisi</span>
-                            <span class="text-lg font-bold font-mono" id="banner-strat-ret">--</span>
-                        </div>
-                        <div>
-                            <span class="text-xs text-gray-400 block">Buy & Hold (Benchmark)</span>
-                            <span class="text-lg font-bold font-mono text-gray-400" id="banner-bh-ret">--</span>
-                        </div>
-                        <div>
-                            <span class="text-xs text-gray-400 block">Üretilen Alfa (Alpha)</span>
-                            <span class="text-lg font-bold font-mono" id="banner-alpha">--</span>
-                        </div>
-                    </div>
+            <!-- REAL-TIME GRAPH (Chart.js) -->
+            <div class="mt-6 bg-slate-950/50 p-4 rounded-xl border border-slate-900/60">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Canlı Bakiye Eğrisi (Equity Curve)</h3>
+                <div class="h-28 w-full relative">
+                    <canvas id="equity-chart"></canvas>
                 </div>
+            </div>
 
-                <!-- MAIN EQUITY AND DRAWDOWN CHART (FULL WIDTH) -->
-                <div class="glass-card p-6 flex flex-col">
-                    <div class="flex items-center justify-between mb-4">
-                        <span class="text-sm font-semibold text-gray-300">Sermaye Büyüme ve Çöküş Grafiği</span>
-                        <span class="text-xs text-gray-500">Mavi: Strateji | Gri: Buy & Hold | Kırmızı: Drawdown (%)</span>
-                    </div>
-                    <div class="h-96 min-h-[380px]">
-                        <canvas id="equityChartV2"></canvas>
-                    </div>
-                </div>
-
-                <!-- BREAKDOWNS ROW (Asset Contribution & Yearly Return) -->
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <!-- Asset Contribution -->
-                    <div class="glass-card p-6 flex flex-col">
-                        <span class="text-sm font-semibold text-gray-300 mb-4">Varlık Bazlı Kar Katkısı (Asset Contribution)</span>
-                        <div class="h-64 min-h-[220px]">
-                            <canvas id="assetContribChart"></canvas>
-                        </div>
-                    </div>
-                    <!-- Yearly Performance -->
-                    <div class="glass-card p-6 flex flex-col">
-                        <span class="text-sm font-semibold text-gray-300 mb-4">Yıllık Performans Dağılımı (Yearly P&L)</span>
-                        <div class="h-64 min-h-[220px]">
-                            <canvas id="yearlyPnlChart"></canvas>
-                        </div>
+            <!-- Active Positions List -->
+            <div class="mt-6 flex flex-col">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Açık Pozisyonlar</h3>
+                <div id="positions-list">
+                    <div class="text-slate-500 text-xs text-center py-6 bg-slate-950/40 rounded-xl border border-slate-900/80">
+                        Açık pozisyon bulunmuyor.
                     </div>
                 </div>
             </div>
 
-            <!-- ─── SEKME 2: RISK & MONTE CARLO ────────────────────────────────────── -->
-            <div id="content-risk" class="tab-content space-y-6 hidden">
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <!-- Monte Carlo Fan Chart (2/3 width) -->
-                    <div class="glass-card p-6 lg:col-span-2 flex flex-col">
-                        <div class="flex items-center justify-between mb-4">
-                            <span class="text-sm font-semibold text-gray-300">Monte Carlo Simüle Yol Dağılımları (1000 Simülasyon)</span>
-                            <span class="text-xs text-orange-400 font-bold" id="risk-ruin-indicator">Risk of Ruin: --</span>
-                        </div>
-                        <div class="h-96 min-h-[380px]">
-                            <canvas id="monteCarloChartV2"></canvas>
-                        </div>
-                    </div>
-                    
-                    <!-- Advanced Metrics Grid (1/3 width) -->
-                    <div class="glass-card p-6 flex flex-col justify-between">
-                        <span class="text-sm font-semibold text-gray-300 mb-4">Gelişmiş Risk Metrikleri</span>
-                        <div class="space-y-4 text-sm flex-1 flex flex-col justify-center">
-                            <div class="flex items-center justify-between pb-3 border-b border-glassBorder/50">
-                                <span class="text-gray-400">Recovery Factor</span>
-                                <span class="font-bold text-gray-200" id="risk-rec-factor">--</span>
-                            </div>
-                            <div class="flex items-center justify-between pb-3 border-b border-glassBorder/50">
-                                <span class="text-gray-400">MAR Ratio</span>
-                                <span class="font-bold text-gray-200" id="risk-mar-ratio">--</span>
-                            </div>
-                            <div class="flex items-center justify-between pb-3 border-b border-glassBorder/50">
-                                <span class="text-gray-400">Gain / Pain Ratio</span>
-                                <span class="font-bold text-gray-200" id="risk-gainpain-ratio">--</span>
-                            </div>
-                            <div class="flex items-center justify-between pb-3 border-b border-glassBorder/50">
-                                <span class="text-gray-400">Exposure Time (Piyasada Kalma)</span>
-                                <span class="font-bold text-gray-200 font-mono" id="risk-exposure">--</span>
-                            </div>
-                            <div class="flex items-center justify-between pb-3 border-b border-glassBorder/50">
-                                <span class="text-gray-400">SQN Score (Sistem Kalitesi)</span>
-                                <span class="font-bold text-gray-200" id="risk-sqn">--</span>
-                            </div>
-                            <div class="flex items-center justify-between pb-3 border-b border-glassBorder/50">
-                                <span class="text-gray-400">Kelly Oranı</span>
-                                <span class="font-bold text-gray-200 font-mono" id="risk-kelly">--</span>
-                            </div>
-                            <div class="flex items-center justify-between pb-3 border-b border-glassBorder/50">
-                                <span class="text-gray-400">Ulcer Index (Stres Endeksi)</span>
-                                <span class="font-bold text-accentRed" id="risk-ulcer">--</span>
-                            </div>
-                            <div class="flex items-center justify-between">
-                                <span class="text-gray-400">Capital Usage (Sermaye Kullanımı)</span>
-                                <span class="font-bold text-gray-200 font-mono" id="risk-capusage">--</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Market Regime Allocations breakdown -->
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div class="glass-card p-6 flex flex-col">
-                        <span class="text-sm font-semibold text-gray-300 mb-2">Piyasa Rejim Performansı</span>
-                        <div class="h-64 flex items-center justify-center">
-                            <canvas id="riskRegimeChart"></canvas>
-                        </div>
-                    </div>
-                    <div class="glass-card p-6 lg:col-span-2 flex flex-col justify-center">
-                        <span class="text-sm font-semibold text-gray-300 mb-4">Monte Carlo Dağılım Çıktıları</span>
-                        <div class="grid grid-cols-2 md:grid-cols-5 gap-6 text-center">
-                            <div class="bg-black/20 p-4 rounded-lg">
-                                <span class="text-xs text-gray-400 block">Worst Path</span>
-                                <span class="text-sm font-bold text-accentRed mt-1 block" id="mc-worst">--</span>
-                            </div>
-                            <div class="bg-black/20 p-4 rounded-lg">
-                                <span class="text-xs text-gray-400 block">P5 (Kötü %5)</span>
-                                <span class="text-sm font-bold text-orange-400 mt-1 block" id="mc-p5">--</span>
-                            </div>
-                            <div class="bg-black/20 p-4 rounded-lg">
-                                <span class="text-xs text-gray-400 block">P50 (Ortanca)</span>
-                                <span class="text-sm font-bold text-accentBlue mt-1 block" id="mc-p50">--</span>
-                            </div>
-                            <div class="bg-black/20 p-4 rounded-lg">
-                                <span class="text-xs text-gray-400 block">P95 (İyi %5)</span>
-                                <span class="text-sm font-bold text-emerald-400 mt-1 block" id="mc-p95">--</span>
-                            </div>
-                            <div class="bg-black/20 p-4 rounded-lg">
-                                <span class="text-xs text-gray-400 block">Best Path</span>
-                                <span class="text-sm font-bold text-accentGreen mt-1 block" id="mc-best">--</span>
-                            </div>
-                        </div>
-                    </div>
+            <!-- System Activity Terminal Console Log -->
+            <div class="mt-6 flex flex-col">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Sistem Konsolu (Canlı Günlük)</h3>
+                <div id="terminal-console" class="h-28 bg-slate-950 border border-slate-900 rounded-xl p-3.5 font-mono text-[10px] text-teal-400/90 overflow-y-auto space-y-1.5 scroll-smooth">
+                    <div class="text-slate-500">[19:53:35] Sistem hazır. Otopilot başlatılmayı bekliyor...</div>
                 </div>
             </div>
+        </section>
 
-            <!-- ─── SEKME 3: KARŞILAŞTIRMA (COMPARE) ────────────────────────────────── -->
-            <div id="content-compare" class="tab-content space-y-6 hidden">
-                <div class="glass-card p-6">
-                    <div class="flex items-center justify-between mb-6">
-                        <div>
-                            <span class="text-sm font-semibold text-gray-300">Strateji Karşılaştırma Analizi</span>
-                            <p class="text-xs text-gray-500 mt-0.5">Soldaki listeden kutucukları işaretleyerek stratejileri yan yana kıyaslayın.</p>
-                        </div>
-                        <span class="text-xs bg-accentBlue/20 text-accentBlue px-2.5 py-1 border border-accentBlue/30 rounded-full font-bold" id="badge-winner">🥇 Kazanan: Donchian</span>
-                    </div>
-
-                    <!-- Compare Table -->
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left border-collapse" id="compare-table">
-                            <thead>
-                                <tr class="border-b border-glassBorder text-gray-500 text-xs uppercase tracking-wider">
-                                    <th class="pb-4 font-semibold">Metrik</th>
-                                    <!-- Dynamic headers will be injected here -->
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-glassBorder text-sm" id="compare-table-body">
-                                <!-- Dynamic comparison rows will be injected here -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ─── SEKME 3b: DSL TASARIMCISI (BUILDER) ──────────────────────────────── -->
-            <div id="content-builder" class="tab-content space-y-6 hidden">
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <!-- Form Editor Card -->
-                    <div class="glass-card p-6 flex flex-col justify-between">
-                        <div>
-                            <span class="text-sm font-semibold text-gray-300 block mb-1">Görsel Strateji Tasarımcısı (DSL Builder)</span>
-                            <p class="text-xs text-gray-500 mb-6">JSON yazmadan, indikatör parametrelerini seçerek stratejinizi oluşturun.</p>
-                            
-                            <div class="space-y-4">
-                                <!-- Name -->
-                                <div>
-                                    <label class="block text-xs text-gray-400 font-semibold mb-1.5 uppercase">Strateji Adı</label>
-                                    <input type="text" id="builder-name" oninput="generateDSL()" value="my-custom-strategy" class="w-full bg-[#090d16] border border-glassBorder px-4 py-2 rounded-lg text-sm focus:outline-none focus:border-accentBlue text-gray-200">
-                                </div>
-                                
-                                <!-- Indicator Family Select -->
-                                <div>
-                                    <label class="block text-xs text-gray-400 font-semibold mb-1.5 uppercase">Strateji Türü / İndikatör Ailesi</label>
-                                    <select id="builder-type" onchange="toggleBuilderFields(); generateDSL();" class="w-full bg-[#090d16] border border-glassBorder px-4 py-2 rounded-lg text-sm focus:outline-none focus:border-accentBlue text-gray-200">
-                                        <option value="ema-cross">EMA Cross (Moving Average Crossover)</option>
-                                        <option value="donchian">Donchian Breakout (Kanal Kırılımı)</option>
-                                        <option value="supertrend">Supertrend Trend Takibi</option>
-                                    </select>
-                                </div>
-                                
-                                <!-- Dynamic Fields Container -->
-                                <div id="builder-fields" class="p-4 bg-black/20 rounded-lg border border-glassBorder/50 space-y-4">
-                                    <!-- Dynamic parameters injected here -->
-                                </div>
-
-                                <!-- Stop Loss / Take Profit -->
-                                <div class="grid grid-cols-2 gap-4 pt-2">
-                                    <div>
-                                        <label class="block text-xs text-gray-400 font-semibold mb-1.5 uppercase">Stop Loss (%)</label>
-                                        <input type="number" id="builder-sl" oninput="generateDSL()" value="2.5" step="0.1" class="w-full bg-[#090d16] border border-glassBorder px-4 py-2 rounded-lg text-sm focus:outline-none focus:border-accentBlue text-gray-200">
-                                    </div>
-                                    <div>
-                                        <label class="block text-xs text-gray-400 font-semibold mb-1.5 uppercase">Take Profit (%)</label>
-                                        <input type="number" id="builder-tp" oninput="generateDSL()" value="6.0" step="0.1" class="w-full bg-[#090d16] border border-glassBorder px-4 py-2 rounded-lg text-sm focus:outline-none focus:border-accentBlue text-gray-200">
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- JSON Viewer Card -->
-                    <div class="glass-card p-6 flex flex-col">
-                        <div class="flex items-center justify-between mb-4">
-                            <span class="text-sm font-semibold text-gray-300">Üretilen DSL Yapılandırması (config.json)</span>
-                            <button onclick="copyDSLJson()" class="px-3 py-1 bg-accentBlue/25 hover:bg-accentBlue/40 text-accentBlue border border-accentBlue/30 text-xs rounded transition-all font-semibold">
-                                JSON Kopyala
-                            </button>
-                        </div>
-                        <div class="flex-1 flex flex-col">
-                            <textarea id="builder-output" readonly class="w-full flex-1 bg-black/40 border border-glassBorder p-4 rounded-lg text-xs font-mono text-emerald-400 focus:outline-none resize-none min-h-[300px]"></textarea>
-                        </div>
-                        <p class="text-[10px] text-gray-500 mt-3">
-                            Bu JSON içeriğini kopyalayarak projenizin <code>config/strategy.json</code> dosyasına yapıştırıp backtest yapabilirsiniz.
-                        </p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ─── SEKME 4: İŞLEM GÜNLÜĞÜ (JOURNAL) ─────────────────────────────────── -->
-            <div id="content-journal" class="tab-content space-y-6 hidden">
-                <div class="glass-card p-6">
-                    <div class="flex flex-col md:flex-row md:items-center md:justify-between space-y-3 md:space-y-0 mb-6">
-                        <div>
-                            <span class="text-sm font-semibold text-gray-300">Tarihsel İşlemler Listesi</span>
-                            <p class="text-xs text-gray-500 mt-0.5" id="journal-trades-subtitle">0 işlem listeleniyor</p>
-                        </div>
-                        <!-- Search / Filters -->
-                        <div class="flex items-center space-x-4">
-                            <input type="text" id="journal-search" oninput="filterTradesTable()" placeholder="Coin veya çıkış nedeni ara..." class="bg-[#090d16] border border-glassBorder px-4 py-1.5 rounded-lg text-sm focus:outline-none focus:border-accentBlue w-64">
-                        </div>
-                    </div>
-
-                    <!-- Journal Table -->
-                    <div class="overflow-x-auto max-h-[500px]">
-                        <table class="w-full text-left border-collapse">
-                            <thead>
-                                <tr class="border-b border-glassBorder text-gray-500 text-xs uppercase tracking-wider sticky top-0 bg-darkCard">
-                                    <th class="pb-3 font-semibold">Varlık</th>
-                                    <th class="pb-3 font-semibold">Yön</th>
-                                    <th class="pb-3 font-semibold text-right">Miktar</th>
-                                    <th class="pb-3 font-semibold text-right">Giriş Fiyatı</th>
-                                    <th class="pb-3 font-semibold text-right">Çıkış Fiyatı</th>
-                                    <th class="pb-3 font-semibold text-right">Net P&L %</th>
-                                    <th class="pb-3 font-semibold">Çıkış Nedeni</th>
-                                    <th class="pb-3 font-semibold text-right">MAE</th>
-                                    <th class="pb-3 font-semibold text-right">MFE</th>
-                                </tr>
-                            </thead>
-                            <tbody id="journal-table-body" class="divide-y divide-glassBorder text-sm">
-                                <!-- Dynamic rows -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ─── SEKME 5: DISCOVERY HUNİSİ (DISCOVERY) ───────────────────────────── -->
-            <div id="content-discovery" class="tab-content space-y-6 hidden">
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <!-- Funnel Visualizer (2/3 width) -->
-                    <div class="glass-card p-6 lg:col-span-2 flex flex-col">
-                        <span class="text-sm font-semibold text-gray-300 mb-6">Alpha Discovery Filtreleme Hunisi (Strategy Funnel)</span>
-                        <div class="flex-1 flex flex-col justify-around py-4 min-h-[300px]">
-                            <!-- Funnel Stages -->
-                            <div class="flex items-center space-x-4">
-                                <span class="text-xs font-mono text-gray-400 w-32">Toplam Aday</span>
-                                <div class="flex-1 bg-accentBlue/20 border border-accentBlue/40 h-8 rounded flex items-center px-4 font-bold text-sm text-accentBlue" id="funnel-total" style="width: 100%;">0 Aday</div>
-                            </div>
-                            <div class="flex items-center space-x-4">
-                                <span class="text-xs font-mono text-gray-400 w-32">Backtest Geçen</span>
-                                <div class="bg-indigo-500/20 border border-indigo-500/40 h-8 rounded flex items-center px-4 font-bold text-sm text-indigo-400" id="funnel-bt" style="width: 80%;">0 Aday</div>
-                            </div>
-                            <div class="flex items-center space-x-4">
-                                <span class="text-xs font-mono text-gray-400 w-32">Monte Carlo Geçen</span>
-                                <div class="bg-orange-500/20 border border-orange-500/40 h-8 rounded flex items-center px-4 font-bold text-sm text-orange-400" id="funnel-mc" style="width: 60%;">0 Aday</div>
-                            </div>
-                            <div class="flex items-center space-x-4">
-                                <span class="text-xs font-mono text-gray-400 w-32">Walk-Forward Geçen</span>
-                                <div class="bg-accentGreen/20 border border-accentGreen/40 h-8 rounded flex items-center px-4 font-bold text-sm text-accentGreen" id="funnel-wf" style="width: 40%;">0 Aday</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Top Candidates leaderboard -->
-                    <div class="glass-card p-6 flex flex-col justify-between">
-                        <div>
-                            <span class="text-sm font-semibold text-gray-300">En İyi Keşifler (Top Leaderboard)</span>
-                            <p class="text-xs text-gray-500 mt-0.5">En yüksek genelleme başarısına sahip adaylar.</p>
-                        </div>
-                        <div class="mt-4 flex-1 overflow-y-auto space-y-3 pr-2" id="discovery-leaderboard">
-                            <div class="text-gray-500 text-xs text-center py-8">Yükleniyor veya keşif verisi bulunamadı...</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ─── SEKME 6: CANLI TAKİP (LIVE PAPER) ───────────────────────────── -->
-            <div id="content-live" class="tab-content space-y-6 hidden">
-                <!-- Deploy Control Panel Card -->
-                <div class="glass-card p-6 grid grid-cols-1 lg:grid-cols-4 gap-6 items-center">
-                    <div class="lg:col-span-2">
-                        <div class="flex items-center space-x-3">
-                            <span class="text-sm font-semibold text-gray-300">Live Paper Trading Control</span>
-                            <span id="live-status-badge" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-gray-800 text-gray-400">Stopped</span>
-                        </div>
-                        <p class="text-xs text-gray-500 mt-1">Stratejilerinizi Binance WebSocket verileriyle kağıt üzerinde canlı test edin.</p>
-                        
-                        <!-- Parameter Inputs -->
-                        <div class="grid grid-cols-3 gap-3 mt-4">
-                            <div>
-                                <label class="block text-[10px] text-gray-400 font-semibold mb-1 uppercase">Strateji</label>
-                                <select id="live-strategy-select" class="w-full bg-[#090d16] border border-glassBorder px-2 py-1 rounded text-xs text-gray-200">
-                                    <option value="ema-cross">EMA Cross (9/21)</option>
-                                    <option value="sma-cross">SMA Cross (12/26)</option>
-                                    <option value="donchian-breakout">Donchian Breakout</option>
-                                    <option value="config/strategy.json">Custom (strategy.json)</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="block text-[10px] text-gray-400 font-semibold mb-1 uppercase">Varlıklar</label>
-                                <input type="text" id="live-coins-input" value="BTCUSDT,ETHUSDT,SOLUSDT" class="w-full bg-[#090d16] border border-glassBorder px-2 py-1 rounded text-xs text-gray-200">
-                            </div>
-                            <div>
-                                <label class="block text-[10px] text-gray-400 font-semibold mb-1 uppercase">Interval</label>
-                                <select id="live-interval-select" class="w-full bg-[#090d16] border border-glassBorder px-2 py-1 rounded text-xs text-gray-200">
-                                    <option value="1m">1 Dakika (1m)</option>
-                                    <option value="5m">5 Dakika (5m)</option>
-                                    <option value="1h">1 Saat (1h)</option>
-                                    <option value="1d">1 Gün (1d)</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Action Buttons -->
-                    <div class="flex items-center space-x-3 justify-start lg:justify-end">
-                        <button id="btn-deploy-paper" onclick="deployPaperEngine()" class="px-5 py-2.5 bg-accentGreen hover:bg-accentGreen/80 text-black font-bold text-xs rounded-lg transition-all flex items-center space-x-2">
-                            <span>🚀 Deploy to Paper</span>
-                        </button>
-                        <button id="btn-stop-paper" onclick="stopPaperEngine()" disabled class="px-5 py-2.5 bg-accentRed hover:bg-accentRed/80 text-white font-bold text-xs rounded-lg transition-all flex items-center space-x-2 disabled:opacity-30 disabled:cursor-not-allowed">
-                            <span>🛑 Stop Paper</span>
-                        </button>
-                    </div>
-
-                    <!-- Statistics / Heartbeat Info -->
-                    <div class="bg-black/20 border border-glassBorder/50 rounded-lg p-3 text-xs space-y-2 font-mono text-gray-400">
-                        <div class="flex justify-between">
-                            <span>Uptime:</span>
-                            <span id="live-uptime-val" class="text-gray-200">00:00:00</span>
-                        </div>
-                        <div class="flex justify-between">
-                            <span>Last Candle:</span>
-                            <span id="live-lastcandle-val" class="text-gray-200">--:--:--</span>
-                        </div>
-                        <div class="flex justify-between items-center">
-                            <span>Heartbeat:</span>
-                            <span class="flex items-center space-x-1">
-                                <span id="live-heartbeat-dot" class="w-2 h-2 rounded-full bg-gray-500"></span>
-                                <span id="live-heartbeat-val">--</span>
-                            </span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Account Equity & Active Positions Grid -->
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <!-- Account info (1/3) -->
-                    <div class="glass-card p-6 flex flex-col justify-between space-y-6">
-                        <div>
-                            <span class="text-sm font-semibold text-gray-300">Hesap Bakiyesi & Portföy</span>
-                            <p class="text-xs text-gray-500 mt-0.5">Canlı kağıt işlemleri hesap durumu.</p>
-                        </div>
-                        <div class="space-y-4">
-                            <div>
-                                <span class="text-[10px] text-gray-400 font-semibold uppercase font-mono">Toplam Bakiye (Net Equity)</span>
-                                <div id="live-equity-val" class="text-3xl font-extrabold text-gray-100 tracking-tight">$10,000.00</div>
-                            </div>
-                            <div class="grid grid-cols-2 gap-4 border-t border-glassBorder/50 pt-4">
-                                <div>
-                                    <span class="text-[10px] text-gray-400 font-semibold uppercase font-mono">Serbest Cash</span>
-                                    <div id="live-cash-val" class="text-base font-bold text-gray-300">$10,000.00</div>
-                                </div>
-                                <div>
-                                    <span class="text-[10px] text-gray-400 font-semibold uppercase font-mono">Gerçekleşen Kar (Realized)</span>
-                                    <div id="live-realized-val" class="text-base font-bold text-gray-300">$0.00</div>
-                                </div>
-                            </div>
-                            <div class="grid grid-cols-2 gap-4 border-t border-glassBorder/50 pt-4">
-                                <div>
-                                    <span class="text-[10px] text-gray-400 font-semibold uppercase font-mono">Açık Kar/Zarar (Unrealized)</span>
-                                    <div id="live-unrealized-val" class="text-base font-bold text-gray-300">$0.00</div>
-                                </div>
-                                <div>
-                                    <span class="text-[10px] text-gray-400 font-semibold uppercase font-mono">Toplam İşlem</span>
-                                    <div id="live-trades-count" class="text-base font-bold text-gray-300">0</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Active Positions Table (2/3) -->
-                    <div class="glass-card p-6 lg:col-span-2 flex flex-col justify-between">
-                        <div>
-                            <span class="text-sm font-semibold text-gray-300">Aktif Açık Pozisyonlar (Active Positions)</span>
-                            <p class="text-xs text-gray-500 mt-0.5">Binance WebSocket fiyat akışıyla anlık olarak takip edilmektedir.</p>
-                        </div>
-                        <div class="overflow-x-auto mt-4 min-h-[150px]">
-                            <table class="w-full text-left border-collapse text-xs">
-                                <thead>
-                                    <tr class="border-b border-glassBorder text-gray-500 uppercase tracking-wider">
-                                        <th class="pb-2 font-semibold">Varlık</th>
-                                        <th class="pb-2 font-semibold">Strateji</th>
-                                        <th class="pb-2 font-semibold text-right">Giriş Fiyatı</th>
-                                        <th class="pb-2 font-semibold text-right">Güncel Fiyat</th>
-                                        <th class="pb-2 font-semibold text-right">Miktar (Qty)</th>
-                                        <th class="pb-2 font-semibold text-right">Stop Loss</th>
-                                        <th class="pb-2 font-semibold text-right">Take Profit</th>
-                                        <th class="pb-2 font-semibold text-right">MAE</th>
-                                        <th class="pb-2 font-semibold text-right">MFE</th>
-                                        <th class="pb-2 font-semibold text-right">Kar / Zarar %</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="live-positions-body" class="divide-y divide-glassBorder">
-                                    <tr>
-                                        <td colspan="10" class="py-6 text-center text-gray-500">Açık pozisyon bulunmuyor.</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Signal Watchdog & Trade Journal Grid -->
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <!-- Signal Watchdog (1/3) -->
-                    <div class="glass-card p-6 flex flex-col justify-between">
-                        <div>
-                            <span class="text-sm font-semibold text-gray-300">Sinyal Takip Panel Listesi</span>
-                            <p class="text-xs text-gray-500 mt-0.5">Sistem kline kapanışlarında üretilen son sinyalleri izler.</p>
-                        </div>
-                        <div class="overflow-y-auto mt-4 max-h-[250px] space-y-2 pr-2" id="live-signals-list">
-                            <div class="text-gray-500 text-xs text-center py-8">Henüz üretilmiş bir sinyal bulunmuyor.</div>
-                        </div>
-                    </div>
-
-                    <!-- Live Trade Journal (2/3) -->
-                    <div class="glass-card p-6 lg:col-span-2 flex flex-col justify-between">
-                        <div>
-                            <span class="text-sm font-semibold text-gray-300">Live Trade Journal (Kapatılan İşlemler)</span>
-                            <p class="text-xs text-gray-500 mt-0.5">Tamamlanmış canlı paper trading emirleri günlüğü.</p>
-                        </div>
-                        <div class="overflow-x-auto mt-4 max-h-[250px]">
-                            <table class="w-full text-left border-collapse text-xs">
-                                <thead>
-                                    <tr class="border-b border-glassBorder text-gray-500 uppercase tracking-wider">
-                                        <th class="pb-2 font-semibold">Varlık</th>
-                                        <th class="pb-2 font-semibold">Giriş Fiyatı</th>
-                                        <th class="pb-2 font-semibold">Çıkış Fiyatı</th>
-                                        <th class="pb-2 font-semibold">Net P&L %</th>
-                                        <th class="pb-2 font-semibold">Çıkış Nedeni</th>
-                                        <th class="pb-2 font-semibold text-right">Süre</th>
-                                        <th class="pb-2 font-semibold text-right">MAE</th>
-                                        <th class="pb-2 font-semibold text-right">MFE</th>
-                                        <th class="pb-2 font-semibold text-right">R-Mult</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="live-journal-body" class="divide-y divide-glassBorder">
-                                    <tr>
-                                        <td colspan="9" class="py-6 text-center text-gray-500">Tamamlanmış işlem bulunmuyor.</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-        </div>
     </main>
 
-    <!-- UI JAVASCRIPT LOGIC -->
+    <!-- FOOTER -->
+    <footer class="border-t border-white/5 py-4 text-center text-[10px] text-slate-600 mt-auto bg-gray-950/20 font-semibold tracking-wide">
+        KriptoQuant Engine v2.0 • Gelişmiş Kantitatif Araştırma ve Otopilot Sistemi
+    </footer>
+
+    <!-- INTERACTION LOGIC SCRIPT -->
     <script>
-        let mainReportData = null;
-        let selectedReports = new Set();
-        let allReportsCache = new Map();
+        let chartInstance = null;
+        let consoleLogs = [];
+        let previousStatus = 'stopped';
+        let previousPositionsCount = 0;
+        
+        const watchCoins = [
+            "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", 
+            "ADAUSDT", "AVAXUSDT", "LINKUSDT", "NEARUSDT", "SUIUSDT", 
+            "APTUSDT", "DOTUSDT", "LTCUSDT", "POLUSDT", "FTMUSDT", 
+            "ARBUSDT", "OPUSDT"
+        ];
+        
+        const previousPrices = {};
 
-        // Chart instances cache
-        let myEquityChart = null;
-        let myMonteCarloChart = null;
-        let myRegimeChart = null;
-        let myAssetContribChart = null;
-        let myYearlyPnlChart = null;
+        let allCoinsSelected = true;
+        function toggleAllCoins() {
+            const checkboxes = document.querySelectorAll('input[name="autopilot-coins"]');
+            allCoinsSelected = !allCoinsSelected;
+            checkboxes.forEach(cb => cb.checked = allCoinsSelected);
+            const btn = document.getElementById('toggle-all-btn');
+            btn.innerText = allCoinsSelected ? 'Tümünü Kaldır' : 'Tümünü Seç';
+        }
 
-        document.addEventListener('DOMContentLoaded', () => {
-            loadReportList();
-            loadDiscoveryFunnel();
-        });
+        function addConsoleLog(message, type = 'info') {
+            const timeStr = new Date().toLocaleTimeString();
+            let colorClass = 'text-slate-400';
+            if (type === 'success') colorClass = 'text-emerald-400';
+            if (type === 'error') colorClass = 'text-rose-400';
+            if (type === 'warning') colorClass = 'text-amber-400';
+            if (type === 'system') colorClass = 'text-teal-400';
 
-        // ── Tabs Navigation ───────────────────────────────────────────────────
-        function switchTab(tabId) {
-            const tabs = document.querySelectorAll('.tab-btn');
-            tabs.forEach(t => t.classList.remove('active', 'border-accentBlue', 'text-accentBlue'));
+            const logElement = `<div class="${colorClass}"><span class="text-slate-600 font-bold">[${timeStr}]</span> ${message}</div>`;
+            const consoleEl = document.getElementById('terminal-console');
+            consoleEl.innerHTML += logElement;
+            consoleEl.scrollTop = consoleEl.scrollHeight;
+        }
+
+        // Initialize Chart.js
+        function initChart(labels = [], data = []) {
+            const ctx = document.getElementById('equity-chart').getContext('2d');
             
-            document.getElementById(`tab-${tabId}`).classList.add('active', 'border-accentBlue', 'text-accentBlue');
-            
-            const contents = document.querySelectorAll('.tab-content');
-            contents.forEach(c => c.classList.add('hidden'));
-            
-            document.getElementById(`content-${tabId}`).classList.remove('hidden');
+            // Create gradient
+            const gradient = ctx.createLinearGradient(0, 0, 0, 100);
+            gradient.addColorStop(0, 'rgba(16, 185, 129, 0.15)');
+            gradient.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
 
-            if (tabId === 'compare') {
-                renderCompareTab();
-            }
-        }
-
-        // ── Load list of files from server ──────────────────────────────────
-        async function loadReportList() {
-            const listEl = document.getElementById('reports-list');
-            listEl.innerHTML = '<div class="text-gray-500 text-sm text-center py-8">Raporlar yükleniyor...</div>';
-            
-            try {
-                const res = await fetch('/api/reports');
-                const reports = await res.json();
-                
-                if (reports.length === 0) {
-                    listEl.innerHTML = '<div class="text-gray-500 text-sm text-center py-8">Rapor bulunamadı. Lütfen önce backtest çalıştırın.</div>';
-                    return;
-                }
-                
-                // Sort by timestamp desc
-                reports.sort((a, b) => b.filename.localeCompare(a.filename));
-                
-                listEl.innerHTML = '';
-                reports.forEach((rep) => {
-                    allReportsCache.set(rep.filename, rep);
-
-                    const container = document.createElement('div');
-                    container.className = 'w-full p-4 rounded-lg bg-[#111827]/40 hover:bg-[#111827]/80 border border-glassBorder flex items-center justify-between space-x-3 transition-all relative';
-                    
-                    // Checkbox
-                    const checkbox = document.createElement('input');
-                    checkbox.type = 'checkbox';
-                    checkbox.className = 'w-4 h-4 rounded border-gray-300 text-accentBlue focus:ring-accentBlue z-10 cursor-pointer';
-                    checkbox.checked = selectedReports.has(rep.filename);
-                    checkbox.onchange = (e) => {
-                        e.stopPropagation();
-                        toggleCompare(rep.filename, checkbox.checked);
-                    };
-
-                    // Label/Button
-                    const btn = document.createElement('div');
-                    btn.className = 'flex-1 cursor-pointer select-none';
-                    btn.onclick = () => selectReport(rep.filename, container);
-
-                    const retVal = Number(rep.totalReturn ?? 0);
-                    const retStr = retVal >= 0 ? `+${retVal.toFixed(1)}%` : `${retVal.toFixed(1)}%`;
-                    const retColor = retVal >= 0 ? 'text-accentGreen' : 'text-accentRed';
-                    
-                    btn.innerHTML = `
-                        <div class="flex items-center justify-between w-full">
-                            <span class="font-bold text-gray-200 text-xs truncate max-w-[130px]" title="${rep.strategyName}">${rep.strategyName}</span>
-                            <span class="text-xs font-semibold ${retColor}">${retStr}</span>
-                        </div>
-                        <div class="flex items-center justify-between w-full mt-2 text-[10px] text-gray-500">
-                            <span>${rep.coin.split('+').slice(0, 2).join('+')} | ${rep.interval}</span>
-                            <span>Sharpe: ${Number(rep.sharpeRatio ?? 0).toFixed(2)}</span>
-                        </div>
-                    `;
-
-                    container.appendChild(checkbox);
-                    container.appendChild(btn);
-                    listEl.appendChild(container);
-                });
-
-                // Select first report automatically
-                if (reports.length > 0 && !mainReportData) {
-                    const firstEl = listEl.querySelector('div');
-                    selectReport(reports[0].filename, firstEl);
-                }
-            } catch (err) {
-                listEl.innerHTML = `<div class="text-red-500 text-sm text-center py-8">Yükleme hatası: ${err.message}</div>`;
-            }
-        }
-
-        function toggleCompare(filename, checked) {
-            if (checked) {
-                selectedReports.add(filename);
-            } else {
-                selectedReports.delete(filename);
-            }
-            document.getElementById('compare-count').innerText = selectedReports.size;
-        }
-
-        function clearComparison() {
-            selectedReports.clear();
-            document.getElementById('compare-count').innerText = 0;
-            const checkboxes = document.querySelectorAll('#reports-list input[type="checkbox"]');
-            checkboxes.forEach(c => c.checked = false);
-            renderCompareTab();
-        }
-
-        async function selectReport(filename, element) {
-            const cards = document.querySelectorAll('#reports-list > div');
-            cards.forEach(c => c.classList.remove('border-accentBlue', 'bg-[#111827]/80'));
-            if (element) {
-                element.classList.add('border-accentBlue', 'bg-[#111827]/80');
-            }
-
-            try {
-                const res = await fetch(`/api/reports/${encodeURIComponent(filename)}`);
-                const data = await res.json();
-                mainReportData = data;
-                renderDashboard(data);
-            } catch (err) {
-                alert('Rapor yüklenemedi: ' + err.message);
-            }
-        }
-
-        // ── RENDER OVERVIEW DATA ──────────────────────────────────────────────
-        function renderDashboard(data) {
-            // Set Header Metadata
-            document.getElementById('active-strategy-title').innerText = data.strategyName || 'Config-based Strategy';
-            document.getElementById('active-coin-subtitle').innerText = `${data.coin} | Interval: ${data.interval}`;
-            document.getElementById('active-date-range').innerText = `${data.startDate || ''} → ${data.endDate || ''}`;
-
-            // Decision Outperformance Banner Calculation
-            const stratRet = data.totalReturn ?? 0;
-            const bhRet = data.buyAndHoldReturn ?? 0;
-            const alpha = stratRet - bhRet;
-
-            const decisionBanner = document.getElementById('decision-banner');
-            const decisionIcon = document.getElementById('decision-icon');
-            const decisionLabel = document.getElementById('decision-label');
-            if (alpha > 0) {
-                decisionBanner.className = 'p-6 rounded-xl border border-accentGreen/30 bg-accentGreen/5 flex items-center justify-between transition-all';
-                decisionIcon.innerHTML = '🥇';
-                decisionLabel.innerText = 'OUTPERFORM (Piyasayı Yendi)';
-                decisionLabel.className = 'text-xl font-bold mt-0.5 text-accentGreen';
-            } else {
-                decisionBanner.className = 'p-6 rounded-xl border border-accentRed/30 bg-accentRed/5 flex items-center justify-between transition-all';
-                decisionIcon.innerHTML = '⚠️';
-                decisionLabel.innerText = 'UNDERPERFORM (Piyasa Gerisinde)';
-                decisionLabel.className = 'text-xl font-bold mt-0.5 text-accentRed';
-            }
-
-            // AI Recommendation logic
-            const sharpe = Number(data.sharpeRatio ?? 0);
-            const aiInsightCard = document.getElementById('ai-insight-card');
-            const recConfidence = document.getElementById('rec-confidence');
-            const recText = document.getElementById('rec-text');
-            const recBadge = document.getElementById('rec-badge');
-            const recStars = document.getElementById('rec-stars');
-            const recAction = document.getElementById('rec-action');
-            const whyList = document.getElementById('ai-why-list');
-
-            let confidenceStr = "Düşük (LOW)";
-            let badgeText = "❌ AVOID (Uzak Dur)";
-            let badgeClass = "text-accentRed";
-            let stars = "★★☆☆☆";
-            let reasoning = "";
-            let actionStr = "Yeniden optimize et";
-
-            if (alpha > 0) {
-                if (sharpe >= 3.0) {
-                    confidenceStr = "Mükemmel (EXCELLENT)";
-                    badgeText = "✅ DEPLOY";
-                    badgeClass = "text-accentGreen";
-                    stars = "★★★★★";
-                    reasoning = `Strateji %${stratRet.toFixed(1)} getiri ile piyasayı (Buy & Hold: %${bhRet.toFixed(1)}) bariz bir şekilde yenmiştir. Sharpe oranı (${sharpe.toFixed(2)}) mükemmel seviyededir. Sistem güvenli limandadır ve kısıt olmaksızın fon yatırımına uygundur.`;
-                    actionStr = "Canlı yayına alınabilir";
-                } else if (sharpe >= 2.0) {
-                    confidenceStr = "İyi (GOOD)";
-                    badgeText = "✅ DEPLOY";
-                    badgeClass = "text-accentGreen";
-                    stars = "★★★★☆";
-                    reasoning = `Strateji benchmark'ı geride bırakmış ve %${stratRet.toFixed(1)} net getiri sağlamıştır. Sharpe oranı (${sharpe.toFixed(2)}) tatmin edici düzeydedir. Kontrollü bir şekilde canlı kullanıma alınması önerilir.`;
-                    actionStr = "Düşük sermaye ile başlat";
-                } else {
-                    confidenceStr = "Orta (MODERATE)";
-                    badgeText = "⚠️ CAUTION";
-                    badgeClass = "text-orange-400";
-                    stars = "★★★☆☆";
-                    reasoning = `Strateji getiri olarak benchmark'ın üzerinde kalsa da, Sharpe oranı (${sharpe.toFixed(2)}) düşüktür. Bu durum piyasadaki yüksek oynaklık ve volatilite riskini gösterir. Düşük bütçeyle veya korumalı filtrelerle yatırım yapılabilir.`;
-                    actionStr = "Trend filtresi ekle";
-                }
-            } else {
-                confidenceStr = "Yüksek (HIGH)";
-                badgeText = "❌ AVOID";
-                badgeClass = "text-accentRed";
-                stars = "★★☆☆☆";
-                reasoning = `Strateji getiri olarak pasif piyasa tutma getirisinin (Buy & Hold: %${bhRet.toFixed(1)}) gerisinde kalmıştır. Piyasa performansı stratejiden daha üstün olduğu için bu stratejinin bu haliyle çalıştırılması önerilmez.`;
-                actionStr = "Parametreleri sıfırla / optimize et";
-            }
-
-            aiInsightCard.className = `glass-card p-6 flex flex-col justify-between lg:col-span-2 border-l-4 ${alpha > 0 ? (sharpe >= 2.0 ? 'border-l-accentGreen' : 'border-l-orange-400') : 'border-l-accentRed'} transition-all`;
-            recConfidence.innerText = `Güven Seviyesi: ${confidenceStr}`;
-            recText.innerText = reasoning;
-            recBadge.innerText = badgeText;
-            recBadge.className = `text-sm font-extrabold px-3 py-1 rounded bg-black/20 ${badgeClass}`;
-            recStars.innerText = stars;
-            recAction.innerText = actionStr;
-
-            // Generate why bullets based on trades
-            const trades = data.trades || [];
-            const assetPnL = new Map();
-            trades.forEach(t => {
-                const current = assetPnL.get(t.asset) || 0;
-                assetPnL.set(t.asset, current + (t.pnl || 0));
-            });
-
-            // Find best and worst assets
-            let bestAsset = "";
-            let bestPnL = -Infinity;
-            let worstAsset = "";
-            let worstPnL = Infinity;
-            assetPnL.forEach((val, key) => {
-                if (val > bestPnL) { bestPnL = val; bestAsset = key; }
-                if (val < worstPnL) { worstPnL = val; worstAsset = key; }
-            });
-
-            const winRate = Number(data.winRate ?? 0);
-            const maxDd = Number(data.maxDrawdown ?? 0);
-
-            let whyHTML = "";
-            if (bestAsset && bestPnL > 0) {
-                whyHTML += `<li class="flex items-center space-x-2 text-accentGreen"><span>✓</span> <span>${bestAsset} varlığı portföy kârına en yüksek katkıyı sağladı (+${bestPnL.toFixed(0)} USDT).</span></li>`;
-            }
-            if (worstAsset && worstPnL < 0) {
-                whyHTML += `<li class="flex items-center space-x-2 text-accentRed"><span>✗</span> <span>${worstAsset} varlığı net zarar yazarak portföyü aşağı çekti (${worstPnL.toFixed(0)} USDT).</span></li>`;
-            }
-            if (winRate < 45) {
-                whyHTML += `<li class="flex items-center space-x-2 text-accentRed"><span>✗</span> <span>Düşük kazanma oranı (%${winRate.toFixed(1)}): Piyasanın kararsız/yatay olduğu dönemlerde çok sayıda sahte sinyalle (false break) stop olunmuş.</span></li>`;
-            } else {
-                whyHTML += `<li class="flex items-center space-x-2 text-accentGreen"><span>✓</span> <span>Güçlü kazanma oranı (%${winRate.toFixed(1)}): Trend dönüşleri kararlı bir şekilde yakalanmış.</span></li>`;
-            }
-            if (maxDd > 20) {
-                whyHTML += `<li class="flex items-center space-x-2 text-accentRed"><span>✗</span> <span>Maksimum Çöküş (%${maxDd.toFixed(1)}): Risk toleransı yüksek, kaldıraç veya pozisyon büyüklükleri düşürülmeli.</span></li>`;
-            }
-            whyList.innerHTML = whyHTML || '<li>Metrikler stabil görünüyor, sıra dışı bir sapma saptanmadı.</li>';
-
-            // Populate Deploy Decision Panel (Problem 8)
-            document.getElementById('deploy-badge').innerText = badgeText;
-            document.getElementById('deploy-badge').className = `text-2xl font-extrabold block mt-1 tracking-tight ${badgeClass}`;
-            document.getElementById('deploy-exp-dd').innerText = `-%${Number(data.maxDrawdown ?? 0).toFixed(1)}`;
-            document.getElementById('deploy-exp-cagr').innerText = `%${stratRet.toFixed(1)}`;
-            
-            const deployScore = Math.round((Math.min(10, Math.max(1, stratRet / 10)) * 0.3 + Math.max(1, Math.min(10, 10 - Number(data.maxDrawdown ?? 0) / 3)) * 0.3 + Math.max(1, Math.min(10, sharpe * 2)) * 0.4) * 10);
-            document.getElementById('deploy-confidence').innerText = `%${deployScore}`;
-            
-            const capRec = alpha > 0 ? Math.min(40, Math.max(5, Math.round(sharpe * 10))) : 0;
-            document.getElementById('deploy-cap-rec').innerText = `%${capRec}`;
-
-            // Metrics Cards
-            const capPct = `${stratRet >= 0 ? '+' : ''}${stratRet.toFixed(2)}%`;
-            document.getElementById('card-capital-pct').innerText = capPct;
-            document.getElementById('card-capital-pct').className = `text-3xl font-extrabold ${stratRet >= 0 ? 'text-accentGreen' : 'text-accentRed'}`;
-            document.getElementById('card-capital-val').innerText = `Bitiş: ${(data.finalCapital ?? 0).toLocaleString()} USDT | Başlangıç: ${(data.initialCapital ?? 0).toLocaleString()} USDT`;
-
-            document.getElementById('card-sharpe').innerText = Number(data.sharpeRatio ?? 0).toFixed(3);
-            document.getElementById('card-pf').innerText = `Profit Factor: ${Number(data.profitFactor ?? 0).toFixed(3)}`;
-
-            document.getElementById('card-winrate').innerText = `%${winRate.toFixed(1)}`;
-            document.getElementById('card-winloss').innerText = `W: ${data.winningTrades ?? 0} | L: ${data.losingTrades ?? 0}`;
-
-            document.getElementById('card-maxdd').innerText = `-%${maxDd.toFixed(2)}`;
-            const expectancy = Number(data.analytics?.expectancyUsdt ?? 0);
-            document.getElementById('card-avgtrade').innerText = `Expectancy: ${expectancy.toFixed(1)} USDT`;
-
-            // Strategy Scorecard (Problem 4)
-            const scoreRetVal = Math.min(10, Math.max(1, Math.round(stratRet / 10)));
-            const scoreRiskVal = Math.max(1, Math.min(10, Math.round(10 - maxDd / 3)));
-            const scoreRobustVal = Math.max(1, Math.min(10, Math.round(sharpe * 2)));
-            const scoreOverfitVal = Math.max(1, Math.min(10, Math.round(10 - sharpe / 1.5)));
-
-            document.getElementById('score-ret').innerText = `${scoreRetVal}/10`;
-            document.getElementById('score-risk').innerText = `${scoreRiskVal}/10`;
-            document.getElementById('score-robust').innerText = `${scoreRobustVal}/10`;
-            document.getElementById('score-overfit').innerText = `${scoreOverfitVal}/10`;
-            document.getElementById('score-total').innerText = `${deployScore}/100`;
-
-
-            calculateAndRenderAssetBreakdown(trades);
-            calculateAndRenderYearlyBreakdown(trades);
-
-            // Detailed Risk Tab Metrics
-            document.getElementById('risk-rec-factor').innerText = Number(data.analytics?.recoveryFactor ?? 0).toFixed(2);
-            document.getElementById('risk-mar-ratio').innerText = Number(data.analytics?.marRatio ?? 0).toFixed(2);
-            document.getElementById('risk-gainpain-ratio').innerText = Number(data.analytics?.gainPainRatio ?? 0).toFixed(2);
-            document.getElementById('risk-exposure').innerText = `${Number(data.analytics?.exposureTime ?? 0).toFixed(1)}%`;
-            document.getElementById('risk-sqn').innerText = Number(data.analytics?.sqn ?? 0).toFixed(2);
-            document.getElementById('risk-kelly').innerText = `%${(Number(data.analytics?.kelly ?? 0) * 100).toFixed(1)}`;
-            document.getElementById('risk-ulcer').innerText = Number(data.analytics?.ulcerIndex ?? 0).toFixed(2);
-            document.getElementById('risk-capusage').innerText = `%${(Number(data.analytics?.capitalUsage ?? 0)).toFixed(1)}`;
-
-            const ruinPercent = Number(data.monteCarlo?.riskOfRuinPercent ?? 0);
-            document.getElementById('risk-ruin-indicator').innerText = `Risk of Ruin (%30 Limit): %${ruinPercent.toFixed(1)}`;
-
-            // Monte Carlo details
-            const mc = data.monteCarlo || {};
-            if (mc.finalCapitalQuantiles) {
-                document.getElementById('mc-worst').innerText = `${mc.finalCapitalQuantiles.worst?.toLocaleString(undefined, {maximumFractionDigits:0})} $`;
-                document.getElementById('mc-p5').innerText = `${mc.finalCapitalQuantiles.p5?.toLocaleString(undefined, {maximumFractionDigits:0})} $`;
-                document.getElementById('mc-p50').innerText = `${mc.finalCapitalQuantiles.p50?.toLocaleString(undefined, {maximumFractionDigits:0})} $`;
-                document.getElementById('mc-p95').innerText = `${mc.finalCapitalQuantiles.p95?.toLocaleString(undefined, {maximumFractionDigits:0})} $`;
-                document.getElementById('mc-best').innerText = `${mc.finalCapitalQuantiles.best?.toLocaleString(undefined, {maximumFractionDigits:0})} $`;
-            }
-
-            // Render main Equity chart and Monte Carlo Chart
-            renderEquityChart(data.equityCurve || []);
-            renderMonteCarloChart(data.monteCarlo || {});
-            renderRegimeChart(trades);
-
-            // Populate Trade journal tab
-            populateJournalTable(trades);
-        }
-
-        // ── CALCULATE ASSET CONTRIBUTION ────────────────────────────────────
-        function calculateAndRenderAssetBreakdown(trades) {
-            const assetPnL = new Map();
-            trades.forEach(t => {
-                const current = assetPnL.get(t.asset) || 0;
-                assetPnL.set(t.asset, current + (t.pnl || 0));
-            });
-
-            const labels = Array.from(assetPnL.keys());
-            const data = Array.from(assetPnL.values());
-            const colors = data.map(v => v >= 0 ? '#10b981' : '#ef4444');
-
-            const ctx = document.getElementById('assetContribChart').getContext('2d');
-            if (myAssetContribChart) myAssetContribChart.destroy();
-
-            myAssetContribChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Varlık Net Kârı (USDT)',
-                        data: data,
-                        backgroundColor: colors,
-                        borderRadius: 6
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        x: { grid: { display: false }, ticks: { color: '#9ca3af' } },
-                        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#9ca3af' } }
-                    },
-                    plugins: { legend: { display: false } }
-                }
-            });
-        }
-
-        // ── CALCULATE YEARLY P&L ─────────────────────────────────────────────
-        function calculateAndRenderYearlyBreakdown(trades) {
-            const yearlyPnL = new Map();
-            trades.forEach(t => {
-                const date = new Date(t.exitOrder.timestamp);
-                const year = date.getFullYear();
-                if (!isNaN(year)) {
-                    const current = yearlyPnL.get(year) || 0;
-                    yearlyPnL.set(year, current + (t.pnl || 0));
-                }
-            });
-
-            const labels = Array.from(yearlyPnL.keys()).sort();
-            const data = labels.map(y => yearlyPnL.get(y));
-            const colors = data.map(v => v >= 0 ? '#10b981' : '#ef4444');
-
-            const ctx = document.getElementById('yearlyPnlChart').getContext('2d');
-            if (myYearlyPnlChart) myYearlyPnlChart.destroy();
-
-            myYearlyPnlChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: labels.map(String),
-                    datasets: [{
-                        label: 'Yıllık Kar/Zarar (USDT)',
-                        data: data,
-                        backgroundColor: colors,
-                        borderRadius: 6
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        x: { grid: { display: false }, ticks: { color: '#9ca3af' } },
-                        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#9ca3af' } }
-                    },
-                    plugins: { legend: { display: false } }
-                }
-            });
-        }
-
-        // ── RENDER MAIN EQUITY & DD CHART ────────────────────────────────────
-        function renderEquityChart(curve) {
-            const ctx = document.getElementById('equityChartV2').getContext('2d');
-            if (myEquityChart) myEquityChart.destroy();
-
-            const labels = curve.map(c => new Date(c.timestamp).toISOString().slice(0, 10));
-            const equities = curve.map(c => c.equity);
-            const drawdowns = curve.map(c => c.drawdownPercent || 0);
-
-            // Calculate Buy & Hold benchmark line
-            const bhRet = Number(mainReportData?.buyAndHoldReturn ?? 0);
-            const initialCapital = Number(mainReportData?.initialCapital ?? 10000);
-            const bhCurve = curve.map((c, i) => {
-                const ratio = i / (curve.length - 1 || 1);
-                return initialCapital * (1 + (bhRet / 100) * ratio);
-            });
-
-            myEquityChart = new Chart(ctx, {
+            chartInstance = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: labels,
-                    datasets: [
-                        {
-                            label: 'Strateji Sermayesi (USDT)',
-                            data: equities,
-                            borderColor: '#3b82f6',
-                            borderWidth: 2.5,
-                            yAxisID: 'y',
-                            pointRadius: 0,
-                            fill: false
-                        },
-                        {
-                            label: 'Buy & Hold Benchmark (USDT)',
-                            data: bhCurve,
-                            borderColor: '#4b5563',
-                            borderWidth: 1.5,
-                            borderDash: [5, 5],
-                            yAxisID: 'y',
-                            pointRadius: 0,
-                            fill: false
-                        },
-                        {
-                            label: 'Drawdown (%)',
-                            data: drawdowns,
-                            borderColor: '#ef4444',
-                            borderWidth: 1.5,
-                            backgroundColor: 'rgba(239, 68, 68, 0.12)',
-                            fill: true,
-                            yAxisID: 'y1',
-                            pointRadius: 0
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        x: {
-                            grid: { color: 'rgba(255, 255, 255, 0.03)' },
-                            ticks: { color: '#9ca3af', maxRotation: 0, font: { size: 10 } }
-                        },
-                        y: {
-                            position: 'left',
-                            grid: { color: 'rgba(255, 255, 255, 0.04)' },
-                            ticks: { color: '#3b82f6' }
-                        },
-                        y1: {
-                            position: 'right',
-                            grid: { display: false },
-                            ticks: { color: '#ef4444' },
-                            reverse: true,
-                            min: 0,
-                            max: 100
-                        }
-                    },
-                    plugins: {
-                        legend: { labels: { color: '#f1f5f9' } }
-                    }
-                }
-            });
-        }
-
-        // ── RENDER MONTE CARLO CHART ─────────────────────────────────────────
-        function renderMonteCarloChart(mc) {
-            const ctx = document.getElementById('monteCarloChartV2').getContext('2d');
-            if (myMonteCarloChart) myMonteCarloChart.destroy();
-
-            if (!mc || !mc.finalCapitalQuantiles) return;
-
-            const q = mc.finalCapitalQuantiles;
-            const labels = ['Worst Path', 'P5 (Kötü %5)', 'P50 (Ortanca)', 'P95 (İyi %5)', 'Best Path'];
-            const data = [q.worst, q.p5, q.p50, q.p95, q.best];
-
-            myMonteCarloChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: labels,
                     datasets: [{
+                        label: 'Kasa Değeri',
                         data: data,
-                        backgroundColor: ['#ef4444', '#f97316', '#3b82f6', '#10b981', '#059669'],
-                        borderRadius: 8
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        x: { grid: { display: false }, ticks: { color: '#9ca3af' } },
-                        y: { grid: { color: 'rgba(255, 255, 255, 0.04)' }, ticks: { color: '#9ca3af' } }
-                    },
-                    plugins: { legend: { display: false } }
-                }
-            });
-        }
-
-        // ── RENDER REGIME doughnut CHART ──────────────────────────────────────
-        function renderRegimeChart(trades) {
-            const ctx = document.getElementById('riskRegimeChart').getContext('2d');
-            if (myRegimeChart) myRegimeChart.destroy();
-
-            let wins = 0;
-            let losses = 0;
-            trades.forEach(t => {
-                if (t.pnlPercent >= 0) wins++;
-                else losses++;
-            });
-
-            myRegimeChart = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: ['Karlı İşlemler', 'Zararlı İşlemler'],
-                    datasets: [{
-                        data: [wins, losses],
-                        backgroundColor: ['#10b981', '#ef4444'],
-                        borderWidth: 0
+                        borderColor: '#10b981',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        pointHoverRadius: 4,
+                        fill: true,
+                        backgroundColor: gradient,
+                        tension: 0.3
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: { position: 'bottom', labels: { color: '#9ca3af' } }
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: { display: false },
+                        y: {
+                            grid: { color: 'rgba(255, 255, 255, 0.02)' },
+                            ticks: {
+                                color: '#64748b',
+                                font: { size: 9, family: 'JetBrains Mono' }
+                            }
+                        }
                     }
                 }
             });
         }
 
-        // ── RENDER COMPARE MODULE (Sekme 3) ──────────────────────────────────
-        async function renderCompareTab() {
-            const tableBody = document.getElementById('compare-table-body');
-            const tableHeader = document.querySelector('#compare-table thead tr');
-            
-            if (selectedReports.size === 0) {
-                tableBody.innerHTML = '<tr><td colspan="10" class="py-8 text-center text-gray-500">Lütfen karşılaştırmak için soldaki listeden en az iki kutucuğu işaretleyin.</td></tr>';
-                document.getElementById('badge-winner').innerText = '🥇 Seçim Yapılmadı';
+        function updateChart(curve = []) {
+            if (!chartInstance) {
+                const labels = curve.map(c => c.time);
+                const data = curve.map(c => c.equity);
+                initChart(labels, data);
                 return;
             }
+            chartInstance.data.labels = curve.map(c => c.time);
+            chartInstance.data.datasets[0].data = curve.map(c => c.equity);
+            chartInstance.update();
+        }
 
-            // Fetch all reports contents in parallel
-            const reportDataList = [];
-            for (const filename of selectedReports) {
+        // Setup Websocket event listener for live state broadcasts
+        function setupWebsocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const ws = new WebSocket(`${protocol}//${window.location.host}/ws/live`);
+            const connDot = document.getElementById('ws-connection-dot');
+            
+            ws.onopen = () => {
+                connDot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-md shadow-emerald-500/20';
+                addConsoleLog('Sunucu WebSocket bağlantısı başarıyla kuruldu.', 'success');
+                fetchInitialState();
+            };
+            
+            ws.onclose = () => {
+                connDot.className = 'w-2.5 h-2.5 rounded-full bg-rose-500 shadow-md shadow-rose-500/20';
+                addConsoleLog('Sunucu WebSocket bağlantısı koptu. Yeniden bağlanmaya çalışılıyor...', 'error');
+                setTimeout(setupWebsocket, 5000);
+            };
+            
+            ws.onmessage = (event) => {
                 try {
-                    const res = await fetch(`/api/reports/${encodeURIComponent(filename)}`);
-                    const data = await res.json();
-                    reportDataList.push(data);
-                } catch {}
-            }
-
-            // Render Headers
-            tableHeader.innerHTML = '<th class="pb-4 font-semibold">Metrik / Özellik</th>';
-            reportDataList.forEach(data => {
-                tableHeader.innerHTML += `<th class="pb-4 font-semibold text-center">${data.strategyName || 'Strategy'}</th>`;
-            });
-
-            // Compare Rows config
-            const rowsConfig = [
-                { label: 'Coin / Varlık', key: 'coin', type: 'string' },
-                { label: 'Mum Aralığı', key: 'interval', type: 'string' },
-                { label: 'Strateji Getirisi (%)', key: 'totalReturn', type: 'pct', higherBetter: true },
-                { label: 'Buy & Hold Getirisi (%)', key: 'buyAndHoldReturn', type: 'pct', higherBetter: true },
-                { label: 'Sharpe Oranı', key: 'sharpeRatio', type: 'num', higherBetter: true },
-                { label: 'Maksimum Çöküş (%)', key: 'maxDrawdown', type: 'dd', higherBetter: false },
-                { label: 'Kazanma Oranı (%)', key: 'winRate', type: 'pct', higherBetter: true },
-                { label: 'Profit Factor', key: 'profitFactor', type: 'num', higherBetter: true },
-                { label: 'Toplam İşlem Sayısı', key: 'totalTrades', type: 'int', higherBetter: true },
-            ];
-
-            // Build Rows HTML
-            tableBody.innerHTML = '';
-            rowsConfig.forEach(row => {
-                let html = `<tr class="hover:bg-slate-800/20"><td class="py-3.5 font-medium text-gray-400">${row.label}</td>`;
-                
-                // Find best value index to highlight it
-                let bestIdx = -1;
-                if (row.type !== 'string') {
-                    let bestVal = row.higherBetter ? -Infinity : Infinity;
-                    reportDataList.forEach((data, idx) => {
-                        const val = data[row.key] ?? 0;
-                        if (row.higherBetter) {
-                            if (val > bestVal) { bestVal = val; bestIdx = idx; }
-                        } else {
-                            if (val < bestVal) { bestVal = val; bestIdx = idx; }
-                        }
-                    });
-                }
-
-                reportDataList.forEach((data, idx) => {
-                    let val = data[row.key];
-                    let text = val;
-                    if (row.type === 'pct') text = `%${val?.toFixed(2)}`;
-                    else if (row.type === 'dd') text = `-%${val?.toFixed(2)}`;
-                    else if (row.type === 'num') text = val?.toFixed(3);
-                    else if (row.type === 'int') text = val?.toString();
-
-                    const highlightClass = idx === bestIdx ? 'text-accentGreen font-bold bg-accentGreen/5' : 'text-gray-200';
-                    html += `<td class="py-3.5 text-center font-mono ${highlightClass}">${text}</td>`;
-                });
-                html += '</tr>';
-                tableBody.innerHTML += html;
-            });
-
-            // Find overall winner based on Sharpe Ratio
-            let bestSharpe = -Infinity;
-            let winnerName = 'Bulunamadı';
-            reportDataList.forEach(data => {
-                if ((data.sharpeRatio ?? 0) > bestSharpe) {
-                    bestSharpe = data.sharpeRatio ?? 0;
-                    winnerName = data.strategyName;
-                }
-            });
-            document.getElementById('badge-winner').innerText = `🥇 Öneri: ${winnerName} (Yüksek Sharpe)`;
+                    const msg = JSON.parse(event.data);
+                    if (msg.type === 'engine') {
+                        renderAutopilotState(msg.data);
+                    }
+                } catch (e) {}
+            };
         }
 
-        // ── POPULATE JOURNAL TABLE (Sekme 4) ──────────────────────────────────
-        let allTradesCache = [];
-        function populateJournalTable(trades) {
-            allTradesCache = trades;
-            filterTradesTable();
-        }
-
-        function filterTradesTable() {
-            const query = document.getElementById('journal-search').value.toLowerCase();
-            const tbody = document.getElementById('journal-table-body');
+        // Setup Direct Binance MiniTicker Websocket for Market Watch prices
+        function setupMarketWatchWebsocket() {
+            const streams = watchCoins.map(c => `${c.toLowerCase()}@miniTicker`).join('/');
+            const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${streams}`);
+            
+            // Build initial static table
+            const tbody = document.getElementById('market-watch-body');
             tbody.innerHTML = '';
-
-            const filtered = allTradesCache.filter(t => 
-                t.asset.toLowerCase().includes(query) ||
-                (t.exitReason && t.exitReason.toLowerCase().includes(query))
-            );
-
-            document.getElementById('journal-trades-subtitle').innerText = `${filtered.length} işlem filtrelendi (Toplam: ${allTradesCache.length})`;
-
-            filtered.forEach(t => {
-                const tr = document.createElement('tr');
-                tr.className = 'hover:bg-slate-800/30 transition-all';
-                
-                const sideColor = t.entryOrder.side === 'BUY' ? 'text-accentGreen' : 'text-accentRed';
-                const pnlColor = t.pnlPercent >= 0 ? 'text-accentGreen' : 'text-accentRed';
-                
-                tr.innerHTML = `
-                    <td class="py-3 font-semibold text-gray-200">${t.asset}</td>
-                    <td class="py-3 font-bold ${sideColor}">${t.entryOrder.side}</td>
-                    <td class="py-3 text-right text-gray-400 font-mono">${t.entryOrder.quantity.toFixed(4)}</td>
-                    <td class="py-3 text-right text-gray-400 font-mono">${t.entryOrder.price.toFixed(2)}</td>
-                    <td class="py-3 text-right text-gray-400 font-mono">${t.exitOrder.price.toFixed(2)}</td>
-                    <td class="py-3 text-right font-bold font-mono ${pnlColor}">${t.pnlPercent >= 0 ? '+' : ''}${t.pnlPercent.toFixed(2)}%</td>
-                    <td class="py-3 text-xs text-gray-400 max-w-[200px] truncate" title="${t.exitReason}">${t.exitReason}</td>
-                    <td class="py-3 text-right text-accentRed font-mono">${(t.mae ?? 0).toFixed(2)}%</td>
-                    <td class="py-3 text-right text-accentGreen font-mono">${(t.mfe ?? 0).toFixed(2)}%</td>
+            
+            watchCoins.forEach(coin => {
+                const cleanName = coin.replace('USDT', '');
+                const row = document.createElement('tr');
+                row.id = `mw-row-${coin}`;
+                row.className = 'hover:bg-slate-900/10 transition-colors duration-150 border-b border-slate-900/40';
+                row.innerHTML = `
+                    <td class="py-2.5 font-bold text-slate-200">${cleanName}</td>
+                    <td id="mw-price-${coin}" class="py-2.5 font-mono text-slate-400 font-semibold">$0.00</td>
+                    <td id="mw-change-${coin}" class="py-2.5 font-mono text-right font-bold text-slate-500">0.00%</td>
                 `;
-                tbody.appendChild(tr);
+                tbody.appendChild(row);
             });
-        }
-
-        // ── LOAD DISCOVERY FUNNEL (Sekme 5) ──────────────────────────────────
-        async function loadDiscoveryFunnel() {
-            try {
-                const res = await fetch('/api/discovery');
-                const data = await res.json();
-
-                if (!data.results || data.results.length === 0) return;
-
-                // Simple stage count calculations based on discovery log results
-                const total = data.totalCandidates || 50;
-                
-                // Count passes per stage
-                let btCount = 0;
-                let mcCount = 0;
-                let wfCount = 0;
-
-                data.results.forEach(r => {
-                    // Passed backtest stage means stage is at least not BACKTEST_FAILED or INSUFFICIENT_TRADES
-                    if (r.stage !== 'BACKTEST_FAILED' && r.stage !== 'INSUFFICIENT_TRADES') btCount++;
-                    if (r.stage !== 'BACKTEST_FAILED' && r.stage !== 'INSUFFICIENT_TRADES' && r.stage !== 'MONTE_CARLO_FAILED') mcCount++;
-                    if (r.stage === 'PASSED') wfCount++;
-                });
-
-                // Update funnel width sizes
-                document.getElementById('funnel-total').style.width = '100%';
-                document.getElementById('funnel-total').innerText = `${total} Aday Arama`;
-
-                const btPct = total > 0 ? (btCount / total * 100).toFixed(0) : 0;
-                document.getElementById('funnel-bt').style.width = `${btPct}%`;
-                document.getElementById('funnel-bt').innerText = `${btCount} Aday (Kârlı Backtest) | %${btPct}`;
-
-                const mcPct = btCount > 0 ? (mcCount / total * 100).toFixed(0) : 0;
-                document.getElementById('funnel-mc').style.width = `${mcPct}%`;
-                document.getElementById('funnel-mc').innerText = `${mcCount} Aday (Monte Carlo Güvenli) | %${mcPct}`;
-
-                const wfPct = mcCount > 0 ? (wfCount / total * 100).toFixed(0) : 0;
-                document.getElementById('funnel-wf').style.width = `${wfPct}%`;
-                document.getElementById('funnel-wf').innerText = `${wfCount} Aday (Walk-Forward Robust) | %${wfPct}`;
-
-                // Discovery Leaderboard
-                const sorted = data.results.filter(r => r.stage === 'PASSED')
-                    .sort((a,b) => (b.score?.overall ?? 0) - (a.score?.overall ?? 0))
-                    .slice(0, 10);
-
-                const leaderboardEl = document.getElementById('discovery-leaderboard');
-                if (sorted.length === 0) {
-                    leaderboardEl.innerHTML = '<div class="text-gray-500 text-xs text-center py-8">Walk-Forward aşamasını geçen aday bulunamadı.</div>';
-                    return;
-                }
-
-                leaderboardEl.innerHTML = '';
-                sorted.forEach((item, idx) => {
-                    const stars = '★'.repeat(Math.min(5, Math.ceil((item.score?.overall ?? 0) / 20)));
-                    
-                    // Check if we can find a matching filename in cache
-                    let filename = "";
-                    for (const key of allReportsCache.keys()) {
-                        if (key.includes(item.id) || key.includes(item.strategyName)) {
-                            filename = key;
-                            break;
-                        }
-                    }
-
-                    const card = document.createElement('div');
-                    card.className = 'p-3 bg-black/30 border border-glassBorder rounded-lg flex items-center justify-between text-xs transition-all ' + (filename ? 'cursor-pointer hover:border-accentBlue hover:bg-black/50' : '');
-                    if (filename) {
-                        card.onclick = () => {
-                            switchTab('overview');
-                            selectReport(filename);
-                        };
-                        card.title = "Ayrıntılı Raporu Yükle";
-                    }
-
-                    card.innerHTML = '<div>' +
-                        '<span class="font-bold text-gray-200 block">' + (idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '#' + (idx + 1)) + ' ' + item.id + '</span>' +
-                        '<span class="text-gray-500 mt-1 block">Sharpe: ' + Number(item.sharpeRatio ?? 0).toFixed(2) + ' | DD: -%' + Number(item.maxDrawdown ?? 0).toFixed(1) + '</span>' +
-                        '</div>' +
-                        '<div class="text-right">' +
-                        '<span class="text-accentGreen font-bold block">+' + Number(item.totalReturn ?? 0).toFixed(1) + '%</span>' +
-                        '<span class="text-yellow-500 font-mono mt-1 block">' + stars + '</span>' +
-                        '</div>';
-                    leaderboardEl.appendChild(card);
-                });
-
-            } catch (err) {}
-        }
-
-        // ── DSL BUILDER JS LOGIC ──────────────────────────────────────────────
-        function toggleBuilderFields() {
-            const type = document.getElementById('builder-type').value;
-            const fieldsEl = document.getElementById('builder-fields');
             
-            if (type === 'ema-cross') {
-                fieldsEl.innerHTML = `
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-[10px] text-gray-400 font-semibold mb-1 uppercase font-mono">Hızlı EMA Periyodu</label>
-                            <input type="number" id="builder-ema-fast" oninput="generateDSL()" value="9" class="w-full bg-[#090d16] border border-glassBorder px-3 py-1.5 rounded text-xs text-gray-200">
-                        </div>
-                        <div>
-                            <label class="block text-[10px] text-gray-400 font-semibold mb-1 uppercase font-mono">Yavaş EMA Periyodu</label>
-                            <input type="number" id="builder-ema-slow" oninput="generateDSL()" value="21" class="w-full bg-[#090d16] border border-glassBorder px-3 py-1.5 rounded text-xs text-gray-200">
-                        </div>
-                    </div>
-                `;
-            } else if (type === 'donchian') {
-                fieldsEl.innerHTML = `
-                    <div>
-                        <label class="block text-[10px] text-gray-400 font-semibold mb-1 uppercase font-mono">Kanal Periyodu (Period)</label>
-                        <input type="number" id="builder-donchian-period" oninput="generateDSL()" value="20" class="w-full bg-[#090d16] border border-glassBorder px-3 py-1.5 rounded text-xs text-gray-200">
-                    </div>
-                `;
-            } else if (type === 'supertrend') {
-                fieldsEl.innerHTML = `
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-[10px] text-gray-400 font-semibold mb-1 uppercase font-mono">ATR Periyodu</label>
-                            <input type="number" id="builder-st-period" oninput="generateDSL()" value="10" class="w-full bg-[#090d16] border border-glassBorder px-3 py-1.5 rounded text-xs text-gray-200">
-                        </div>
-                        <div>
-                            <label class="block text-[10px] text-gray-400 font-semibold mb-1 uppercase font-mono">Çarpan (Multiplier)</label>
-                            <input type="number" id="builder-st-mult" oninput="generateDSL()" value="3.0" step="0.1" class="w-full bg-[#090d16] border border-glassBorder px-3 py-1.5 rounded text-xs text-gray-200">
-                        </div>
-                    </div>
-                `;
-            }
-        }
-
-        function generateDSL() {
-            const name = document.getElementById('builder-name').value;
-            const type = document.getElementById('builder-type').value;
-            const sl = parseFloat(document.getElementById('builder-sl').value);
-            const tp = parseFloat(document.getElementById('builder-tp').value);
-            
-            let params = {};
-            if (type === 'ema-cross') {
-                params = {
-                    fastPeriod: parseInt(document.getElementById('builder-ema-fast')?.value || 9),
-                    slowPeriod: parseInt(document.getElementById('builder-ema-slow')?.value || 21)
-                };
-            } else if (type === 'donchian') {
-                params = {
-                    period: parseInt(document.getElementById('builder-donchian-period')?.value || 20)
-                };
-            } else if (type === 'supertrend') {
-                params = {
-                    period: parseInt(document.getElementById('builder-st-period')?.value || 10),
-                    multiplier: parseFloat(document.getElementById('builder-st-mult')?.value || 3.0)
-                };
-            }
-
-            const config = {
-                name: name,
-                indicator: type,
-                params: params,
-                risk: {
-                    stopLossPercent: sl,
-                    takeProfitPercent: tp
-                }
-            };
-
-            document.getElementById('builder-output').value = JSON.stringify(config, null, 4);
-        }
-
-        function copyDSLJson() {
-            const output = document.getElementById('builder-output');
-            output.select();
-            document.execCommand('copy');
-            alert('Strateji JSON yapılandırması panoya kopyalandı!');
-        }
-
-        // ── LIVE PAPER TRADING JS LOGIC ──────────────────────────────────────────
-        let liveSocket = null;
-
-        function connectLiveWebSocket() {
-            const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-            const wsUrl = proto + '://' + location.host + '/ws/live';
-            console.log("Connecting to Live Event Bus WS...", wsUrl);
-            
-            liveSocket = new WebSocket(wsUrl);
-
-            liveSocket.onmessage = (event) => {
+            ws.onmessage = (event) => {
                 try {
-                    const state = JSON.parse(event.data);
-                    renderLiveState(state);
-                } catch (e) {
-                    console.error("Failed to parse live state message:", e);
-                }
+                    const tick = JSON.parse(event.data);
+                    const coin = tick.s; // Symbol
+                    const price = parseFloat(tick.c); // Current Close Price
+                    const open = parseFloat(tick.o); // 24h Open Price
+                    
+                    const priceEl = document.getElementById(`mw-price-${coin}`);
+                    const changeEl = document.getElementById(`mw-change-${coin}`);
+                    const rowEl = document.getElementById(`mw-row-${coin}`);
+                    
+                    if (priceEl && changeEl && rowEl) {
+                        // Formatting decimals based on value size
+                        const decimals = price > 500 ? 2 : (price > 10 ? 3 : 4);
+                        priceEl.innerText = `$${price.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
+                        
+                        // Calculate 24h change percent
+                        const change = ((price - open) / open) * 100;
+                        changeEl.innerText = `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
+                        changeEl.className = `py-2.5 font-mono text-right font-bold ${change >= 0 ? 'text-emerald-400' : 'text-rose-500'}`;
+                        
+                        // Flash Row based on price ticks
+                        const prevPrice = previousPrices[coin];
+                        if (prevPrice !== undefined && prevPrice !== price) {
+                            rowEl.classList.remove('price-flash-up', 'price-flash-down');
+                            // Trigger reflow to restart CSS animation
+                            void rowEl.offsetWidth; 
+                            rowEl.classList.add(price > prevPrice ? 'price-flash-up' : 'price-flash-down');
+                        }
+                        previousPrices[coin] = price;
+                    }
+                } catch (e) {}
             };
-
-            liveSocket.onclose = () => {
-                console.log("Live WS closed. Reconnecting in 3s...");
-                setTimeout(connectLiveWebSocket, 3000);
+            
+            ws.onclose = () => {
+                setTimeout(setupMarketWatchWebsocket, 5000);
             };
         }
 
-        async function deployPaperEngine() {
-            const strategy = document.getElementById('live-strategy-select').value;
-            const coins = document.getElementById('live-coins-input').value.split(',').map(c => c.trim());
-            const interval = document.getElementById('live-interval-select').value;
+        // Fetch current autopilot state via REST API on startup or ws reconnect
+        async function fetchInitialState() {
+            try {
+                const res = await fetch('/api/live-paper');
+                const state = await res.json();
+                renderAutopilotState(state);
+            } catch (e) {}
+        }
 
+        // Format uptime seconds into HH:MM:SS
+        function formatUptime(seconds) {
+            const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
+            const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
+            const s = (seconds % 60).toString().padStart(2, '0');
+            return `${h}:${m}:${s}`;
+        }
+
+        // Render current virtual cash balance and active positions list
+        function renderAutopilotState(state) {
+            if (!state) return;
+            
+            // Console logging based on engine status changes
+            if (state.engineStatus !== previousStatus) {
+                if (state.engineStatus === 'running') {
+                    addConsoleLog(`Otopilot motoru başlatıldı. İşlem çiftleri dinleniyor...`, 'success');
+                } else {
+                    addConsoleLog(`Otopilot motoru durduruldu.`, 'warning');
+                }
+                previousStatus = state.engineStatus;
+            }
+
+            // Uptime updates
+            document.getElementById('engine-uptime').innerText = formatUptime(state.uptime || 0);
+
+            // Status and state dots
+            updateEngineUIState(state.engineStatus);
+            
+            // Cash equity and realized PnL formatting
+            const equity = state.currentEquity ?? state.cash ?? 10000;
+            const realized = state.realizedPnL ?? 0;
+            const unrealized = state.unrealizedPnL ?? 0;
+            
+            document.getElementById('virtual-balance').innerText = `${equity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT`;
+            
+            const pnlEl = document.getElementById('realized-pnl');
+            pnlEl.innerText = `${realized >= 0 ? '+' : ''}${realized.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT`;
+            pnlEl.className = `text-md font-black font-mono mt-1 ${realized >= 0 ? 'text-emerald-400' : 'text-rose-500'}`;
+
+            const unpnlEl = document.getElementById('unrealized-pnl');
+            unpnlEl.innerText = `${unrealized >= 0 ? '+' : ''}${unrealized.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT`;
+            unpnlEl.className = `text-md font-black font-mono mt-1 ${unrealized >= 0 ? 'text-emerald-400' : 'text-rose-500'}`;
+            
+            // Render Live Chart
+            updateChart(state.equityCurveLive || []);
+
+            const positionsContainer = document.getElementById('positions-list');
+            positionsContainer.innerHTML = '';
+            
+            const positions = state.activePositions || [];
+            
+            // Position opening/closing logging
+            if (positions.length > previousPositionsCount) {
+                const newPos = positions[positions.length - 1];
+                addConsoleLog(`[ALIM SİNYALİ] ${newPos.coin} için long pozisyon açıldı. Giriş Fiyatı: $${newPos.entryPrice}`, 'success');
+            } else if (positions.length < previousPositionsCount) {
+                addConsoleLog(`[SATIM SİNYALİ] Pozisyon başarıyla kapatıldı. Kar realize edildi.`, 'system');
+            }
+            previousPositionsCount = positions.length;
+
+            if (positions.length === 0) {
+                positionsContainer.innerHTML = `
+                    <div class="text-slate-500 text-xs text-center py-6 bg-slate-950/40 rounded-xl border border-slate-900/80">
+                        Açık pozisyon bulunmuyor.
+                    </div>
+                `;
+                return;
+            }
+            
+            // Build the active positions table UI
+            const table = document.createElement('table');
+            table.className = 'w-full text-left text-xs text-slate-300 border-collapse';
+            table.innerHTML = `
+                <thead>
+                    <tr class="border-b border-slate-800/80 text-slate-500 text-[10px] uppercase font-bold tracking-wider">
+                        <th class="py-2.5">Coin</th>
+                        <th class="py-2.5">Giriş Fiyatı</th>
+                        <th class="py-2.5">Mevcut Fiyat</th>
+                        <th class="py-2.5 text-right">PnL (%)</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-900/40">
+                </tbody>
+            `;
+            
+            const tbody = table.querySelector('tbody');
+            positions.forEach(pos => {
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-slate-900/10 transition-colors duration-150';
+                
+                const pnl = pos.currentPnLPercent ?? 0;
+                const pnlClass = pnl >= 0 ? 'text-emerald-400' : 'text-rose-500';
+                const pnlSign = pnl >= 0 ? '+' : '';
+                
+                row.innerHTML = `
+                    <td class="py-2.5 font-bold text-slate-200">${pos.coin.replace('USDT', '')}</td>
+                    <td class="py-2.5 font-mono text-slate-400">$${pos.entryPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                    <td class="py-2.5 font-mono text-slate-300">$${pos.currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                    <td class="py-2.5 text-right font-black font-mono ${pnlClass}">${pnlSign}${pnl.toFixed(2)}%</td>
+                `;
+                tbody.appendChild(row);
+            });
+            
+            positionsContainer.appendChild(table);
+        }
+
+        // Helper to update start/stop active labels and engine dots
+        function updateEngineUIState(status) {
+            const statusDot = document.getElementById('autopilot-status-dot');
+            const statusText = document.getElementById('autopilot-status-text');
+            if (status === 'running') {
+                statusDot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-md shadow-emerald-500/40 animate-pulse';
+                statusText.innerText = 'Aktif (Çalışıyor)';
+                statusText.className = 'text-emerald-400 font-bold text-xs';
+            } else {
+                statusDot.className = 'w-2.5 h-2.5 rounded-full bg-slate-600';
+                statusText.innerText = 'Pasif (Durduruldu)';
+                statusText.className = 'text-slate-400 font-bold text-xs';
+            }
+        }
+
+        // Autopilot action APIs
+        async function startAutopilot() {
+            const checkedCoins = Array.from(document.querySelectorAll('input[name="autopilot-coins"]:checked'))
+                                    .map(el => el.value);
+            if (checkedCoins.length === 0) {
+                alert('Lütfen işlem yapılacak en az bir coin seçin.');
+                return;
+            }
+            const strategy = document.getElementById('autopilot-strategy').value;
+            const interval = document.getElementById('autopilot-interval').value;
+            const mlVeto = document.getElementById('autopilot-ml-veto').checked;
+            
             try {
                 const res = await fetch('/api/live-paper/start', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ strategy, coins, interval })
+                    body: JSON.stringify({ coins: checkedCoins, strategy, interval, mlVeto })
                 });
                 const data = await res.json();
                 if (data.success) {
-                    alert('Live Paper Trading Engine başarıyla başlatıldı!');
+                    updateEngineUIState('running');
                 } else {
-                    alert('Hata: ' + data.message);
+                    alert(`Başlatma Hatası: ${data.message}`);
                 }
-            } catch (e) {
-                alert('Motor başlatılamadı: ' + e.message);
+            } catch (err) {
+                alert(`Sunucu Hatası: ${err.message}`);
             }
         }
 
-        async function stopPaperEngine() {
+        async function stopAutopilot() {
             try {
-                const res = await fetch('/api/live-paper/stop', { method: 'POST' });
+                const res = await fetch('/api/live-paper/stop', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
                 const data = await res.json();
                 if (data.success) {
-                    alert('Live Paper Trading Engine durduruldu.');
-                } else {
-                    alert('Hata: ' + data.message);
+                    updateEngineUIState('stopped');
                 }
-            } catch (e) {
-                alert('Motor durdurulamadı: ' + e.message);
+            } catch (err) {
+                alert(`Sunucu Hatası: ${err.message}`);
             }
         }
 
-        function renderLiveState(state) {
-            // 1) Status Badge & Uptime & heartbeat
-            const badge = document.getElementById('live-status-badge');
-            const btnDeploy = document.getElementById('btn-deploy-paper');
-            const btnStop = document.getElementById('btn-stop-paper');
-
-            if (state.engineStatus === 'running') {
-                badge.innerText = 'CANLI ÇALIŞIYOR';
-                badge.className = 'px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-accentGreen/20 text-accentGreen animate-pulse';
-                btnDeploy.disabled = true;
-                btnDeploy.className = 'px-5 py-2.5 bg-accentGreen/20 text-gray-500 font-bold text-xs rounded-lg cursor-not-allowed';
-                btnStop.disabled = false;
-                btnStop.className = 'px-5 py-2.5 bg-accentRed hover:bg-accentRed/80 text-white font-bold text-xs rounded-lg transition-all';
-                
-                // Blink heartbeat green
-                document.getElementById('live-heartbeat-dot').className = 'w-2 h-2 rounded-full bg-accentGreen animate-ping';
-            } else {
-                badge.innerText = 'DURDURULDU';
-                badge.className = 'px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-gray-800 text-gray-400';
-                btnDeploy.disabled = false;
-                btnDeploy.className = 'px-5 py-2.5 bg-accentGreen hover:bg-accentGreen/80 text-black font-bold text-xs rounded-lg transition-all';
-                btnStop.disabled = true;
-                btnStop.className = 'px-5 py-2.5 bg-accentRed/20 text-gray-500 font-bold text-xs rounded-lg cursor-not-allowed';
-                
-                document.getElementById('live-heartbeat-dot').className = 'w-2 h-2 rounded-full bg-gray-500';
-            }
-
-            // Format uptime
-            const u = state.uptime || 0;
-            const hrs = String(Math.floor(u / 3600)).padStart(2, '0');
-            const mins = String(Math.floor((u % 3600) / 60)).padStart(2, '0');
-            const secs = String(u % 60).padStart(2, '0');
-            document.getElementById('live-uptime-val').innerText = hrs + ':' + mins + ':' + secs;
-            document.getElementById('live-lastcandle-val').innerText = state.lastCandleTime ? new Date(state.lastCandleTime).toLocaleTimeString() : '--:--:--';
-            document.getElementById('live-heartbeat-val').innerText = state.heartbeat ? new Date(state.heartbeat).toLocaleTimeString() : '--';
-
-            // 2) Account info
-            document.getElementById('live-equity-val').innerText = '$' + (state.currentEquity ?? 10000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            document.getElementById('live-cash-val').innerText = '$' + (state.cash ?? 10000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        // Backtest Run API
+        async function runBacktest() {
+            const coin = document.getElementById('backtest-coin').value;
+            const strategy = document.getElementById('backtest-strategy').value;
+            const interval = document.getElementById('backtest-interval').value;
             
-            const realizedColor = (state.realizedPnL ?? 0) >= 0 ? 'text-accentGreen' : 'text-accentRed';
-            document.getElementById('live-realized-val').innerText = '$' + (state.realizedPnL ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            document.getElementById('live-realized-val').className = 'text-base font-bold ' + realizedColor;
-
-            const unrealizedColor = (state.unrealizedPnL ?? 0) >= 0 ? 'text-accentGreen' : 'text-accentRed';
-            document.getElementById('live-unrealized-val').innerText = '$' + (state.unrealizedPnL ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            document.getElementById('live-unrealized-val').className = 'text-base font-bold ' + unrealizedColor;
-            document.getElementById('live-trades-count').innerText = state.closedTrades ? state.closedTrades.length : 0;
-
-            // 3) Active positions table
-            const posBody = document.getElementById('live-positions-body');
-            posBody.innerHTML = '';
-            if (!state.activePositions || state.activePositions.length === 0) {
-                posBody.innerHTML = '<tr><td colspan="10" class="py-6 text-center text-gray-500">Açık pozisyon bulunmuyor.</td></tr>';
-            } else {
-                state.activePositions.forEach(p => {
-                    const tr = document.createElement('tr');
-                    tr.className = 'hover:bg-slate-800/30 transition-all font-mono';
-                    
-                    const pnlColor = p.currentPnLPercent >= 0 ? 'text-accentGreen font-bold' : 'text-accentRed font-bold';
-                    const sign = p.currentPnLPercent >= 0 ? '+' : '';
-                    
-                    tr.innerHTML = '<td>' + p.coin + '</td>' +
-                        '<td class="py-3 text-gray-400 font-sans">' + p.strategyName + '</td>' +
-                        '<td class="py-3 text-right text-gray-300 font-mono">' + p.entryPrice.toFixed(2) + '</td>' +
-                        '<td class="py-3 text-right text-gray-300 font-mono">' + p.currentPrice.toFixed(2) + '</td>' +
-                        '<td class="py-3 text-right text-gray-400 font-mono">' + p.quantity.toFixed(4) + '</td>' +
-                        '<td class="py-3 text-right text-accentRed font-mono">' + p.stopLoss.toFixed(2) + '</td>' +
-                        '<td class="py-3 text-right text-accentGreen font-mono">' + p.takeProfit.toFixed(2) + '</td>' +
-                        '<td class="py-3 text-right text-gray-400 font-mono">' + (p.mae ?? 0).toFixed(2) + '%</td>' +
-                        '<td class="py-3 text-right text-gray-400 font-mono">' + (p.mfe ?? 0).toFixed(2) + '%</td>' +
-                        '<td class="py-3 text-right font-bold font-mono ' + pnlColor + '">' + sign + p.currentPnLPercent.toFixed(2) + '% ($' + sign + p.currentPnLUsdt.toFixed(2) + ')</td>';
-                    posBody.appendChild(tr);
+            document.getElementById('backtest-loader').classList.remove('hidden');
+            document.getElementById('backtest-results').classList.add('hidden');
+            
+            try {
+                const runRes = await fetch('/api/backtest/run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ coin, strategy, interval })
                 });
-            }
-
-            // 4) Signals watch list
-            const signalList = document.getElementById('live-signals-list');
-            signalList.innerHTML = '';
-            if (!state.pendingSignals || state.pendingSignals.length === 0) {
-                signalList.innerHTML = '<div class="text-gray-500 text-xs text-center py-8">Henüz üretilmiş bir sinyal bulunmuyor.</div>';
-            } else {
-                const reversedSignals = [...state.pendingSignals].reverse();
-                reversedSignals.forEach(s => {
-                    const sideColor = s.side === 'BUY' ? 'text-accentGreen' : 'text-accentRed';
-                    const badge = document.createElement('div');
-                    badge.className = 'p-2.5 bg-black/30 border border-glassBorder rounded-lg flex items-center justify-between text-xs font-mono';
-                    badge.innerHTML = '<div class="flex items-center space-x-2">' +
-                            '<span class="font-bold text-gray-200">' + s.coin + '</span>' +
-                            '<span class="text-gray-500">|</span>' +
-                            '<span class="text-gray-400">' + new Date(s.time).toLocaleTimeString() + '</span>' +
-                        '</div>' +
-                        '<div class="flex items-center space-x-2">' +
-                            '<span class="' + sideColor + ' font-bold">' + s.side + '</span>' +
-                            '<span class="text-gray-500">@</span>' +
-                            '<span class="text-gray-200">' + s.price.toFixed(2) + '</span>' +
-                        '</div>';
-                    signalList.appendChild(badge);
-                });
-            }
-
-            // 5) Live Trade journal
-            const journalBody = document.getElementById('live-journal-body');
-            journalBody.innerHTML = '';
-            if (!state.closedTrades || state.closedTrades.length === 0) {
-                journalBody.innerHTML = '<tr><td colspan="9" class="py-6 text-center text-gray-500">Tamamlanmış işlem bulunmuyor.</td></tr>';
-            } else {
-                const reversedTrades = [...state.closedTrades].reverse();
-                reversedTrades.forEach(t => {
-                    const tr = document.createElement('tr');
-                    tr.className = 'hover:bg-slate-800/30 transition-all font-mono';
+                const runData = await runRes.json();
+                
+                if (runData.success) {
+                    const reportsRes = await fetch('/api/reports');
+                    const reportsList = await reportsRes.json();
                     
-                    const pnlColor = t.realizedPnLPercent >= 0 ? 'text-accentGreen' : 'text-accentRed';
-                    const sign = t.realizedPnLPercent >= 0 ? '+' : '';
-                    
-                    const dur = t.holdingDurationSeconds || 0;
-                    let durStr = dur + 's';
-                    if (dur > 60) {
-                        durStr = Math.floor(dur / 60) + 'dk ' + (dur % 60) + 's';
+                    if (reportsList.length > 0) {
+                        reportsList.sort((a, b) => b.createdAt - a.createdAt);
+                        const newestReport = reportsList[0];
+                        
+                        const detailRes = await fetch(`/api/reports/${newestReport.filename}`);
+                        const reportData = await detailRes.json();
+                        
+                        const netReturn = reportData.totalReturn ?? 0;
+                        const trades = reportData.totalTrades ?? 0;
+                        const winRate = reportData.winRate ?? 0;
+                        const maxDd = reportData.maxDrawdown ?? 0;
+                        const sharpe = reportData.sharpeRatio ?? 0;
+                        
+                        const retEl = document.getElementById('result-return');
+                        retEl.innerText = `${netReturn >= 0 ? '+' : ''}${netReturn.toFixed(2)}%`;
+                        retEl.className = `text-lg font-black font-mono mt-1 ${netReturn >= 0 ? 'text-emerald-400' : 'text-rose-500'}`;
+                        
+                        document.getElementById('result-trades').innerText = trades;
+                        document.getElementById('result-winrate').innerText = `%${winRate.toFixed(1)}`;
+                        document.getElementById('result-maxdd').innerText = `${maxDd.toFixed(2)}%`;
+                        document.getElementById('result-sharpe').innerText = sharpe.toFixed(2);
+                        
+                        document.getElementById('backtest-results').classList.remove('hidden');
+                    } else {
+                        alert('Rapor listesi boş döndü.');
                     }
-                    
-                    tr.innerHTML = '<td class="py-3 font-semibold text-gray-200">' + t.coin + '</td>' +
-                        '<td class="py-3 text-gray-400 font-mono">' + t.entryPrice.toFixed(2) + '</td>' +
-                        '<td class="py-3 text-gray-400 font-mono">' + t.exitPrice.toFixed(2) + '</td>' +
-                        '<td class="py-3 font-bold font-mono ' + pnlColor + '">' + sign + t.realizedPnLPercent.toFixed(2) + '% ($' + sign + t.realizedPnLUsdt.toFixed(2) + ')</td>' +
-                        '<td class="py-3 text-gray-400 max-w-[120px] truncate" title="' + t.exitReason + '">' + t.exitReason + '</td>' +
-                        '<td class="py-3 text-right text-gray-400 font-mono">' + durStr + '</td>' +
-                        '<td class="py-3 text-right text-accentRed font-mono">' + (t.mae ?? 0).toFixed(2) + '%</td>' +
-                        '<td class="py-3 text-right text-accentGreen font-mono">' + (t.mfe ?? 0).toFixed(2) + '%</td>' +
-                        '<td class="py-3 text-right font-bold text-gray-200 font-mono">' + (t.rMultiple ?? 0).toFixed(2) + 'R</td>';
-                    journalBody.appendChild(tr);
-                });
+                } else {
+                    alert(`Backtest Hatası: ${runData.message || 'Bilinmeyen Hata'}`);
+                }
+            } catch (err) {
+                alert(`Bağlantı Hatası: ${err.message}`);
+            } finally {
+                document.getElementById('backtest-loader').classList.add('hidden');
             }
         }
 
-        // Initialize Builder dynamically
-        document.addEventListener('DOMContentLoaded', () => {
-            toggleBuilderFields();
-            generateDSL();
-            connectLiveWebSocket();
-        });
+        // Start connection on page load
+        setupWebsocket();
+        setupMarketWatchWebsocket();
     </script>
 </body>
 </html>

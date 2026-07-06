@@ -1,0 +1,7 @@
+{
+  "strategies": [
+    { "name": "ema-cross", "weight": 0.35 },
+    { "name": "donchian-breakout", "weight": 0.45 },
+    { "name": "sma-cross", "weight": 0.20 }
+  ]
+}

@@ -7,11 +7,18 @@
 		"XRPUSDT",
 		"ADAUSDT",
 		"AVAXUSDT",
-		"DOGEUSDT",
+		"LINKUSDT",
+		"NEARUSDT",
+		"SUIUSDT",
+		"APTUSDT",
 		"DOTUSDT",
-		"MATICUSDT"
+		"LTCUSDT",
+		"POLUSDT",
+		"FTMUSDT",
+		"ARBUSDT",
+		"OPUSDT"
 	],
-	"defaultInterval": "1d",
+	"defaultInterval": "1h",
 	"initialCapital": 10000,
 	"commissionPercent": 0.10,
 	"slippagePercent": 0.05

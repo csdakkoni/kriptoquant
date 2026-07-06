@@ -85,6 +85,13 @@ export interface BacktestResult {
 	readonly avgLoss: number; // Ortalama kayıp (USDT)
 	readonly maxDrawdown: number; // Yüzde
 	readonly sharpeRatio: number;
+	readonly sortinoRatio: number;
+	readonly calmarRatio: number;
+	readonly marRatio: number;
+	readonly longestDrawdownDays: number;
+	readonly timeUnderWaterPercent: number;
+	readonly avgRecoveryTimeDays: number;
+	readonly medianRecoveryTimeDays: number;
 	readonly profitFactor: number;
 	readonly trades: Trade[];
 	readonly equityCurve: EquityPoint[];

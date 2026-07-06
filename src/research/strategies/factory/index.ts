@@ -15,6 +15,8 @@ import {
 	donchianChannel,
 	atr,
 	supertrend,
+	vwapZScore,
+	bollingerBands,
 } from '../../../core/indicators/index.js';
 
 export function createStrategyFromConfig(config: StrategyConfig, candles: Candle[]): CompiledStrategy {
@@ -60,6 +62,17 @@ export function createStrategyFromConfig(config: StrategyConfig, candles: Candle
 				const period = ind.params[0] ?? 10;
 				const mult = ind.params[1] ?? 3.0;
 				indicatorsData.set(ind.id, supertrend(candles, period, mult));
+				break;
+			}
+			case 'vwap': {
+				const period = ind.params[0] ?? 20;
+				indicatorsData.set(ind.id, vwapZScore(candles, period));
+				break;
+			}
+			case 'bollinger': {
+				const period = ind.params[0] ?? 20;
+				const mult = ind.params[1] ?? 2.0;
+				indicatorsData.set(ind.id, bollingerBands(closes, period, mult));
 				break;
 			}
 			default:

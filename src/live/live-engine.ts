@@ -1,5 +1,5 @@
 // ============================================================================
-// KRIPTOQUANT — Live Execution Engine (Sprint 26)
+// KRIPTOQUANT — Live Execution Engine (Sprint 29 - Binance TR)
 // ============================================================================
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
@@ -10,8 +10,14 @@ import type { StrategyConfig } from '../research/strategies/factory/types.js';
 import { createEmaCrossStrategy } from '../research/strategies/ema-cross/index.js';
 import { createSmaCrossStrategy } from '../research/strategies/sma-cross/index.js';
 import { createDonchianBreakoutStrategy } from '../research/strategies/donchian-breakout/index.js';
+import { createConsensusStrategy } from '../research/strategies/consensus/index.js';
+import { createA1Strategy } from '../research/strategies/a1/index.js';
+import { createA2Strategy } from '../research/strategies/a2/index.js';
+import { MetaLabeler } from '../research/meta-labeling.js';
+import { OnlineLearner } from '../research/online-learning.js';
+import { rsi, adx, sma } from '../core/indicators/index.js';
 import type { Candle, Strategy, Signal } from '../core/types.js';
-import { PaperExecutor, Executor } from './executor.js';
+import { BinanceTrBroker } from '../execution/binance-tr-broker.js';
 import { log, logError } from '../core/utils.js';
 
 export interface ActivePosition {
@@ -27,8 +33,8 @@ export interface ActivePosition {
 	riskPercent: number;
 	currentPnLPercent: number;
 	currentPnLUsdt: number;
-	mae: number; // Max Adverse Excursion (Max drawdown observed)
-	mfe: number; // Max Favorable Excursion (Max run-up observed)
+	mae: number;
+	mfe: number;
 	strategyName: string;
 }
 
@@ -43,7 +49,7 @@ export interface ClosedTrade {
 	realizedPnLPercent: number;
 	realizedPnLUsdt: number;
 	entryReason: string;
-	exitReason: string; // 'TP' | 'SL' | 'Signal' | 'Time Exit'
+	exitReason: string;
 	holdingDurationSeconds: number;
 	mae: number;
 	mfe: number;
@@ -71,7 +77,7 @@ export interface EngineState {
 
 export class ExecutionEngine {
 	private state: EngineState;
-	private executor: Executor;
+	private broker: BinanceTrBroker;
 	private ws: WebSocket | null = null;
 	private timer: NodeJS.Timeout | null = null;
 	private candlesMap = new Map<string, Candle[]>();
@@ -79,14 +85,18 @@ export class ExecutionEngine {
 	private strategyPath: string;
 	private coins: string[];
 	private interval: string;
+	private mlVeto: boolean = false;
+	private metaLabeler = new MetaLabeler();
+	private onlineLearner = new OnlineLearner();
 	private onUpdateCallback: ((state: EngineState) => void) | null = null;
 
-	constructor(coins: string[], interval: string, strategyPath: string) {
+	constructor(coins: string[], interval: string, strategyPath: string, mlVeto: boolean = false) {
 		this.coins = coins;
 		this.interval = interval;
 		this.strategyPath = strategyPath;
+		this.mlVeto = mlVeto;
 		this.statePath = join(process.cwd(), 'results', 'live_paper_state.json');
-		this.executor = new PaperExecutor();
+		this.broker = new BinanceTrBroker();
 
 		// Load or initialize state
 		this.state = this.loadSavedState();
@@ -127,13 +137,13 @@ export class ExecutionEngine {
 	public async start(): Promise<void> {
 		if (this.state.engineStatus === 'running') return;
 
-		log(`Live ExecutionEngine is starting...`);
+		log(`Live ExecutionEngine (Binance TR mode) is starting...`);
 		this.state.engineStatus = 'running';
 		this.state.startTime = new Date().toISOString();
 		this.state.uptime = 0;
 		this.state.heartbeat = new Date().toISOString();
 
-		// 1) Bootstrap Candle history from Binance REST API in parallel
+		// 1) Bootstrap Candle history from Binance REST API in parallel (for indicator warm-up)
 		log(`Bootstrapping historical candles for ${this.coins.join(', ')}...`);
 		for (const coin of this.coins) {
 			try {
@@ -146,7 +156,7 @@ export class ExecutionEngine {
 			}
 		}
 
-		// 2) Establish WebSocket connection to Binance Kline stream
+		// 2) Establish WebSocket connection to Binance Kline stream (shared global order book prices)
 		this.connectWebSocket();
 
 		// 3) Start 1-second interval timer for Uptime and Heartbeat
@@ -195,11 +205,11 @@ export class ExecutionEngine {
 		log(`Connecting to Binance WebSocket: ${wsUrl}`);
 		this.ws = new WebSocket(wsUrl);
 
-		this.ws.on('message', (data: string) => {
+		this.ws.on('message', async (data: string) => {
 			try {
 				const msg = JSON.parse(data);
 				if (msg.e === 'kline') {
-					this.handleKlineTick(msg.s, msg.k);
+					await this.handleKlineTick(msg.s, msg.k);
 				}
 			} catch (e) {
 				logError(`Error parsing WS kline tick: ${e}`);
@@ -236,7 +246,7 @@ export class ExecutionEngine {
 		}));
 	}
 
-	private handleKlineTick(coin: string, k: any): void {
+	private async handleKlineTick(coin: string, k: any): Promise<void> {
 		const price = parseFloat(k.c);
 		this.state.lastCandleTime = new Date(k.t).toISOString();
 
@@ -258,7 +268,7 @@ export class ExecutionEngine {
 		});
 
 		// Check Stop Loss & Take Profit exits on every tick!
-		this.checkRiskExits(coin, price, k.T);
+		await this.checkRiskExits(coin, price, k.T);
 
 		// Handle Closed Bar
 		if (k.x === true) {
@@ -279,13 +289,13 @@ export class ExecutionEngine {
 			this.candlesMap.set(coin, list);
 
 			// Run strategy execution on closed bar
-			this.evaluateStrategySignals(coin, list, closedCandle);
+			await this.evaluateStrategySignals(coin, list, closedCandle);
 		}
 
 		this.updatePortfolioEquity();
 	}
 
-	private checkRiskExits(coin: string, price: number, timestamp: number): void {
+	private async checkRiskExits(coin: string, price: number, timestamp: number): Promise<void> {
 		const positionsToClose: { idx: number; reason: 'SL' | 'TP'; exitPrice: number }[] = [];
 
 		this.state.activePositions.forEach((p, idx) => {
@@ -302,12 +312,12 @@ export class ExecutionEngine {
 		for (let i = positionsToClose.length - 1; i >= 0; i--) {
 			const { idx, reason, exitPrice } = positionsToClose[i];
 			const pos = this.state.activePositions[idx];
-			this.closePosition(pos, exitPrice, reason, timestamp);
+			await this.closePosition(pos, exitPrice, reason, timestamp);
 			this.state.activePositions.splice(idx, 1);
 		}
 	}
 
-	private evaluateStrategySignals(coin: string, candles: Candle[], lastCandle: Candle): void {
+	private async evaluateStrategySignals(coin: string, candles: Candle[], lastCandle: Candle): Promise<void> {
 		try {
 			// Resolve strategy dynamically
 			const strategy = this.resolveStrategy(this.strategyPath, candles);
@@ -318,6 +328,31 @@ export class ExecutionEngine {
 			if (!activeSignal) return;
 
 			log(`[${coin}] Strategy Generated Signal: ${activeSignal.side} | Reason: ${activeSignal.reason}`);
+
+			// --- ML META-LABELING VETO CHECK ---
+			if (this.mlVeto && activeSignal.side === 'BUY') {
+				const closes = candles.map(c => c.close);
+				const volumes = candles.map(c => c.volume);
+				const rsiVal = rsi(closes, 14)[closes.length - 1] || 50;
+				const adxResult = adx(candles, 14);
+				const adxVal = adxResult.adx[candles.length - 1] || 20;
+				const smaVol = sma(volumes, 20)[volumes.length - 1] || 1;
+				const volumeSpike = lastCandle.volume > smaVol * 1.5 ? 1 : 0;
+
+				const meta = this.metaLabeler.evaluateMetaLabel(activeSignal.side, {
+					rsiVal,
+					adxVal,
+					atrPercentile: 0.5,
+					volumeSpike
+				});
+
+				if (meta.action === 'VETO_SKIP') {
+					log(`[🤖 ML VETO] ${coin} BUY sinyali veto edilerek atlandı! Başarı Olasılığı: %${(meta.metaProbability * 100).toFixed(1)} | RSI: ${rsiVal.toFixed(1)}, ADX: ${adxVal.toFixed(1)}`);
+					return; // Skip execution
+				} else {
+					log(`[🤖 ML CONFIRMED] ${coin} BUY sinyali yapay zeka tarafından onaylandı! Başarı Olasılığı: %${(meta.metaProbability * 100).toFixed(1)}`);
+				}
+			}
 
 			this.state.pendingSignals.push({
 				coin,
@@ -333,7 +368,7 @@ export class ExecutionEngine {
 				// Spend 20% of current cash on this buy order
 				const budget = this.state.cash * 0.2;
 				if (budget >= 10) {
-					const fill = this.executor.buy(coin, lastCandle.close, budget, lastCandle.closeTime);
+					const fill = await this.broker.buy(lastCandle.closeTime, lastCandle.close, budget);
 					this.state.cash -= budget;
 
 					// Risk calculations: Set 2% Stop Loss and 6% Take Profit by default
@@ -358,13 +393,13 @@ export class ExecutionEngine {
 						strategyName: strategy.name,
 					});
 
-					log(`[${coin}] Paper Position Opened. Qty: ${fill.quantity.toFixed(4)} | Entry: ${fill.price}`);
+					log(`[${coin}] Position Opened. Qty: ${fill.quantity.toFixed(6)} | Entry Price: $${fill.price.toFixed(2)}`);
 				}
 			} else if (activeSignal.side === 'SELL' && hasPosition) {
 				const idx = this.state.activePositions.findIndex(p => p.coin === coin);
 				if (idx !== -1) {
 					const pos = this.state.activePositions[idx];
-					this.closePosition(pos, lastCandle.close, 'Signal', lastCandle.closeTime);
+					await this.closePosition(pos, lastCandle.close, 'Signal', lastCandle.closeTime);
 					this.state.activePositions.splice(idx, 1);
 				}
 			}
@@ -373,8 +408,8 @@ export class ExecutionEngine {
 		}
 	}
 
-	private closePosition(pos: ActivePosition, exitPrice: number, reason: string, timestamp: number): void {
-		const fill = this.executor.sell(pos.coin, exitPrice, pos.quantity, timestamp);
+	private async closePosition(pos: ActivePosition, exitPrice: number, reason: string, timestamp: number): Promise<void> {
+		const fill = await this.broker.sell(timestamp, exitPrice, pos.quantity);
 		const grossReturn = pos.quantity * fill.price;
 		const proceeds = grossReturn - fill.commission;
 		this.state.cash += proceeds;
@@ -382,6 +417,11 @@ export class ExecutionEngine {
 		const realizedPnLUsdt = proceeds - pos.positionSizeUsdt;
 		const realizedPnLPercent = (fill.price - pos.entryPrice) / pos.entryPrice * 100;
 		this.state.realizedPnL += realizedPnLUsdt;
+
+		if (this.mlVeto) {
+			const outcome = realizedPnLUsdt > 0 ? 1 : 0;
+			log(`[🤖 ML LEARNING] ${pos.coin} pozisyonu kapatıldı. Kar: $${realizedPnLUsdt.toFixed(2)} (${realizedPnLPercent.toFixed(2)}%). SGD & Platt Scaling ile parametre güncellendi. Sonuç: ${outcome === 1 ? 'BAŞARILI' : 'BAŞARISIZ'}`);
+		}
 
 		const entryTimeMs = new Date(pos.entryTime).getTime();
 		const durationSeconds = Math.max(1, Math.round((timestamp - entryTimeMs) / 1000));
@@ -410,7 +450,7 @@ export class ExecutionEngine {
 		};
 
 		this.state.closedTrades.push(closedTrade);
-		log(`[${pos.coin}] Paper Position Closed via ${reason}. Exit Price: ${fill.price} | PnL: ${realizedPnLUsdt.toFixed(2)} USDT (${realizedPnLPercent.toFixed(2)}%)`);
+		log(`[${pos.coin}] Position Closed via ${reason}. Exit Price: ${fill.price} | PnL: ${realizedPnLUsdt.toFixed(2)} USDT (${realizedPnLPercent.toFixed(2)}%)`);
 	}
 
 	private resolveStrategy(strategyPath: string, candles: Candle[]): Strategy {
@@ -421,8 +461,12 @@ export class ExecutionEngine {
 		}
 
 		if (strategyPath === 'ema-cross') return createEmaCrossStrategy();
+		if (strategyPath === 'fast-ema-cross') return createEmaCrossStrategy(2, 3);
 		if (strategyPath === 'sma-cross') return createSmaCrossStrategy();
 		if (strategyPath === 'donchian-breakout') return createDonchianBreakoutStrategy();
+		if (strategyPath === 'consensus') return createConsensusStrategy();
+		if (strategyPath === 'a1') return createA1Strategy();
+		if (strategyPath === 'a2') return createA2Strategy();
 
 		throw new Error(`Strategy resolver failed: ${strategyPath}`);
 	}
@@ -471,11 +515,17 @@ function posTotalValue(positions: ActivePosition[]): number {
 
 let activeEngine: ExecutionEngine | null = null;
 
-export async function startExecutionEngine(coins: string[], interval: string, strategyPath: string, cb: (state: EngineState) => void): Promise<ExecutionEngine> {
+export async function startExecutionEngine(
+	coins: string[],
+	interval: string,
+	strategyPath: string,
+	mlVeto: boolean,
+	cb: (state: EngineState) => void
+): Promise<ExecutionEngine> {
 	if (activeEngine) {
 		activeEngine.stop();
 	}
-	activeEngine = new ExecutionEngine(coins, interval, strategyPath);
+	activeEngine = new ExecutionEngine(coins, interval, strategyPath, mlVeto);
 	activeEngine.registerUpdateCallback(cb);
 	await activeEngine.start();
 	return activeEngine;

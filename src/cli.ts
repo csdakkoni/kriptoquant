@@ -11,6 +11,7 @@
 
 import { parseArgs } from 'node:util';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'node:fs';
+import { join } from 'node:path';
 import type { PlatformConfig, RiskConfig, Strategy, StrategyDefaultsConfig } from './core/types.js';
 import { log, logError } from './core/utils.js';
 import { fetchAndStore } from './data/fetcher.js';
@@ -44,6 +45,7 @@ import type { DiscoveryReport } from './research/discovery/types.js';
 import { runMonteCarlo } from './research/analytics/monte-carlo.js';
 import { startDashboardServer } from './dashboard/server.js';
 import { startExecutionEngine } from './live/live-engine.js';
+import { runValidationLab } from './research/validation-lab.js';
 
 // Konfigürasyonları yükle
 import defaultConfig from '../config/default.json' with { type: 'json' };
@@ -398,7 +400,7 @@ async function commandPaperTrade(strategyName: string, coin: string, interval: s
 	startDashboardServer(3008);
 
 	// 2) Start the in-process ExecutionEngine
-	await startExecutionEngine(coins, interval, strategyName, (state) => {
+	await startExecutionEngine(coins, interval, strategyName, false, (state: any) => {
 		// Periodically print update status to console
 		if (state.uptime % 10 === 0) {
 			log(`[Live Engine Uptime: ${state.uptime}s] Equity: ${state.currentEquity.toFixed(2)} USDT | Cash: ${state.cash.toFixed(2)} | Active Positions: ${state.activePositions.length}`);
@@ -446,6 +448,163 @@ async function commandMultiAsset(strategyName: string, coinsStr?: string, interv
 	const jsonFilename = `results/multi_asset_summary_${strategy.name}_${timestamp}.json`;
 	exportMultiAssetJSON(summary, jsonFilename);
 	console.log(`  🔬 JSON: ${jsonFilename}`);
+}
+
+async function commandValidationLab(coinsStr?: string, intervalsStr?: string, startDate?: string, endDate?: string): Promise<void> {
+	const coins = coinsStr ? coinsStr.split(',') : ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'LTCUSDT', 'LINKUSDT', 'AVAXUSDT'];
+	const intervals = intervalsStr ? intervalsStr.split(',') : ['4h', '1d'];
+
+	log(`\n====================================================`);
+	log(`🔬 VALIDATION LAB — PARAMETRIC MATRIX SWEEP & SIGNIFICANCE`);
+	log(`====================================================`);
+	log(`Assets   : ${coins.join(', ')}`);
+	log(`Intervals: ${intervals.join(', ')}`);
+
+	const report = await runValidationLab({
+		coins,
+		intervals,
+		startDate,
+		endDate
+	});
+
+	log(`\nValidation complete. Matrix Runs: ${report.totalBacktestsRun}`);
+	
+	// Helper function to print Table 1 row (Significance & Adjusted P-values)
+	const printTable1Row = (row: any, rawRow?: any) => {
+		let sigStr = '❌ NO';
+		if (row.isSignificant) {
+			if (rawRow) {
+				sigStr = row.totalReturnPercent > rawRow.totalReturnPercent ? '✅ YES (Improved)' : '✅ YES (Degraded)';
+			} else {
+				sigStr = '✅ YES';
+			}
+		}
+		const pTStr = row.pValueTTestAdjusted === 1.0 ? '-' : row.pValueTTestAdjusted.toFixed(4);
+		const pWStr = row.pValueWilcoxonAdjusted === 1.0 ? '-' : row.pValueWilcoxonAdjusted.toFixed(4);
+		const dStr = row.cohensD === 0 ? '-' : row.cohensD.toFixed(3);
+		const ciStr = row.ciLower === 0 && row.ciUpper === 0 ? '-' : `[${row.ciLower.toFixed(3)}, ${row.ciUpper.toFixed(3)}]`;
+		
+		return `| ${row.configName.padEnd(28)} | ${row.totalTrades.toString().padEnd(6)} | ${row.winRatePercent.toFixed(1)}%     | ${row.sharpeRatio.toFixed(2).padEnd(6)} | ${row.totalReturnPercent.toFixed(2).padEnd(8)} | ${row.maxDrawdownPercent.toFixed(2).padEnd(8)} | ${pTStr.padEnd(12)} | ${pWStr.padEnd(13)} | ${dStr.padEnd(7)} | ${ciStr.padEnd(16)} | ${sigStr.padEnd(16)} |`;
+	};
+
+	// Helper function to print Table 2 row (Advanced Performance Metrics)
+	const printTable2Row = (row: any) => {
+		return `| ${row.configName.padEnd(28)} | ${row.sortinoRatio.toFixed(2).padEnd(7)} | ${row.calmarRatio.toFixed(2).padEnd(6)} | ${row.marRatio.toFixed(2).padEnd(5)} | ${row.longestDrawdownDays.toString().padEnd(11)} | ${row.avgRecoveryTimeDays.toFixed(1).padEnd(13)} | ${row.medianRecoveryTimeDays.toFixed(1).padEnd(13)} | ${row.timeUnderWaterPercent.toFixed(1).padEnd(18)}% | ${row.sqn.toFixed(2).padEnd(5)} | ${row.payoffRatio.toFixed(2).padEnd(12)} | ${row.kellyPercent.toFixed(1).padEnd(7)}% |`;
+	};
+
+	const table1Header = 
+		`| Configuration | Trades | Win Rate % | Sharpe | Return % | Max DD % | p-tTest(Adj) | p-Wilcox(Adj) | Cohen d | 95% CI Difference | Significant? |\n` +
+		`| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |`;
+
+	const table2Header = 
+		`| Configuration | Sortino | Calmar | MAR   | Max DD Days | Avg Rec. Days | Med Rec. Days | Time Under Water % | SQN   | Payoff Ratio | Kelly % |\n` +
+		`| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |`;
+
+	console.log(`\n### Global Summary - Table 1: Significance & Adjusted P-values\n`);
+	console.log(table1Header);
+	const rawRow = report.summaryTable.find(r => r.configName === 'Raw Strategy')!;
+	for (const row of report.summaryTable) {
+		console.log(printTable1Row(row, rawRow));
+	}
+	console.log('');
+
+	console.log(`### Global Summary - Table 2: Advanced Portfolio Metrics\n`);
+	console.log(table2Header);
+	for (const row of report.summaryTable) {
+		console.log(printTable2Row(row));
+	}
+	console.log('');
+
+	// Print Per-Asset Breakdowns
+	for (const coin of coins) {
+		const rows = report.assetBreakdowns[coin];
+		if (!rows) continue;
+		const rawAssetRow = rows.find(r => r.configName === 'Raw Strategy')!;
+
+		console.log(`### Asset Breakdown: ${coin} - Table 1: Significance & Adjusted P-values\n`);
+		console.log(table1Header);
+		for (const row of rows) {
+			console.log(printTable1Row(row, rawAssetRow));
+		}
+		console.log('');
+
+		console.log(`### Asset Breakdown: ${coin} - Table 2: Advanced Portfolio Metrics\n`);
+		console.log(table2Header);
+		for (const row of rows) {
+			console.log(printTable2Row(row));
+		}
+		console.log('');
+	}
+
+	// Generate Markdown Report content
+	let md = `# Validation Lab Report\n\n`;
+	md += `Generated: ${new Date().toISOString()}\n`;
+	md += `- **Matrix Size:** ${coins.length} coins x ${intervals.length} intervals x 4 ablation configurations\n`;
+	md += `- **Total Backtests Executed:** ${report.totalBacktestsRun}\n\n`;
+	md += `## Methodology Summary\n`;
+	md += `- **Multiple Comparisons Correction:** Holm-Bonferroni step-down correction applied to control Family-Wise Error Rate (FWER) across the 3 comparisons within each slice.\n`;
+	md += `- **Statistical Tests:** Paired Two-Tailed t-test (parametric) and Paired Wilcoxon Signed-Rank test (non-parametric).\n`;
+	md += `- **Sample Unit:** 90-day sub-period returns of the resampled equity curve.\n`;
+	md += `- **Significance Level:** alpha = 0.05 (95% confidence).\n`;
+	md += `- **Sharpe/Sortino:** Calculated on resampled daily equity returns, scaled by sqrt(365).\n\n`;
+
+	md += `## Global Summary - Table 1: Significance & Adjusted P-values\n\n`;
+	md += `| Configuration | Trades | Win Rate % | Sharpe | Return % | Max DD % | p-tTest(Adj) | p-Wilcox(Adj) | Cohen d | 95% CI Difference | Significant? |\n`;
+	md += `| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n`;
+	for (const row of report.summaryTable) {
+		let sigStr = '❌ NO';
+		if (row.isSignificant) {
+			sigStr = row.totalReturnPercent > rawRow.totalReturnPercent ? '✅ YES (Improved)' : '✅ YES (Degraded)';
+		}
+		const pTStr = row.pValueTTestAdjusted === 1.0 ? '-' : row.pValueTTestAdjusted.toFixed(4);
+		const pWStr = row.pValueWilcoxonAdjusted === 1.0 ? '-' : row.pValueWilcoxonAdjusted.toFixed(4);
+		const dStr = row.cohensD === 0 ? '-' : row.cohensD.toFixed(3);
+		const ciStr = row.ciLower === 0 && row.ciUpper === 0 ? '-' : `[${row.ciLower.toFixed(3)}, ${row.ciUpper.toFixed(3)}]`;
+		md += `| ${row.configName} | ${row.totalTrades} | ${row.winRatePercent.toFixed(1)}% | ${row.sharpeRatio.toFixed(2)} | ${row.totalReturnPercent.toFixed(2)}% | ${row.maxDrawdownPercent.toFixed(2)}% | ${pTStr} | ${pWStr} | ${dStr} | ${ciStr} | ${sigStr} |\n`;
+	}
+	md += `\n`;
+
+	md += `## Global Summary - Table 2: Advanced Portfolio Metrics\n\n`;
+	md += `| Configuration | Sortino | Calmar | MAR | Max DD Days | Avg Rec. Days | Med Rec. Days | Time Under Water % | SQN | Payoff Ratio | Kelly % |\n`;
+	md += `| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n`;
+	for (const row of report.summaryTable) {
+		md += `| ${row.configName} | ${row.sortinoRatio.toFixed(2)} | ${row.calmarRatio.toFixed(2)} | ${row.marRatio.toFixed(2)} | ${row.longestDrawdownDays} | ${row.avgRecoveryTimeDays.toFixed(1)} | ${row.medianRecoveryTimeDays.toFixed(1)} | ${row.timeUnderWaterPercent.toFixed(1)}% | ${row.sqn.toFixed(2)} | ${row.payoffRatio.toFixed(2)} | ${row.kellyPercent.toFixed(1)}% |\n`;
+	}
+	md += `\n`;
+
+	for (const coin of coins) {
+		const rows = report.assetBreakdowns[coin];
+		if (!rows) continue;
+		const rawAssetRow = rows.find(r => r.configName === 'Raw Strategy')!;
+		
+		md += `## Asset Breakdown: ${coin} - Table 1: Significance & Adjusted P-values\n\n`;
+		md += `| Configuration | Trades | Win Rate % | Sharpe | Return % | Max DD % | p-tTest(Adj) | p-Wilcox(Adj) | Cohen d | 95% CI Difference | Significant? |\n`;
+		md += `| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n`;
+		for (const row of rows) {
+			let sigStr = '❌ NO';
+			if (row.isSignificant) {
+				sigStr = row.totalReturnPercent > rawAssetRow.totalReturnPercent ? '✅ YES (Improved)' : '✅ YES (Degraded)';
+			}
+			const pTStr = row.pValueTTestAdjusted === 1.0 ? '-' : row.pValueTTestAdjusted.toFixed(4);
+			const pWStr = row.pValueWilcoxonAdjusted === 1.0 ? '-' : row.pValueWilcoxonAdjusted.toFixed(4);
+			const dStr = row.cohensD === 0 ? '-' : row.cohensD.toFixed(3);
+			const ciStr = row.ciLower === 0 && row.ciUpper === 0 ? '-' : `[${row.ciLower.toFixed(3)}, ${row.ciUpper.toFixed(3)}]`;
+			md += `| ${row.configName} | ${row.totalTrades} | ${row.winRatePercent.toFixed(1)}% | ${row.sharpeRatio.toFixed(2)} | ${row.totalReturnPercent.toFixed(2)}% | ${row.maxDrawdownPercent.toFixed(2)}% | ${pTStr} | ${pWStr} | ${dStr} | ${ciStr} | ${sigStr} |\n`;
+		}
+		md += `\n`;
+
+		md += `## Asset Breakdown: ${coin} - Table 2: Advanced Portfolio Metrics\n\n`;
+		md += `| Configuration | Sortino | Calmar | MAR | Max DD Days | Avg Rec. Days | Med Rec. Days | Time Under Water % | SQN | Payoff Ratio | Kelly % |\n`;
+		md += `| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n`;
+		for (const row of rows) {
+			md += `| ${row.configName} | ${row.sortinoRatio.toFixed(2)} | ${row.calmarRatio.toFixed(2)} | ${row.marRatio.toFixed(2)} | ${row.longestDrawdownDays} | ${row.avgRecoveryTimeDays.toFixed(1)} | ${row.medianRecoveryTimeDays.toFixed(1)} | ${row.timeUnderWaterPercent.toFixed(1)}% | ${row.sqn.toFixed(2)} | ${row.payoffRatio.toFixed(2)} | ${row.kellyPercent.toFixed(1)}% |\n`;
+		}
+		md += `\n`;
+	}
+
+	const outputPath = join(process.cwd(), 'results', 'validation_lab_report.md');
+	writeFileSync(outputPath, md, 'utf-8');
+	log(`Validation Lab report successfully written to: ${outputPath}\n`);
 }
 
 async function commandAlphaDiscover(
@@ -666,6 +825,7 @@ function printUsage(): void {
 	console.log('  walkforward   Walk-Forward Validation');
 	console.log('  walkforward-rolling  Rolling Walk-Forward (multi-window)');
 	console.log('  walkforward-multi  Multi-Asset Walk-Forward (cross-validation)');
+	console.log('  validation-lab  Validation Lab (ablation & paired t-test)');
 	console.log('  paper-trade   Paper Trading (simüle, para kullanılmaz)');
 	console.log('  backtest-config  JSON strateji dosyası ile backtest çalıştır');
 	console.log('  dashboard     Premium HTML Dashboard sunucusunu başlat');
@@ -676,12 +836,14 @@ function printUsage(): void {
 	console.log('  --interval <aralık>   Mum aralığı (ör. 1d, 4h, 1h)');
 	console.log('  --intervals <aralıklar> Virgülle ayrılmış aralıklar (ör. 4h,1d)');
 	console.log('  --strategy <ad>       Strateji adı (ema-cross, donchian-breakout)');
+	console.log('  --start-date <tarih>  Analiz başlangıç tarihi (ör. 2024-01-01)');
+	console.log('  --end-date <tarih>    Analiz bitiş tarihi (ör. 2025-01-01)');
 	console.log('');
 	console.log('Örnekler:');
 	console.log('  npx tsx src/cli.ts fetch --coin BTCUSDT --interval 1d');
 	console.log('  npx tsx src/cli.ts backtest --strategy donchian-breakout --coin BTCUSDT');
 	console.log('  npx tsx src/cli.ts sweep --coin BTCUSDT --interval 1d');
-	console.log('  npx tsx src/cli.ts walkforward --strategy donchian-breakout --coin BTCUSDT');
+	console.log('  npx tsx src/cli.ts validation-lab --coins BTCUSDT,ETHUSDT --intervals 4h,1d');
 	console.log('  npx tsx src/cli.ts walkforward-rolling --strategy donchian-breakout --coin BTCUSDT');
 	console.log('  npx tsx src/cli.ts walkforward-multi --strategy donchian-breakout --coins BTCUSDT,ETHUSDT --intervals 4h,1d');
 	console.log('  npx tsx src/cli.ts paper-trade --strategy donchian-breakout --coin BTCUSDT');
@@ -706,6 +868,8 @@ async function main(): Promise<void> {
 			'max-positions': { type: 'string', default: '5' },
 			candidates: { type: 'string', default: '20' },
 			port: { type: 'string', default: '3000' },
+			'start-date': { type: 'string' },
+			'end-date': { type: 'string' },
 			help: { type: 'boolean', short: 'h', default: false },
 		},
 		allowPositionals: true,
@@ -778,6 +942,9 @@ async function main(): Promise<void> {
 				break;
 			case 'verify-e2e':
 				await commandVerifyE2e();
+				break;
+			case 'validation-lab':
+				await commandValidationLab(values.coins, values.intervals, values['start-date'], values['end-date']);
 				break;
 			case 'dashboard': {
 				const portNum = parseInt(values.port ?? '3000', 10);

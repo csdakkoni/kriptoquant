@@ -22,20 +22,21 @@ export class PositionManager {
 	private highestPrice: number = 0;
 	private lowestPrice: number = 0;
 
-	open(fill: Fill, orderValue: number, atrAtEntry: number, stopLossPrice: number): void {
+	open(fill: Fill, quantityOrValue: number, atrAtEntry: number, stopLossPrice: number): void {
 		this.quantity = fill.quantity;
 		this.entryPrice = fill.price;
 		this.stopLossPrice = stopLossPrice;
 		this.atrAtEntry = atrAtEntry;
 		this.entryTimestamp = fill.timestamp;
 		this.entryCommission = fill.commission;
-		this.entryValue = orderValue;
+		// DÜZELTME: Giriş komisyonunu maliyet temeline ekleyerek kasa ile trade PnL uyumluluğunu sağla
+		this.entryValue = (fill.quantity * fill.price) + fill.commission;
 		this.entryOrder = {
 			timestamp: fill.timestamp,
 			side: 'BUY',
 			price: fill.price,
 			quantity: fill.quantity,
-			value: orderValue,
+			value: this.entryValue,
 		};
 		this.highestPrice = fill.price;
 		this.lowestPrice = fill.price;

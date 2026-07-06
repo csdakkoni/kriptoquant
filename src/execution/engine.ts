@@ -104,87 +104,121 @@ export function runExecution(
 		analyzedByTimestamp.set(a.timestamp, a);
 	}
 
-	// ── Mum mum execution ────────────────────────────────────────────────
+	// ── Mum Mum Simülasyon Döngüsü ──────────────────────────────────────
 	for (let i = strategy.warmupPeriod; i < candles.length; i++) {
 		const candle = candles[i];
 		const prevCandle = candles[i - 1];
 
-		// Günlük P&L takibi
 		portfolio.updateDay(candle.openTime);
 
-		// İşlem içi en yüksek/en düşük fiyat takibi (Mevcut pozisyonlar için)
-		portfolio.positions.updateIntraTradePrices(candle.high, candle.low);
-
-		// ── 1) STOP-LOSS kontrolü (Engine karar verir via StopRule, Broker uygular) ──
-		const stopSignal = portfolio.positions.evaluateStopLoss(candle, stopRule);
-		if (stopSignal) {
-			const fill = broker.sell(candle.openTime, stopSignal.exitPrice, portfolio.positions.getQuantity());
-			if (logger) logger.onFill(fill);
-
-			const trade = portfolio.positions.close(fill, stopSignal.reason, coin);
-			portfolio.addTrade(trade);
-			portfolio.addCapital(fill.quantity * fill.price - fill.commission);
-			if (logger) logger.onTrade(trade);
-		}
-
-		// ── 2) t+1 SİNYAL YÜRÜTME ──────────────────────────────────────
+		// ── PHASE 1: MARKET OPEN — AÇILIŞ EMİRLERİNİN YÜRÜTÜLMESİ ──
+		// t-1 mumunda üretilen sinyal, kronolojik olarak t mumunun AÇILIŞINDA (Open) işlenir.
 		const pendingSignal = signalsByTimestamp.get(prevCandle.openTime);
 		if (pendingSignal) {
-			const analyzed = analyzedByTimestamp.get(prevCandle.openTime);
+			if (pendingSignal.side === 'SELL' && portfolio.positions.hasOpen()) {
+				const fill = broker.sell(candle.openTime, candle.open, portfolio.positions.getQuantity());
+				if (logger) logger.onFill(fill);
 
-			if (!analyzed || !analyzed.accepted) {
-				portfolio.incrementRejected();
-			} else {
-				// Risk Engine
-				const riskDecision = evaluateRisk(
-					pendingSignal, portfolio.getCapital(), portfolio.getDailyPnl(), riskConfig,
-				);
+				const trade = portfolio.positions.close(fill, `Signal: ${pendingSignal.reason}`, coin);
+				portfolio.addTrade(trade);
+				portfolio.addCapital(fill.quantity * fill.price - fill.commission);
+				if (logger) logger.onTrade(trade);
+			} 
+			else if (pendingSignal.side === 'BUY' && !portfolio.positions.hasOpen()) {
+				const analyzed = analyzedByTimestamp.get(prevCandle.openTime);
 
-				if (riskDecision.approved) {
-					if (pendingSignal.side === 'BUY' && !portfolio.positions.hasOpen()) {
-						// BUY → Broker'a gönder → Portfolio'ya kaydet
+				if (!analyzed || !analyzed.accepted) {
+					portfolio.incrementRejected(); 
+				} else {
+					const riskDecision = evaluateRisk(
+						pendingSignal, portfolio.getCapital(), portfolio.getDailyPnl(), riskConfig
+					);
+
+					if (riskDecision.approved) {
 						const fill = broker.buy(candle.openTime, candle.open, riskDecision.positionSize);
 						if (logger) logger.onFill(fill);
 
-						const currentAtr = atrValues.length > i && !Number.isNaN(atrValues[i])
-							? atrValues[i]
-							: 0;
-						const stopLoss = currentAtr > 0
-							? fill.price - currentAtr * riskConfig.stopLossAtrMultiplier
-							: 0;
+						const lastClosedAtr = (i - 1 >= 0) && atrValues.length > (i - 1) && !Number.isNaN(atrValues[i - 1]) ? atrValues[i - 1] : 0;
+						const stopLoss = (lastClosedAtr > 0 && riskConfig.stopLossAtrMultiplier > 0) ? fill.price - lastClosedAtr * riskConfig.stopLossAtrMultiplier : 0;
 
-						portfolio.positions.open(fill, riskDecision.positionSize, currentAtr, stopLoss);
-						portfolio.deductCapital(riskDecision.positionSize);
-
-						// Yeni açılan pozisyon için mum içi fiyatları hemen güncelle
-						portfolio.positions.updateIntraTradePrices(candle.high, candle.low);
-
-					} else if (pendingSignal.side === 'SELL' && portfolio.positions.hasOpen()) {
-						// SELL → Broker'a gönder → Portfolio'yu güncelle
-						const fill = broker.sell(candle.openTime, candle.open, portfolio.positions.getQuantity());
-						if (logger) logger.onFill(fill);
-
-						const trade = portfolio.positions.close(fill, `Signal: ${pendingSignal.reason}`, coin);
-						portfolio.addTrade(trade);
-						portfolio.addCapital(fill.quantity * fill.price - fill.commission);
-						if (logger) logger.onTrade(trade);
+						// DÜZELTME: Pozisyon açarken gerçek miktar 'fill.quantity' kullanılır ve bütçe/komisyon hesaba katılır
+						portfolio.positions.open(fill, fill.quantity, lastClosedAtr, stopLoss);
+						const totalCostUsdt = (fill.quantity * fill.price) + fill.commission;
+						portfolio.deductCapital(totalCostUsdt);
 					}
 				}
 			}
 		}
 
-		// ── 3) Equity curve kaydı (mark-to-market) ──────────────────────
+		// Pozisyon açıldıktan hemen sonra fiyat takip mekanizmasını besle
 		portfolio.positions.updateIntraTradePrices(candle.high, candle.low);
+
+		// ── PHASE 2: INTRA-CANDLE — MUM İÇİ HAREKETLER VE STOP/TP DENETİMİ ──
+		// Açılışta girilen veya geçmişten taşınan pozisyon, mevcut mumun iğneleriyle anında test edilir.
+		if (portfolio.positions.hasOpen()) {
+			let exitSignal: { exitPrice: number; reason: string } | null = null;
+			const pos = portfolio.positions.getPositionInfo();
+
+			if (pos) {
+				const entryPrice = pos.entryPrice;
+				
+				// DÜZELTME: Yüzdesel SL/TP girdisi 1'den büyük veya eşitse 100'e bölünür (%5 girdisi 0.05 olarak işlenir)
+				const slPct = riskConfig.stopLossPercent && riskConfig.stopLossPercent >= 1 ? riskConfig.stopLossPercent / 100 : riskConfig.stopLossPercent;
+				const tpPct = riskConfig.takeProfitPercent && riskConfig.takeProfitPercent >= 1 ? riskConfig.takeProfitPercent / 100 : riskConfig.takeProfitPercent;
+
+				// A) Yüzdesel Stop Loss kontrolü
+				if (slPct && slPct > 0) {
+					const slPrice = entryPrice * (1 - slPct);
+					if (candle.low <= slPrice) {
+						exitSignal = {
+							exitPrice: candle.open <= slPrice ? candle.open : slPrice,
+							reason: `Stop-Loss Percent (-${(slPct * 100).toFixed(1)}%)`,
+						};
+					}
+				}
+
+				// B) Yüzdesel Take Profit kontrolü
+				if (!exitSignal && tpPct && tpPct > 0) {
+					const tpPrice = entryPrice * (1 + tpPct);
+					if (candle.high >= tpPrice) {
+						exitSignal = {
+							exitPrice: candle.open >= tpPrice ? candle.open : tpPrice,
+							reason: `Take-Profit Percent (+${(tpPct * 100).toFixed(1)}%)`,
+						};
+					}
+				}
+			}
+
+			// C) ATR Stop Kuralı Kontrolü
+			if (!exitSignal) {
+				const stopSignal = portfolio.positions.evaluateStopLoss(candle, stopRule);
+				if (stopSignal) {
+					exitSignal = stopSignal;
+				}
+			}
+
+			// Eğer mum içinde bir kırılım (SL/TP) yaşandıysa pozisyonu anında tasfiye et
+			if (exitSignal) {
+				const fill = broker.sell(candle.openTime, exitSignal.exitPrice, portfolio.positions.getQuantity());
+				if (logger) logger.onFill(fill);
+
+				const trade = portfolio.positions.close(fill, exitSignal.reason, coin);
+				portfolio.addTrade(trade);
+				portfolio.addCapital(fill.quantity * fill.price - fill.commission);
+				if (logger) logger.onTrade(trade);
+			}
+		}
+
+		// ── PHASE 3: MARKET CLOSE — GÜN SONU DEĞERLEME ──
 		portfolio.recordEquityPoint(candle.openTime, candle.close);
 	}
 
-	// ── Açık pozisyon kaldıysa son fiyattan kapat ────────────────────────
 	if (portfolio.positions.hasOpen()) {
 		const lastCandle = candles[candles.length - 1];
 		const fill = broker.sell(lastCandle.openTime, lastCandle.close, portfolio.positions.getQuantity());
 		if (logger) logger.onFill(fill);
 
-		const trade = portfolio.positions.close(fill, 'Backtest End (forced close)', coin);
+		const trade = portfolio.positions.close(fill, 'End of Backtest Force Exit', coin);
 		portfolio.addTrade(trade);
 		portfolio.addCapital(fill.quantity * fill.price - fill.commission);
 		if (logger) logger.onTrade(trade);
@@ -235,15 +269,94 @@ function buildResult(
 		? losingTrades.reduce((s, t) => s + t.pnl, 0) / losingTrades.length
 		: 0;
 
-	// Sharpe Ratio
-	const tradeReturns = trades.map((t) => t.pnlPercent / 100);
-	const avgRet = tradeReturns.length > 0
-		? tradeReturns.reduce((s, r) => s + r, 0) / tradeReturns.length
+	// Sharpe Ratio (Resampled to daily intervals as per Validation Blueprint)
+	const dailyEquityMap = new Map<string, number>();
+	for (const pt of equityCurve) {
+		const dateStr = new Date(pt.timestamp).toISOString().slice(0, 10);
+		dailyEquityMap.set(dateStr, pt.equity);
+	}
+	const sortedDays = Array.from(dailyEquityMap.keys()).sort();
+	const dailyEquity = sortedDays.map((d) => dailyEquityMap.get(d)!);
+
+	const dailyReturns: number[] = [];
+	for (let i = 1; i < dailyEquity.length; i++) {
+		const prev = dailyEquity[i - 1];
+		const curr = dailyEquity[i];
+		dailyReturns.push(prev > 0 ? (curr - prev) / prev : 0);
+	}
+
+	const avgDailyRet = dailyReturns.length > 0
+		? dailyReturns.reduce((s, r) => s + r, 0) / dailyReturns.length
 		: 0;
-	const stdRet = tradeReturns.length > 1
-		? Math.sqrt(tradeReturns.reduce((s, r) => s + (r - avgRet) ** 2, 0) / (tradeReturns.length - 1))
+	const stdDailyRet = dailyReturns.length > 1
+		? Math.sqrt(dailyReturns.reduce((s, r) => s + (r - avgDailyRet) ** 2, 0) / (dailyReturns.length - 1))
 		: 0;
-	const sharpeRatio = stdRet > 0 ? (avgRet / stdRet) * Math.sqrt(252) : 0;
+	const sharpeRatio = stdDailyRet > 0 ? (avgDailyRet / stdDailyRet) * Math.sqrt(365) : 0;
+
+	// Sortino Ratio (Downside deviation relative to daily returns)
+	const negativeReturns = dailyReturns.filter((r) => r < 0);
+	const sumSqNegative = negativeReturns.reduce((s, r) => s + r ** 2, 0);
+	const stdDown = dailyReturns.length > 0 ? Math.sqrt(sumSqNegative / dailyReturns.length) : 0;
+	const sortinoRatio = stdDown > 0 ? (avgDailyRet / stdDown) * Math.sqrt(365) : 0;
+
+	// Calmar Ratio (Annualized return divided by maximum drawdown)
+	const numDays = candles.length > 1
+		? (candles[candles.length - 1].openTime - candles[0].openTime) / (24 * 60 * 60 * 1000)
+		: 0;
+	const annualizedReturn = numDays > 30
+		? ((finalCapital / initialCapital) ** (365 / numDays) - 1) * 100
+		: totalReturn;
+	const calmarRatio = portfolio.getMaxDrawdown() > 0 ? annualizedReturn / portfolio.getMaxDrawdown() : 0;
+
+	// Drawdown Duration Metrics (Resampled daily)
+	let runningPeak = initialCapital;
+	let longestDrawdownDays = 0;
+	let currentDrawdownDays = 0;
+	let timeUnderWaterDays = 0;
+
+	const completedDrawdownDurations: number[] = [];
+	let currentDrawdownDuration = 0;
+	let peak = initialCapital;
+	let inDrawdown = false;
+
+	for (const eq of dailyEquity) {
+		if (eq > peak) {
+			peak = eq;
+			if (inDrawdown) {
+				completedDrawdownDurations.push(currentDrawdownDuration);
+				currentDrawdownDuration = 0;
+				inDrawdown = false;
+			}
+		} else if (eq < peak) {
+			inDrawdown = true;
+			currentDrawdownDuration++;
+		}
+
+		if (eq > runningPeak) {
+			runningPeak = eq;
+		}
+		if (eq < runningPeak) {
+			timeUnderWaterDays++;
+			currentDrawdownDays++;
+			if (currentDrawdownDays > longestDrawdownDays) {
+				longestDrawdownDays = currentDrawdownDays;
+			}
+		} else {
+			currentDrawdownDays = 0;
+		}
+	}
+	const timeUnderWaterPercent = dailyEquity.length > 0
+		? (timeUnderWaterDays / dailyEquity.length) * 100
+		: 0;
+
+	let avgRecoveryTimeDays = 0;
+	let medianRecoveryTimeDays = 0;
+	if (completedDrawdownDurations.length > 0) {
+		avgRecoveryTimeDays = completedDrawdownDurations.reduce((s, v) => s + v, 0) / completedDrawdownDurations.length;
+		const sorted = [...completedDrawdownDurations].sort((a, b) => a - b);
+		const mid = Math.floor(sorted.length / 2);
+		medianRecoveryTimeDays = sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+	}
 
 	// Profit Factor
 	const grossProfit = winningTrades.reduce((s, t) => s + t.pnl, 0);
@@ -272,6 +385,13 @@ function buildResult(
 		avgLoss: round(avgLoss),
 		maxDrawdown: round(portfolio.getMaxDrawdown()),
 		sharpeRatio: round(sharpeRatio, 3),
+		sortinoRatio: round(sortinoRatio, 3),
+		calmarRatio: round(calmarRatio, 3),
+		marRatio: round(calmarRatio, 3), // MAR is equivalent to Calmar over the full period
+		longestDrawdownDays,
+		timeUnderWaterPercent: round(timeUnderWaterPercent, 2),
+		avgRecoveryTimeDays: round(avgRecoveryTimeDays, 1),
+		medianRecoveryTimeDays: round(medianRecoveryTimeDays, 1),
 		profitFactor: round(profitFactor, 3),
 		trades,
 		equityCurve,
