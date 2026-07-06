@@ -71,6 +71,10 @@ export interface EngineState {
 	equityCurveLive: { time: string; equity: number }[];
 	heartbeat: string;
 	lastCandleTime: string;
+	coins?: string[];
+	interval?: string;
+	strategyPath?: string;
+	mlVeto?: boolean;
 }
 
 // ─── ExecutionEngine Singleton & Service ────────────────────────────────────
@@ -142,6 +146,10 @@ export class ExecutionEngine {
 		this.state.startTime = new Date().toISOString();
 		this.state.uptime = 0;
 		this.state.heartbeat = new Date().toISOString();
+		this.state.coins = this.coins;
+		this.state.interval = this.interval;
+		this.state.strategyPath = this.strategyPath;
+		this.state.mlVeto = this.mlVeto;
 
 		// 1) Bootstrap Candle history from Binance REST API in parallel (for indicator warm-up)
 		log(`Bootstrapping historical candles for ${this.coins.join(', ')}...`);

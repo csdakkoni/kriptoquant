@@ -725,6 +725,22 @@ export function startDashboardServer(port: number = 3000): any {
 		log(`  📊 KRIPTOQUANT DASHBOARD SERVER RUNNING`);
 		log(`  🚀 URL: http://localhost:${port}`);
 		log(`================================================================\n`);
+
+		// Check for auto-resume on server startup
+		try {
+			const state = getExecutionEngineState();
+			if (state && state.engineStatus === 'running' && state.coins && state.interval && state.strategyPath) {
+				log(`[Auto-Resume] Resuming previously running ExecutionEngine with ${state.coins.length} coins on interval ${state.interval}...`);
+				startExecutionEngine(state.coins, state.interval, state.strategyPath, !!state.mlVeto, (updatedState) => {
+					broadcastEngineState(updatedState);
+					broadcastPortfolioState(portfolio.getPortfolioAllocations());
+				}).catch(e => {
+					logError(`[Auto-Resume] Failed to resume ExecutionEngine: ${e}`);
+				});
+			}
+		} catch (e) {
+			logError(`[Auto-Resume] Error during checking auto-resume state: ${e}`);
+		}
 	});
 
 	return server;
