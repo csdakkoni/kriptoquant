@@ -14,6 +14,7 @@ import { createConsensusStrategy } from '../research/strategies/consensus/index.
 import { createA1Strategy } from '../research/strategies/a1/index.js';
 import { createA2Strategy } from '../research/strategies/a2/index.js';
 import { createTrendPullbackStrategy } from '../research/strategies/trend-pullback/index.js';
+import { createSupertrendStrategy } from '../research/strategies/supertrend/index.js';
 import { MetaLabeler } from '../research/meta-labeling.js';
 import { OnlineLearner } from '../research/online-learning.js';
 import { rsi, adx, sma } from '../core/indicators/index.js';
@@ -469,11 +470,8 @@ export class ExecutionEngine {
 			return createStrategyFromConfig(configJson, candles).strategy;
 		}
 
-		if (strategyPath === 'vwap-zscore') {
-			const resolvedPath = join(process.cwd(), 'config', 'strategies', 'strategy_vwap_zscore.json');
-			const raw = readFileSync(resolvedPath, 'utf-8');
-			const configJson = JSON.parse(raw) as StrategyConfig;
-			return createStrategyFromConfig(configJson, candles).strategy;
+		if (strategyPath === 'supertrend') {
+			return createSupertrendStrategy();
 		}
 		if (strategyPath === 'bollinger-bands') {
 			const resolvedPath = join(process.cwd(), 'config', 'strategies', 'strategy_bollinger_bands.json');
@@ -614,7 +612,7 @@ export function getAllExecutionEnginesSummary(): StrategySummary[] {
 		{ name: 'a2', label: 'A2 15m Scalper' },
 		{ name: 'donchian-breakout', label: 'Donchian Breakout' },
 		{ name: 'ema-cross', label: 'EMA Crossover' },
-		{ name: 'vwap-zscore', label: 'VWAP Z-Score' },
+		{ name: 'supertrend', label: 'Supertrend' },
 		{ name: 'bollinger-bands', label: 'Bollinger Bands' },
 		{ name: 'trend-pullback', label: 'Trend Pullback' }
 	];
