@@ -600,22 +600,28 @@
             const grid = document.getElementById('strategy-cards-grid');
             if (!grid) return;
 
-            grid.innerHTML = '';
             summaries.forEach(strat => {
                 const info = strategyMetadata[strat.name] || { label: strat.name, icon: '⚙️' };
                 const isSelected = strat.name === selectedStrategy;
                 const isRunning = strat.status === 'running';
                 
-                const card = document.createElement('div');
+                // Get or create card element
+                let card = grid.querySelector(`[data-strategy="${strat.name}"]`);
+                let isNew = false;
+                if (!card) {
+                    card = document.createElement('div');
+                    card.dataset.strategy = strat.name;
+                    card.onclick = () => selectStrategy(strat.name);
+                    isNew = true;
+                }
+
+                // Update class dynamically
                 card.className = `strategy-card p-5 rounded-2xl border ${isSelected ? 'border-emerald-500/80 shadow-emerald-500/10 glow-border-emerald bg-slate-900/10' : 'border-slate-800/80 bg-slate-950/40'} hover:border-slate-700 hover:bg-slate-900/20 cursor-pointer transition-all duration-300 flex flex-col justify-between relative group select-none min-h-[160px]`;
-                card.dataset.strategy = strat.name;
-                card.onclick = () => selectStrategy(strat.name);
 
                 const statusDotClass = isRunning ? 'bg-emerald-500 shadow-md shadow-emerald-500/40 animate-pulse' : 'bg-slate-600';
                 const statusText = isRunning ? 'Aktif' : 'Pasif';
                 const statusTextClass = isRunning ? 'text-emerald-400 font-bold' : 'text-slate-500';
                 
-                // Format positions badges
                 let positionsHtml = '';
                 if (strat.positions && strat.positions.length > 0) {
                     strat.positions.forEach(pos => {
@@ -636,7 +642,7 @@
                         `</div>`;
                 }
 
-                card.innerHTML = `
+                const newContent = `
                     <div class="flex items-center justify-between border-b border-white/5 pb-2">
                         <div class="flex flex-col">
                             <div class="flex items-center space-x-2">
@@ -667,7 +673,16 @@
                         </div>
                     </div>
                 `;
-                grid.appendChild(card);
+
+                // Strip spaces to compare content accurately
+                const strip = str => str.replace(/\s+/g, '');
+                if (isNew || strip(card.innerHTML) !== strip(newContent)) {
+                    card.innerHTML = newContent;
+                }
+
+                if (isNew) {
+                    grid.appendChild(card);
+                }
             });
         }
 
