@@ -501,57 +501,7 @@
         }
 
         // Setup Direct Binance MiniTicker Websocket for Market Watch prices
-        function setupMarketWatchWebsocket() {
-            const streams = watchCoins.map(c => `${c.toLowerCase()}@miniTicker`).join('/');
-            const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${streams}`);
-            
-            // Build initial static table
-            const tbody = document.getElementById('market-watch-body');
-            tbody.innerHTML = '';
-            
-            watchCoins.forEach(coin => {
-                const cleanName = coin.replace('USDT', '');
-                const row = document.createElement('tr');
-                row.id = `mw-row-${coin}`;
-                row.className = 'hover:bg-slate-900/10 transition-colors duration-150 border-b border-slate-900/40';
-                row.innerHTML = `
-                    <td class="py-2.5 font-bold text-slate-200">${cleanName}</td>
-                    <td id="mw-price-${coin}" class="py-2.5 font-mono text-slate-400 font-semibold">$0.00</td>
-                    <td id="mw-change-${coin}" class="py-2.5 font-mono text-right font-bold text-slate-500">0.00%</td>
-                `;
-                tbody.appendChild(row);
-            });
-            
-            ws.onmessage = (event) => {
-                try {
-                    const tick = JSON.parse(event.data);
-                    const coin = tick.s; // Symbol
-                    const price = parseFloat(tick.c); // Current Close Price
-                    const open = parseFloat(tick.o); // 24h Open Price
-                    
-                    const priceEl = document.getElementById(`mw-price-${coin}`);
-                    const changeEl = document.getElementById(`mw-change-${coin}`);
-                    const rowEl = document.getElementById(`mw-row-${coin}`);
-                    
-                    if (priceEl && changeEl && rowEl) {
-                        // Formatting decimals based on value size
-                        const decimals = price > 500 ? 2 : (price > 10 ? 3 : 4);
-                        priceEl.innerText = `$${price.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
-                        
-                        // Calculate 24h change percent
-                        const change = ((price - open) / open) * 100;
-                        changeEl.innerText = `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
-                        changeEl.className = `py-2.5 font-mono text-right font-bold ${change >= 0 ? 'text-emerald-400' : 'text-rose-500'}`;
-                        
-                        previousPrices[coin] = price;
-                    }
-                } catch (e) {}
-            };
-            
-            ws.onclose = () => {
-                setTimeout(setupMarketWatchWebsocket, 5000);
-            };
-        }
+        // Setup Direct Binance MiniTicker Websocket for Market Watch prices (Disabled)
 
         let selectedStrategy = 'consensus';
         let selectedInterval = '15m';
@@ -1011,7 +961,6 @@
 
         // Start connection on page load
         setupWebsocket();
-        setupMarketWatchWebsocket();
         setInterval(fetchStrategySummaries, 5000);
 
         // Bind dropdown change event to synchronize tabs
