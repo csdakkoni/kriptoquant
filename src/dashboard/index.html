@@ -669,7 +669,7 @@
                         </div>
                         <div class="flex items-center justify-between text-[9px] text-slate-500">
                             <span>Süre: <span class="font-mono font-bold text-slate-400">${uptimeStr}</span></span>
-                            <span>Sinyal: <span class="font-mono text-slate-400">${strat.lastCandleTime ? strat.lastCandleTime.substring(11, 16) : '-'}</span></span>
+                            <span>Sinyal: <span class="font-mono text-slate-400">${formatLocalTime(strat.lastCandleTime)}</span></span>
                         </div>
                     </div>
                 `;
@@ -684,6 +684,22 @@
                     grid.appendChild(card);
                 }
             });
+        }
+
+        // Convert UTC timestamps to browser local time
+        function formatLocalTime(isoString) {
+            if (!isoString) return '-';
+            try {
+                let dateStr = isoString;
+                if (!dateStr.endsWith('Z') && !dateStr.includes('+')) {
+                    dateStr += 'Z';
+                }
+                const date = new Date(dateStr);
+                if (isNaN(date.getTime())) return '-';
+                return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false });
+            } catch (e) {
+                return '-';
+            }
         }
 
         // Format uptime seconds into HH:MM:SS
