@@ -575,14 +575,15 @@
         function selectStrategy(strategy) {
             selectedStrategy = strategy;
             
-            // Highlight selected card
+            // Highlight selected card instantly and cleanly
             const cards = document.querySelectorAll('.strategy-card');
             cards.forEach(card => {
-                if (card.dataset.strategy === strategy) {
-                    card.className = card.className.replace('border-slate-800/80', 'border-emerald-500/80 shadow-emerald-500/10 glow-border-emerald');
-                } else {
-                    card.className = card.className.replace('border-emerald-500/80 shadow-emerald-500/10 glow-border-emerald', 'border-slate-800/80');
-                }
+                const isSelected = card.dataset.strategy === strategy;
+                card.className = `strategy-card p-5 rounded-2xl border ${
+                    isSelected 
+                        ? 'border-emerald-500/80 shadow-emerald-500/10 glow-border-emerald bg-slate-900/10' 
+                        : 'border-slate-800/80 bg-slate-950/40'
+                } hover:border-slate-700 hover:bg-slate-900/20 cursor-pointer transition-all duration-300 flex flex-col justify-between relative group select-none min-h-[160px]`;
             });
 
             // Update active strategy panel title

@@ -18,7 +18,6 @@ export function createTrendPullbackStrategy(): Strategy {
 		name: 'trend-pullback',
 		description: 'Trend Pullback (1H + 5M)',
 		warmupPeriod: 650, // Emüle edilen 1H EMA50 için warmup
-		tags: ['trend-following', 'pullback', 'multitimeframe'],
 
 		evaluate(candles: Candle[]): Signal[] {
 			const signals: Signal[] = [];
