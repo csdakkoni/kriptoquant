@@ -117,109 +117,6 @@
         <!-- LEFT COLUMN (5 Columns on Large screens: Backtest + Market Watch) -->
         <div class="lg:col-span-5 flex flex-col space-y-6">
             
-            <!-- PANEL 1 - BACKTEST -->
-            <section class="glass-panel p-6 rounded-2xl flex flex-col shadow-2xl relative overflow-hidden group transition-all duration-300 glow-border-blue">
-                <div class="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-blue-500 to-indigo-500"></div>
-                
-                <h2 class="text-xl font-bold text-slate-100 flex items-center space-x-2 mb-6">
-                    <span class="text-lg">🔍</span>
-                    <span>Geçmişi Test Et (Backtest)</span>
-                </h2>
-
-                <div class="space-y-4">
-                    <!-- Coin Select -->
-                    <div class="space-y-1.5">
-                        <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">İşlem Çifti</label>
-                        <select id="backtest-coin" class="w-full bg-slate-950 border border-slate-800/80 rounded-xl px-4 py-2.5 text-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition duration-300 text-sm font-semibold">
-                            <option value="BTCUSDT">BTCUSDT (Bitcoin)</option>
-                            <option value="ETHUSDT">ETHUSDT (Ethereum)</option>
-                            <option value="BNBUSDT">BNBUSDT (Binance Coin)</option>
-                            <option value="SOLUSDT">SOLUSDT (Solana)</option>
-                            <option value="XRPUSDT">XRPUSDT (Ripple)</option>
-                            <option value="ADAUSDT">ADAUSDT (Cardano)</option>
-                            <option value="AVAXUSDT">AVAXUSDT (Avalanche)</option>
-                            <option value="LINKUSDT">LINKUSDT (Chainlink)</option>
-                            <option value="NEARUSDT">NEARUSDT (Near Protocol)</option>
-                            <option value="SUIUSDT">SUIUSDT (Sui)</option>
-                            <option value="APTUSDT">APTUSDT (Aptos)</option>
-                            <option value="DOTUSDT">DOTUSDT (Polkadot)</option>
-                            <option value="LTCUSDT">LTCUSDT (Litecoin)</option>
-                            <option value="POLUSDT">POLUSDT (Polygon)</option>
-                            <option value="FTMUSDT">FTMUSDT (Fantom)</option>
-                            <option value="ARBUSDT">ARBUSDT (Arbitrum)</option>
-                            <option value="OPUSDT">OPUSDT (Optimism)</option>
-                        </select>
-                    </div>
-
-                    <!-- Strategy Select -->
-                    <div class="space-y-1.5">
-                        <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Strateji Modeli</label>
-                        <select id="backtest-strategy" class="w-full bg-slate-950 border border-slate-800/80 rounded-xl px-4 py-2.5 text-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition duration-300 text-sm font-semibold">
-                            <option value="a2">A2 Scalper (EMA & RSI & Volume)</option>
-                            <option value="a1">A1 Scalper (Sweep & Breakout)</option>
-                            <option value="consensus">Consensus Ensemble (Hibrit Mod)</option>
-                            <option value="donchian-breakout">Donchian Breakout (Kanal Kırılımı)</option>
-                            <option value="ema-cross">EMA Crossover (Model 9/21)</option>
-                            <option value="supertrend">Supertrend (Trend Takipçisi)</option>
-                            <option value="vwap-zscore">VWAP Z-Score (Mean Reversion)</option>
-                            <option value="bollinger-bands">Bollinger Bands (Volatilite Bandı)</option>
-                        </select>
-                    </div>
-
-                    <!-- Timeframe Select -->
-                    <div class="space-y-1.5">
-                        <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Zaman Dilimi</label>
-                        <select id="backtest-interval" class="w-full bg-slate-950 border border-slate-800/80 rounded-xl px-4 py-2.5 text-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition duration-300 text-sm font-semibold">
-                            <option value="1m">1 Dakika (1m)</option>
-                            <option value="15m">15 Dakika (15m)</option>
-                            <option value="1h">1 Saat (1h)</option>
-                            <option value="4h">4 Saat (4h)</option>
-                        </select>
-                    </div>
-
-                    <!-- Run Button -->
-                    <button onclick="runBacktest()" class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-3 px-4 rounded-xl shadow-lg shadow-blue-500/10 hover:shadow-blue-500/20 active:scale-[0.98] transition-all duration-300 text-sm">
-                        Test Et
-                    </button>
-                </div>
-
-                <!-- Loader -->
-                <div id="backtest-loader" class="hidden flex flex-col items-center justify-center py-8 space-y-3">
-                    <div class="w-7 h-7 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                    <span class="text-xs text-slate-400 font-semibold tracking-wide">Binance verileri çekilip test ediliyor...</span>
-                </div>
-
-                <!-- Backtest Results Box -->
-                <div id="backtest-results" class="hidden mt-4 bg-slate-950/60 p-4 rounded-xl border border-slate-800/80 space-y-3.5">
-                    <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Backtest Analiz Sonuçları</h3>
-                    <div class="grid grid-cols-3 gap-2.5">
-                        <div class="bg-slate-900/40 p-2.5 rounded-lg border border-white/5 flex flex-col items-center">
-                            <span class="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Net Getiri</span>
-                            <span id="result-return" class="text-md font-black text-emerald-400 mt-1 font-mono">-%0.0</span>
-                        </div>
-                        <div class="bg-slate-900/40 p-2.5 rounded-lg border border-white/5 flex flex-col items-center">
-                            <span class="text-[9px] text-slate-500 font-bold uppercase tracking-wider">İşlem</span>
-                            <span id="result-trades" class="text-md font-black text-slate-200 mt-1 font-mono">0</span>
-                        </div>
-                        <div class="bg-slate-900/40 p-2.5 rounded-lg border border-white/5 flex flex-col items-center">
-                            <span class="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Kazanma %</span>
-                            <span id="result-winrate" class="text-md font-black text-slate-200 mt-1 font-mono">%0.0</span>
-                        </div>
-                    </div>
-                    <!-- Additional Quant Stats -->
-                    <div class="grid grid-cols-2 gap-2.5 pt-0.5">
-                        <div class="bg-slate-900/20 px-3 py-1.5 rounded-lg border border-white/5 flex justify-between items-center text-[10px]">
-                            <span class="text-slate-500 font-bold">Maks Düşüş:</span>
-                            <span id="result-maxdd" class="font-bold text-rose-400 font-mono">0.00%</span>
-                        </div>
-                        <div class="bg-slate-900/20 px-3 py-1.5 rounded-lg border border-white/5 flex justify-between items-center text-[10px]">
-                            <span class="text-slate-500 font-bold">Sharpe Oranı:</span>
-                            <span id="result-sharpe" class="font-bold text-blue-400 font-mono">0.00</span>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
             <!-- PANEL 3 - LIVE MARKET WATCH -->
             <section class="glass-panel p-5 rounded-2xl flex flex-col shadow-2xl relative overflow-hidden group transition-all duration-300 glow-border-blue">
                 <div class="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-teal-500 to-emerald-500"></div>
@@ -229,7 +126,7 @@
                     <span>Canlı Piyasa Fiyatları (Binance TR)</span>
                 </h2>
 
-                <div class="max-h-[310px] overflow-y-auto pr-1">
+                <div class="max-h-[520px] overflow-y-auto pr-1">
                     <table class="w-full text-left text-xs text-slate-300 border-collapse">
                         <thead>
                             <tr class="border-b border-slate-800/80 text-slate-500 text-[9px] uppercase font-bold tracking-wider sticky top-0 bg-[#0c1424] py-1 z-10">
