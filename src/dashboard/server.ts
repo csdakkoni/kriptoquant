@@ -40,6 +40,7 @@ import { createDonchianBreakoutStrategy } from '../research/strategies/donchian-
 import { createConsensusStrategy } from '../research/strategies/consensus/index.js';
 import { createA1Strategy } from '../research/strategies/a1/index.js';
 import { createA2Strategy } from '../research/strategies/a2/index.js';
+import { createTrendPullbackStrategy } from '../research/strategies/trend-pullback/index.js';
 import { createStrategyFromConfig } from '../research/strategies/factory/index.js';
 import { CSVProvider } from '../data/csv-provider.js';
 
@@ -746,7 +747,7 @@ export function startDashboardServer(port: number = 3000): any {
 
 		// Check for auto-resume on server startup for all strategies
 		try {
-			const registeredStrategies = ['consensus', 'a1', 'a2', 'donchian-breakout', 'ema-cross', 'vwap-zscore', 'bollinger-bands'];
+			const registeredStrategies = ['consensus', 'a1', 'a2', 'donchian-breakout', 'ema-cross', 'vwap-zscore', 'bollinger-bands', 'trend-pullback'];
 			for (const strat of registeredStrategies) {
 				const state = getExecutionEngineState(strat);
 				if (state && state.engineStatus === 'running' && state.coins && state.interval && state.strategyPath) {

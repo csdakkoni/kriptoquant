@@ -13,6 +13,7 @@ import { createDonchianBreakoutStrategy } from '../research/strategies/donchian-
 import { createConsensusStrategy } from '../research/strategies/consensus/index.js';
 import { createA1Strategy } from '../research/strategies/a1/index.js';
 import { createA2Strategy } from '../research/strategies/a2/index.js';
+import { createTrendPullbackStrategy } from '../research/strategies/trend-pullback/index.js';
 import { MetaLabeler } from '../research/meta-labeling.js';
 import { OnlineLearner } from '../research/online-learning.js';
 import { rsi, adx, sma } from '../core/indicators/index.js';
@@ -488,6 +489,7 @@ export class ExecutionEngine {
 		if (strategyPath === 'consensus') return createConsensusStrategy();
 		if (strategyPath === 'a1') return createA1Strategy();
 		if (strategyPath === 'a2') return createA2Strategy();
+		if (strategyPath === 'trend-pullback') return createTrendPullbackStrategy();
 
 		throw new Error(`Strategy resolver failed: ${strategyPath}`);
 	}
@@ -613,7 +615,8 @@ export function getAllExecutionEnginesSummary(): StrategySummary[] {
 		{ name: 'donchian-breakout', label: 'Donchian Breakout' },
 		{ name: 'ema-cross', label: 'EMA Crossover' },
 		{ name: 'vwap-zscore', label: 'VWAP Z-Score' },
-		{ name: 'bollinger-bands', label: 'Bollinger Bands' }
+		{ name: 'bollinger-bands', label: 'Bollinger Bands' },
+		{ name: 'trend-pullback', label: 'Trend Pullback' }
 	];
 
 	return registeredStrategies.map(strat => {
