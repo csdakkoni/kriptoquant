@@ -74,7 +74,7 @@ export function startDashboardServer(port: number = 3000): any {
 		log(`[WebSocket] New client connected. Total clients: ${connectedClients.size}`);
 
 		// Immediately push current states to newly connected client
-		const engineState = getExecutionEngineState('consensus');
+		const engineState = getExecutionEngineState('consensus', '15m');
 		if (engineState) {
 			ws.send(JSON.stringify({ type: 'engine', data: engineState }));
 		}
@@ -444,7 +444,8 @@ export function startDashboardServer(port: number = 3000): any {
 			if (url.startsWith('/api/live-paper/details') && req.method === 'GET') {
 				const queryParams = new URL(`http://localhost${url}`).searchParams;
 				const strategy = queryParams.get('strategy') || 'consensus';
-				const state = getExecutionEngineState(strategy);
+				const interval = queryParams.get('interval') || '15m';
+				const state = getExecutionEngineState(strategy, interval);
 				res.writeHead(200, { 'Content-Type': 'application/json' });
 				res.end(JSON.stringify(state || { engineStatus: 'stopped' }));
 				return;
@@ -489,16 +490,17 @@ export function startDashboardServer(port: number = 3000): any {
 					try {
 						const params = JSON.parse(body || '{}');
 						const strategy = params.strategy || 'ema-cross';
+						const interval = params.interval || '15m';
 						
-						stopExecutionEngine(strategy);
-						const stoppedState = getExecutionEngineState(strategy);
+						stopExecutionEngine(strategy, interval);
+						const stoppedState = getExecutionEngineState(strategy, interval);
 						if (stoppedState) {
 							broadcastEngineState(stoppedState);
 						}
 						broadcastPortfolioState(portfolio.getPortfolioAllocations());
 
 						res.writeHead(200, { 'Content-Type': 'application/json' });
-						res.end(JSON.stringify({ success: true, message: `Execution Engine stopped for ${strategy}` }));
+						res.end(JSON.stringify({ success: true, message: `Execution Engine stopped for ${strategy} (${interval})` }));
 					} catch (e) {
 						logError(`Failed to stop execution engine: ${e}`);
 						res.writeHead(500, { 'Content-Type': 'text/plain' });
@@ -746,19 +748,22 @@ export function startDashboardServer(port: number = 3000): any {
 		log(`  🚀 URL: http://localhost:${port}`);
 		log(`================================================================\n`);
 
-		// Check for auto-resume on server startup for all strategies
+		// Check for auto-resume on server startup for all strategies & intervals
 		try {
 			const registeredStrategies = ['consensus', 'a1', 'a2', 'donchian-breakout', 'ema-cross', 'supertrend', 'bollinger-bands', 'trend-pullback'];
+			const intervals = ['1m', '15m', '1h', '4h'];
 			for (const strat of registeredStrategies) {
-				const state = getExecutionEngineState(strat);
-				if (state && state.engineStatus === 'running' && state.coins && state.interval && state.strategyPath) {
-					log(`[Auto-Resume] Resuming previously running ExecutionEngine for ${strat} with ${state.coins.length} coins on interval ${state.interval}...`);
-					startExecutionEngine(state.coins, state.interval, state.strategyPath, !!state.mlVeto, (updatedState) => {
-						broadcastEngineState(updatedState);
-						broadcastPortfolioState(portfolio.getPortfolioAllocations());
-					}).catch(e => {
-						logError(`[Auto-Resume] Failed to resume ExecutionEngine for ${strat}: ${e}`);
-					});
+				for (const interval of intervals) {
+					const state = getExecutionEngineState(strat, interval);
+					if (state && state.engineStatus === 'running' && state.coins && state.interval && state.strategyPath) {
+						log(`[Auto-Resume] Resuming previously running ExecutionEngine for ${strat} (${interval}) with ${state.coins.length} coins...`);
+						startExecutionEngine(state.coins, state.interval, state.strategyPath, !!state.mlVeto, (updatedState) => {
+							broadcastEngineState(updatedState);
+							broadcastPortfolioState(portfolio.getPortfolioAllocations());
+						}).catch(e => {
+							logError(`[Auto-Resume] Failed to resume ExecutionEngine for ${strat} (${interval}): ${e}`);
+						});
+					}
 				}
 			}
 		} catch (e) {

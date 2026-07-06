@@ -101,7 +101,7 @@ export class ExecutionEngine {
 		this.interval = interval;
 		this.strategyPath = strategyPath;
 		this.mlVeto = mlVeto;
-		this.statePath = join(process.cwd(), 'results', `live_paper_state_${strategyPath}.json`);
+		this.statePath = join(process.cwd(), 'results', `live_paper_state_${strategyPath}_${interval}.json`);
 		this.broker = new BinanceTrBroker();
 
 		// Load or initialize state
@@ -543,50 +543,53 @@ export async function startExecutionEngine(
 	mlVeto: boolean,
 	cb: (state: EngineState) => void
 ): Promise<ExecutionEngine> {
-	let engine = activeEngines.get(strategyPath);
+	const key = `${strategyPath}_${interval}`;
+	let engine = activeEngines.get(key);
 	if (engine) {
 		engine.stop();
 	}
 	engine = new ExecutionEngine(coins, interval, strategyPath, mlVeto);
 	engine.registerUpdateCallback(cb);
 	await engine.start();
-	activeEngines.set(strategyPath, engine);
+	activeEngines.set(key, engine);
 	return engine;
 }
 
 // In-memory state cache to prevent blocking file readFileSync during API polling
 const stateCache = new Map<string, EngineState>();
 
-export function stopExecutionEngine(strategyPath: string): void {
-	const engine = activeEngines.get(strategyPath);
+export function stopExecutionEngine(strategyPath: string, interval: string): void {
+	const key = `${strategyPath}_${interval}`;
+	const engine = activeEngines.get(key);
 	if (engine) {
 		const finalState = engine.getState();
 		finalState.engineStatus = 'stopped';
-		stateCache.set(strategyPath, finalState);
+		stateCache.set(key, finalState);
 		engine.stop();
-		activeEngines.delete(strategyPath);
+		activeEngines.delete(key);
 	}
 }
 
-export function getExecutionEngineState(strategyPath: string): EngineState | null {
-	const engine = activeEngines.get(strategyPath);
+export function getExecutionEngineState(strategyPath: string, interval: string): EngineState | null {
+	const key = `${strategyPath}_${interval}`;
+	const engine = activeEngines.get(key);
 	if (engine) {
 		const state = engine.getState();
-		stateCache.set(strategyPath, state); // keep cache warm
+		stateCache.set(key, state); // keep cache warm
 		return state;
 	}
 	
-	const cached = stateCache.get(strategyPath);
+	const cached = stateCache.get(key);
 	if (cached) {
 		return cached;
 	}
 
-	const statePath = join(process.cwd(), 'results', `live_paper_state_${strategyPath}.json`);
+	const statePath = join(process.cwd(), 'results', `live_paper_state_${strategyPath}_${interval}.json`);
 	if (existsSync(statePath)) {
 		try {
 			const raw = readFileSync(statePath, 'utf-8');
 			const parsed = JSON.parse(raw) as EngineState;
-			stateCache.set(strategyPath, parsed);
+			stateCache.set(key, parsed);
 			return parsed;
 		} catch {}
 	}
@@ -603,6 +606,7 @@ export interface StrategySummary {
 	pnlPercent: number;
 	uptime: number;
 	lastCandleTime: string;
+	activeIntervals: string[];
 }
 
 export function getAllExecutionEnginesSummary(): StrategySummary[] {
@@ -617,36 +621,54 @@ export function getAllExecutionEnginesSummary(): StrategySummary[] {
 		{ name: 'trend-pullback', label: 'Trend Pullback' }
 	];
 
+	const intervals = ['1m', '15m', '1h', '4h'];
+
 	return registeredStrategies.map(strat => {
-		const state = getExecutionEngineState(strat.name);
-		if (state) {
-			const startCash = 10000;
-			const equity = state.currentEquity ?? state.cash ?? startCash;
-			const pnlUsdt = equity - startCash;
-			const pnlPercent = (pnlUsdt / startCash) * 100;
-			const positions = (state.activePositions || []).map(p => `${p.coin.replace('USDT', '')} (${p.direction === 'LONG' ? 'L' : 'S'})`);
-			return {
-				name: strat.name,
-				status: state.engineStatus,
-				equity,
-				positionsCount: state.activePositions?.length || 0,
-				positions,
-				pnlUsdt,
-				pnlPercent,
-				uptime: state.uptime || 0,
-				lastCandleTime: state.lastCandleTime || ''
-			};
+		let isAnyRunning = false;
+		let totalPnLUsdt = 0;
+		let activePositionsCount = 0;
+		const activePositions: string[] = [];
+		const activeIntervals: string[] = [];
+		let maxUptime = 0;
+		let latestCandleTime = '';
+
+		for (const interval of intervals) {
+			const state = getExecutionEngineState(strat.name, interval);
+			if (state) {
+				const startCash = 10000;
+				const equity = state.currentEquity ?? state.cash ?? startCash;
+				const pnl = equity - startCash;
+				totalPnLUsdt += pnl;
+
+				if (state.engineStatus === 'running') {
+					isAnyRunning = true;
+					activeIntervals.push(interval);
+					activePositionsCount += state.activePositions?.length || 0;
+					(state.activePositions || []).forEach(p => {
+						activePositions.push(`${p.coin.replace('USDT', '')} (${interval})`);
+					});
+					maxUptime = Math.max(maxUptime, state.uptime || 0);
+					if (state.lastCandleTime && state.lastCandleTime > latestCandleTime) {
+						latestCandleTime = state.lastCandleTime;
+					}
+				}
+			}
 		}
+
+		const totalEquity = 10000 + totalPnLUsdt;
+		const totalPnLPercent = (totalPnLUsdt / 10000) * 100;
+
 		return {
 			name: strat.name,
-			status: 'stopped',
-			equity: 10000,
-			positionsCount: 0,
-			positions: [],
-			pnlUsdt: 0,
-			pnlPercent: 0,
-			uptime: 0,
-			lastCandleTime: ''
+			status: isAnyRunning ? 'running' : 'stopped',
+			equity: totalEquity,
+			positionsCount: activePositionsCount,
+			positions: activePositions,
+			pnlUsdt: totalPnLUsdt,
+			pnlPercent: totalPnLPercent,
+			uptime: maxUptime,
+			lastCandleTime: latestCandleTime,
+			activeIntervals
 		};
 	});
 }

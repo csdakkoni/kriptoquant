@@ -118,14 +118,25 @@
         <section class="lg:col-span-12 glass-panel p-6 md:p-8 rounded-2xl flex flex-col shadow-2xl relative overflow-hidden group transition-all duration-300 glow-border-emerald">
             <div class="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-emerald-500 to-teal-500"></div>
 
-            <div class="flex items-center justify-between mb-6 border-b border-white/5 pb-4">
+            <div class="flex flex-col md:flex-row md:items-center justify-between mb-6 border-b border-white/5 pb-4 gap-4">
                 <h2 class="text-xl font-bold text-slate-100 flex items-center space-x-2">
                     <span class="text-lg">⚡</span>
                     <span id="active-strategy-title">Canlı Otopilot (Paper Trading)</span>
                 </h2>
-                <div class="flex items-center space-x-2 bg-slate-950/40 px-3 py-1.5 rounded-full border border-slate-800">
-                    <span id="autopilot-status-dot" class="w-2.5 h-2.5 rounded-full bg-slate-600 transition-all duration-300"></span>
-                    <span id="autopilot-status-text" class="text-xs font-bold text-slate-400">Pasif (Durduruldu)</span>
+                
+                <div class="flex items-center space-x-4">
+                    <!-- Interval Tabs -->
+                    <div class="flex bg-slate-950/60 p-1 rounded-xl border border-slate-800/80" id="timeframe-tabs">
+                        <button onclick="changeInterval('1m')" class="timeframe-tab px-3 py-1 rounded-lg text-[10px] font-bold uppercase transition duration-200 text-slate-400 hover:text-slate-200" data-interval="1m">1M</button>
+                        <button onclick="changeInterval('15m')" class="timeframe-tab px-3 py-1 rounded-lg text-[10px] font-bold uppercase transition duration-200 bg-slate-900 text-slate-100 border border-white/5 shadow-sm" data-interval="15m">15M</button>
+                        <button onclick="changeInterval('1h')" class="timeframe-tab px-3 py-1 rounded-lg text-[10px] font-bold uppercase transition duration-200 text-slate-400 hover:text-slate-200" data-interval="1h">1H</button>
+                        <button onclick="changeInterval('4h')" class="timeframe-tab px-3 py-1 rounded-lg text-[10px] font-bold uppercase transition duration-200 text-slate-400 hover:text-slate-200" data-interval="4h">4H</button>
+                    </div>
+
+                    <div class="flex items-center space-x-2 bg-slate-950/40 px-3 py-1.5 rounded-full border border-slate-800">
+                        <span id="autopilot-status-dot" class="w-2.5 h-2.5 rounded-full bg-slate-600 transition-all duration-300"></span>
+                        <span id="autopilot-status-text" class="text-xs font-bold text-slate-400">Pasif (Durduruldu)</span>
+                    </div>
                 </div>
             </div>
 
@@ -480,7 +491,7 @@
                 try {
                     const msg = JSON.parse(event.data);
                     if (msg.type === 'engine') {
-                        if (msg.data.strategyPath === selectedStrategy) {
+                        if (msg.data.strategyPath === selectedStrategy && msg.data.interval === selectedInterval) {
                             renderAutopilotState(msg.data);
                         }
                         fetchStrategySummaries();
@@ -543,28 +554,31 @@
         }
 
         let selectedStrategy = 'consensus';
+        let selectedInterval = '15m';
+        let latestSummaries = [];
 
         // Fetch current autopilot state via REST API on startup or ws reconnect
         async function fetchInitialState() {
             fetchStrategySummaries();
-            fetchStrategyDetails(selectedStrategy);
+            fetchStrategyDetails(selectedStrategy, selectedInterval);
         }
 
         async function fetchStrategySummaries() {
             try {
                 const res = await fetch('/api/live-paper');
-                const summaries = await res.json();
-                renderStrategyCards(summaries);
+                latestSummaries = await res.json();
+                renderStrategyCards(latestSummaries);
             } catch (e) {
                 console.error('Failed to fetch strategy summaries', e);
             }
         }
 
-        async function fetchStrategyDetails(strategy) {
+        async function fetchStrategyDetails(strategy, interval) {
+            const intv = interval || selectedInterval;
             try {
-                const res = await fetch(`/api/live-paper/details?strategy=${strategy}`);
+                const res = await fetch(`/api/live-paper/details?strategy=${strategy}&interval=${intv}`);
                 const state = await res.json();
-                if (strategy === selectedStrategy) {
+                if (strategy === selectedStrategy && intv === selectedInterval) {
                     renderAutopilotState(state);
                 }
             } catch (e) {
@@ -572,9 +586,41 @@
             }
         }
 
+        function changeInterval(interval) {
+            selectedInterval = interval;
+
+            // Highlight selected tab
+            const tabs = document.querySelectorAll('.timeframe-tab');
+            tabs.forEach(tab => {
+                if (tab.dataset.interval === interval) {
+                    tab.className = 'timeframe-tab px-3 py-1 rounded-lg text-[10px] font-bold uppercase transition duration-200 bg-slate-900 text-slate-100 border border-white/5 shadow-sm';
+                } else {
+                    tab.className = 'timeframe-tab px-3 py-1 rounded-lg text-[10px] font-bold uppercase transition duration-200 text-slate-400 hover:text-slate-200';
+                }
+            });
+
+            // Synchronize with dropdown
+            const intervalDropdown = document.getElementById('autopilot-interval');
+            if (intervalDropdown) {
+                intervalDropdown.value = interval;
+            }
+
+            // Reload details for this strategy & interval
+            fetchStrategyDetails(selectedStrategy, interval);
+        }
+
         function selectStrategy(strategy) {
             selectedStrategy = strategy;
             
+            // Auto-switch to first active interval if any is running for this strategy
+            const summary = latestSummaries.find(s => s.name === strategy);
+            if (summary && summary.activeIntervals && summary.activeIntervals.length > 0) {
+                if (!summary.activeIntervals.includes(selectedInterval)) {
+                    selectedInterval = summary.activeIntervals[0];
+                }
+            }
+            changeInterval(selectedInterval);
+
             // Highlight selected card instantly and cleanly
             const cards = document.querySelectorAll('.strategy-card');
             cards.forEach(card => {
@@ -598,9 +644,6 @@
             if (stratDropdown) {
                 stratDropdown.value = strategy;
             }
-
-            // Immediately load details
-            fetchStrategyDetails(strategy);
         }
 
         function renderStrategyCards(summaries) {
@@ -636,11 +679,21 @@
                 const pnlSign = strat.pnlUsdt >= 0 ? '+' : '';
                 const pnlClass = strat.pnlUsdt >= 0 ? 'text-emerald-400' : 'text-rose-500';
 
+                let activeIntervalsHtml = '';
+                if (strat.activeIntervals && strat.activeIntervals.length > 0) {
+                    activeIntervalsHtml = `<div class="flex flex-wrap gap-1 mt-1">` + 
+                        strat.activeIntervals.map(inv => `<span class="bg-emerald-950/80 text-emerald-400 border border-emerald-500/20 px-1 py-0.5 rounded text-[8px] font-black uppercase font-mono leading-none">${inv}</span>`).join('') +
+                        `</div>`;
+                }
+
                 card.innerHTML = `
                     <div class="flex items-center justify-between border-b border-white/5 pb-2">
-                        <div class="flex items-center space-x-2">
-                            <span class="text-lg">${info.icon}</span>
-                            <span class="text-[12px] font-black text-slate-200">${info.label}</span>
+                        <div class="flex flex-col">
+                            <div class="flex items-center space-x-2">
+                                <span class="text-lg">${info.icon}</span>
+                                <span class="text-[12px] font-black text-slate-200">${info.label}</span>
+                            </div>
+                            ${activeIntervalsHtml}
                         </div>
                         <div class="flex items-center space-x-1.5 bg-slate-900/60 px-2 py-0.5 rounded-full border border-slate-800/80">
                             <span class="w-1.5 h-1.5 rounded-full ${statusDotClass}"></span>
@@ -882,16 +935,17 @@
 
         async function stopAutopilot() {
             const strategy = selectedStrategy || 'consensus';
+            const interval = selectedInterval || '15m';
             try {
                 const res = await fetch('/api/live-paper/stop', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ strategy })
+                    body: JSON.stringify({ strategy, interval })
                 });
                 const data = await res.json();
                 if (data.success) {
                     fetchStrategySummaries();
-                    fetchStrategyDetails(strategy);
+                    fetchStrategyDetails(strategy, interval);
                 }
             } catch (err) {
                 alert(`Sunucu Hatası: ${err.message}`);
@@ -959,6 +1013,14 @@
         setupWebsocket();
         setupMarketWatchWebsocket();
         setInterval(fetchStrategySummaries, 5000);
+
+        // Bind dropdown change event to synchronize tabs
+        const intvDropdown = document.getElementById('autopilot-interval');
+        if (intvDropdown) {
+            intvDropdown.addEventListener('change', (e) => {
+                changeInterval(e.target.value);
+            });
+        }
     </script>
 </body>
 </html>
