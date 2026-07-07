@@ -41,6 +41,7 @@ import { createConsensusStrategy } from '../research/strategies/consensus/index.
 import { createA1Strategy } from '../research/strategies/a1/index.js';
 import { createA2Strategy } from '../research/strategies/a2/index.js';
 import { createTrendPullbackStrategy } from '../research/strategies/trend-pullback/index.js';
+import { createFreedomStrategy } from '../research/strategies/freedom/index.js';
 import { createSupertrendStrategy } from '../research/strategies/supertrend/index.js';
 import { createStrategyFromConfig } from '../research/strategies/factory/index.js';
 import { CSVProvider } from '../data/csv-provider.js';
@@ -750,7 +751,7 @@ export function startDashboardServer(port: number = 3000): any {
 
 		// Check for auto-resume on server startup for all strategies & intervals
 		try {
-			const registeredStrategies = ['consensus', 'a1', 'a2', 'donchian-breakout', 'ema-cross', 'supertrend', 'bollinger-bands', 'trend-pullback'];
+			const registeredStrategies = ['consensus', 'a1', 'a2', 'donchian-breakout', 'ema-cross', 'supertrend', 'bollinger-bands', 'trend-pullback', 'freedom'];
 			const intervals = ['15m', '1h', '4h'];
 			for (const strat of registeredStrategies) {
 				for (const interval of intervals) {

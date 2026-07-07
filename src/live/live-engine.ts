@@ -14,6 +14,7 @@ import { createConsensusStrategy } from '../research/strategies/consensus/index.
 import { createA1Strategy } from '../research/strategies/a1/index.js';
 import { createA2Strategy } from '../research/strategies/a2/index.js';
 import { createTrendPullbackStrategy } from '../research/strategies/trend-pullback/index.js';
+import { createFreedomStrategy } from '../research/strategies/freedom/index.js';
 import { createSupertrendStrategy } from '../research/strategies/supertrend/index.js';
 import { MetaLabeler } from '../research/meta-labeling.js';
 import { OnlineLearner } from '../research/online-learning.js';
@@ -302,6 +303,23 @@ export class ExecutionEngine {
 		// Handle Closed Bar
 		if (k.x === true) {
 			log(`[${coin}] Kline Closed at ${price}`);
+			
+			// Freedom Soft Stop check at candle close!
+			const softPositionsToClose: number[] = [];
+			this.state.activePositions.forEach((p, idx) => {
+				if (p.coin === coin && p.strategyName === 'freedom') {
+					if (price <= p.stopLoss) {
+						softPositionsToClose.push(idx);
+					}
+				}
+			});
+			for (let i = softPositionsToClose.length - 1; i >= 0; i--) {
+				const idx = softPositionsToClose[i];
+				const pos = this.state.activePositions[idx];
+				await this.closePosition(pos, price, 'Soft Stop (Swing Low)', k.T);
+				this.state.activePositions.splice(idx, 1);
+			}
+
 			const closedCandle: Candle = {
 				openTime: k.t,
 				open: parseFloat(k.o),
@@ -314,7 +332,7 @@ export class ExecutionEngine {
 
 			const list = this.candlesMap.get(coin) || [];
 			list.push(closedCandle);
-			if (list.length > 500) list.shift();
+			if (list.length > 1000) list.shift(); // Keep up to 1000 candles for warm-up strategies like Freedom
 			this.candlesMap.set(coin, list);
 
 			// Run strategy execution on closed bar
@@ -325,14 +343,28 @@ export class ExecutionEngine {
 	}
 
 	private async checkRiskExits(coin: string, price: number, timestamp: number): Promise<void> {
-		const positionsToClose: { idx: number; reason: 'SL' | 'TP'; exitPrice: number }[] = [];
+		const positionsToClose: { idx: number; reason: string; exitPrice: number }[] = [];
 
 		this.state.activePositions.forEach((p, idx) => {
 			if (p.coin === coin) {
-				if (price <= p.stopLoss) {
-					positionsToClose.push({ idx, reason: 'SL', exitPrice: p.stopLoss });
-				} else if (p.takeProfit > 0 && price >= p.takeProfit) {
-					positionsToClose.push({ idx, reason: 'TP', exitPrice: p.takeProfit });
+				if (p.strategyName === 'freedom') {
+					// Freedom Hybrid stop model:
+					// - Hard stop is checked on every tick (instantly at entry - 4.5%)
+					// - Soft stop (Swing Low) is checked only on candle close
+					// - TP is checked on every tick
+					const hardStopPrice = p.entryPrice * 0.955;
+					if (price <= hardStopPrice) {
+						positionsToClose.push({ idx, reason: 'Hard Emergency Stop', exitPrice: hardStopPrice });
+					} else if (p.takeProfit > 0 && price >= p.takeProfit) {
+						positionsToClose.push({ idx, reason: 'TP', exitPrice: p.takeProfit });
+					}
+				} else {
+					// Standard strategies: SL & TP on every tick
+					if (price <= p.stopLoss) {
+						positionsToClose.push({ idx, reason: 'SL', exitPrice: p.stopLoss });
+					} else if (p.takeProfit > 0 && price >= p.takeProfit) {
+						positionsToClose.push({ idx, reason: 'TP', exitPrice: p.takeProfit });
+					}
 				}
 			}
 		});
@@ -510,6 +542,7 @@ export class ExecutionEngine {
 		if (strategyPath === 'a1') return createA1Strategy();
 		if (strategyPath === 'a2') return createA2Strategy();
 		if (strategyPath === 'trend-pullback') return createTrendPullbackStrategy();
+		if (strategyPath === 'freedom') return createFreedomStrategy();
 
 		throw new Error(`Strategy resolver failed: ${strategyPath}`);
 	}
@@ -640,7 +673,8 @@ export function getAllExecutionEnginesSummary(): StrategySummary[] {
 		{ name: 'ema-cross', label: 'EMA Crossover' },
 		{ name: 'supertrend', label: 'Supertrend' },
 		{ name: 'bollinger-bands', label: 'Bollinger Bands' },
-		{ name: 'trend-pullback', label: 'Trend Pullback' }
+		{ name: 'trend-pullback', label: 'Trend Pullback' },
+		{ name: 'freedom', label: 'Freedom Strategy' }
 	];
 
 	const intervals = ['15m', '1h', '4h'];
