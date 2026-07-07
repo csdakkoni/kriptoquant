@@ -153,11 +153,30 @@ export class ExecutionEngine {
 		this.state.strategyPath = this.strategyPath;
 		this.state.mlVeto = this.mlVeto;
 
+		// Determine warmup period by resolving strategy once with dummy candles
+		let warmupPeriod = 200;
+		try {
+			const dummyCandles: Candle[] = Array.from({ length: 1000 }, () => ({
+				openTime: Date.now(),
+				open: 100,
+				high: 100,
+				low: 100,
+				close: 100,
+				volume: 100,
+				closeTime: Date.now() + 60000
+			}));
+			const dummyStrategy = this.resolveStrategy(this.strategyPath, dummyCandles);
+			warmupPeriod = dummyStrategy.warmupPeriod || 200;
+		} catch (e) {
+			logError(`Failed to determine warmup period: ${e}`);
+		}
+
 		// 1) Bootstrap Candle history from Binance REST API in parallel (for indicator warm-up)
-		log(`Bootstrapping historical candles for ${this.coins.join(', ')}...`);
+		const historyLimit = Math.max(200, warmupPeriod + 50);
+		log(`Bootstrapping historical candles for ${this.coins.join(', ')} (limit = ${historyLimit})...`);
 		for (const coin of this.coins) {
 			try {
-				const history = await this.fetchHistory(coin, this.interval);
+				const history = await this.fetchHistory(coin, this.interval, historyLimit);
 				this.candlesMap.set(coin, history);
 				log(`  ✓ Loaded ${history.length} candles for ${coin}`);
 			} catch (e) {
