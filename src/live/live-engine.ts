@@ -621,7 +621,7 @@ export function getAllExecutionEnginesSummary(): StrategySummary[] {
 		{ name: 'trend-pullback', label: 'Trend Pullback' }
 	];
 
-	const intervals = ['1m', '15m', '1h', '4h'];
+	const intervals = ['15m', '1h', '4h'];
 
 	return registeredStrategies.map(strat => {
 		let isAnyRunning = false;

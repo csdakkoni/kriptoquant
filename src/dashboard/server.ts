@@ -460,7 +460,7 @@ export function startDashboardServer(port: number = 3000): any {
 						const params = JSON.parse(body || '{}');
 						const strategy = params.strategy || 'ema-cross';
 						const coins = params.coins || ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
-						const interval = params.interval || '1m';
+						const interval = params.interval || '15m';
 						const mlVeto = !!params.mlVeto;
 
 						log(`Deploying to Paper: Strategy = ${strategy}, Coins = ${coins.join(', ')}, Interval = ${interval}, ML Veto = ${mlVeto}`);
@@ -751,7 +751,7 @@ export function startDashboardServer(port: number = 3000): any {
 		// Check for auto-resume on server startup for all strategies & intervals
 		try {
 			const registeredStrategies = ['consensus', 'a1', 'a2', 'donchian-breakout', 'ema-cross', 'supertrend', 'bollinger-bands', 'trend-pullback'];
-			const intervals = ['1m', '15m', '1h', '4h'];
+			const intervals = ['15m', '1h', '4h'];
 			for (const strat of registeredStrategies) {
 				for (const interval of intervals) {
 					const state = getExecutionEngineState(strat, interval);

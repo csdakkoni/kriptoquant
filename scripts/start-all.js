@@ -2,7 +2,7 @@ import { writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 
 const strategies = ['consensus', 'a1', 'a2', 'donchian-breakout', 'ema-cross', 'supertrend', 'bollinger-bands', 'trend-pullback'];
-const intervals = ['1m', '15m', '1h', '4h'];
+const intervals = ['15m', '1h', '4h'];
 const coins = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT'];
 
 const resultsDir = join(process.cwd(), 'results');
@@ -10,7 +10,7 @@ if (!existsSync(resultsDir)) {
 	mkdirSync(resultsDir, { recursive: true });
 }
 
-console.log(`Starting generation of 32 live state files for auto-resume...`);
+console.log(`Starting generation of 24 live state files for auto-resume...`);
 
 for (const strat of strategies) {
 	for (const interval of intervals) {
