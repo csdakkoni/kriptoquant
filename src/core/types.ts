@@ -27,6 +27,8 @@ export interface Signal {
 	readonly price: number; // Sinyalin üretildiği fiyat
 	readonly confidence: number; // 0–1 arası güven skoru
 	readonly reason: string; // İndikatör gerekçesi
+	readonly stopLoss?: number; // Opsiyonel dinamik zarar kes seviyesi
+	readonly takeProfit?: number; // Opsiyonel dinamik kar al seviyesi
 	readonly metadata?: Record<string, number>; // İndikatör değerleri (ör. emaFast, emaSlow)
 }
 

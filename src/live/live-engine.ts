@@ -400,9 +400,12 @@ export class ExecutionEngine {
 					const fill = await this.broker.buy(lastCandle.closeTime, lastCandle.close, budget);
 					this.state.cash -= budget;
 
-					// Risk calculations: Set 2% Stop Loss and 6% Take Profit by default
-					const stopLossPrice = fill.price * 0.98;
-					const takeProfitPrice = fill.price * 1.06;
+					// Risk calculations: Use strategy-defined stopLoss/takeProfit if provided, else fallback to 2% / 6%
+					const stopLossPrice = activeSignal.stopLoss ?? fill.price * 0.98;
+					const takeProfitPrice = activeSignal.takeProfit ?? fill.price * 1.06;
+					const riskPercent = activeSignal.stopLoss 
+						? Math.abs((fill.price - activeSignal.stopLoss) / fill.price * 100)
+						: 2.0;
 
 					this.state.activePositions.push({
 						coin,
@@ -414,7 +417,7 @@ export class ExecutionEngine {
 						positionSizeUsdt: budget,
 						stopLoss: stopLossPrice,
 						takeProfit: takeProfitPrice,
-						riskPercent: 2.0,
+						riskPercent,
 						currentPnLPercent: 0,
 						currentPnLUsdt: 0,
 						mae: 0,

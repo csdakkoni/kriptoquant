@@ -130,6 +130,8 @@ export function createTrendPullbackStrategy(): Strategy {
 								side: 'BUY',
 								price: entryPrice,
 								confidence: 1.0,
+								stopLoss: stopLossPrice,
+								takeProfit: takeProfitPrice,
 								reason: `1H Trend Bullish + Pullback gerçekleşti + Hacimli yeşil onay mumu. SL: $${stopLossPrice.toFixed(2)} | TP: $${takeProfitPrice.toFixed(2)}`,
 							});
 							inPosition = true;
