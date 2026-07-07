@@ -150,75 +150,8 @@
                             <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Takip Edilecek Coinler</label>
                             <button id="toggle-all-btn" onclick="toggleAllCoins()" class="text-[9px] text-emerald-400 hover:text-emerald-300 font-bold bg-slate-900/60 px-2 py-0.5 rounded border border-white/5 active:scale-95 transition-all">Tümünü Kaldır</button>
                         </div>
-                        <div class="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 bg-slate-950/60 p-4 rounded-xl border border-slate-800/80">
-                            <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                                <input type="checkbox" name="autopilot-coins" value="BTCUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                                <span class="font-semibold text-[11px] tracking-wide">BTC</span>
-                            </label>
-                            <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                                <input type="checkbox" name="autopilot-coins" value="ETHUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                                <span class="font-semibold text-[11px] tracking-wide">ETH</span>
-                            </label>
-                            <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                                <input type="checkbox" name="autopilot-coins" value="BNBUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                                <span class="font-semibold text-[11px] tracking-wide">BNB</span>
-                            </label>
-                            <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                                <input type="checkbox" name="autopilot-coins" value="SOLUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                                <span class="font-semibold text-[11px] tracking-wide">SOL</span>
-                            </label>
-                            <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                                <input type="checkbox" name="autopilot-coins" value="XRPUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                                <span class="font-semibold text-[11px] tracking-wide">XRP</span>
-                            </label>
-                            <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                                <input type="checkbox" name="autopilot-coins" value="ADAUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                                <span class="font-semibold text-[11px] tracking-wide">ADA</span>
-                            </label>
-                            <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                                <input type="checkbox" name="autopilot-coins" value="AVAXUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                                <span class="font-semibold text-[11px] tracking-wide">AVAX</span>
-                            </label>
-                            <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                                <input type="checkbox" name="autopilot-coins" value="LINKUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                                <span class="font-semibold text-[11px] tracking-wide">LINK</span>
-                            </label>
-                            <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                                <input type="checkbox" name="autopilot-coins" value="NEARUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                                <span class="font-semibold text-[11px] tracking-wide">NEAR</span>
-                            </label>
-                            <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                                <input type="checkbox" name="autopilot-coins" value="SUIUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                                <span class="font-semibold text-[11px] tracking-wide">SUI</span>
-                            </label>
-                            <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                                <input type="checkbox" name="autopilot-coins" value="APTUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                                <span class="font-semibold text-[11px] tracking-wide">APT</span>
-                            </label>
-                            <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                                <input type="checkbox" name="autopilot-coins" value="DOTUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                                <span class="font-semibold text-[11px] tracking-wide">DOT</span>
-                            </label>
-                            <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                                <input type="checkbox" name="autopilot-coins" value="LTCUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                                <span class="font-semibold text-[11px] tracking-wide">LTC</span>
-                            </label>
-                            <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                                <input type="checkbox" name="autopilot-coins" value="POLUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                                <span class="font-semibold text-[11px] tracking-wide">POL</span>
-                            </label>
-                            <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                                <input type="checkbox" name="autopilot-coins" value="FTMUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                                <span class="font-semibold text-[11px] tracking-wide">FTM</span>
-                            </label>
-                            <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                                <input type="checkbox" name="autopilot-coins" value="ARBUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                                <span class="font-semibold text-[11px] tracking-wide">ARB</span>
-                            </label>
-                            <label class="flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                                <input type="checkbox" name="autopilot-coins" value="OPUSDT" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                                <span class="font-semibold text-[11px] tracking-wide">OP</span>
-                            </label>
+                        <div id="coins-checkboxes-grid" class="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 bg-slate-950/60 p-4 rounded-xl border border-slate-800/80">
+                            <!-- Generated dynamically by JS -->
                         </div>
                     </div>
 
@@ -382,8 +315,26 @@
             "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", 
             "ADAUSDT", "AVAXUSDT", "LINKUSDT", "NEARUSDT", "SUIUSDT", 
             "APTUSDT", "DOTUSDT", "LTCUSDT", "POLUSDT", "FTMUSDT", 
-            "ARBUSDT", "OPUSDT"
+            "ARBUSDT", "OPUSDT", "DOGEUSDT", "SHIBUSDT", "PEPEUSDT",
+            "WIFUSDT", "RENDERUSDT", "GRTUSDT", "TIAUSDT", "ATOMUSDT",
+            "FILUSDT", "INJUSDT", "LDOUSDT"
         ];
+        
+        function renderCoinCheckboxes() {
+            const grid = document.getElementById('coins-checkboxes-grid');
+            if (!grid) return;
+            grid.innerHTML = '';
+            watchCoins.forEach(coin => {
+                const cleanName = coin.replace('USDT', '');
+                const label = document.createElement('label');
+                label.className = 'flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none';
+                label.innerHTML = `
+                    <input type="checkbox" name="autopilot-coins" value="${coin}" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
+                    <span class="font-semibold text-[11px] tracking-wide">${cleanName}</span>
+                `;
+                grid.appendChild(label);
+            });
+        }
         
         const previousPrices = {};
 
@@ -989,6 +940,7 @@
         }
 
         // Start connection on page load
+        renderCoinCheckboxes();
         setupWebsocket();
         setInterval(fetchStrategySummaries, 5000);
 
