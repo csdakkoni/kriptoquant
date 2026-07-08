@@ -483,7 +483,7 @@ export class ExecutionEngine {
 						strategyName: strategy.name,
 					});
 
-					log(`[${coin}] Position Opened. Qty: ${fill.quantity.toFixed(6)} | Entry Price: $${fill.price.toFixed(2)}`);
+					log(`[🤖 ${strategy.name.toUpperCase()}] [${coin}] Pozisyon AÇILDI. Miktar: ${fill.quantity.toFixed(4)} | Giriş: $${fill.price.toFixed(2)}`);
 				}
 			} else if (activeSignal.side === 'SELL' && hasPosition) {
 				const idx = this.state.activePositions.findIndex(p => p.coin === coin);
@@ -540,7 +540,7 @@ export class ExecutionEngine {
 		};
 
 		this.state.closedTrades.push(closedTrade);
-		log(`[${pos.coin}] Position Closed via ${reason}. Exit Price: ${fill.price} | PnL: ${realizedPnLUsdt.toFixed(2)} USDT (${realizedPnLPercent.toFixed(2)}%)`);
+		log(`[🤖 ${pos.strategyName.toUpperCase()}] [${pos.coin}] Pozisyon KAPATILDI (${reason}). Giriş: $${pos.entryPrice.toFixed(2)} | Çıkış: $${fill.price.toFixed(2)} | Net PnL: $${realizedPnLUsdt.toFixed(2)} (${realizedPnLPercent.toFixed(2)}%)`);
 	}
 
 	private resolveStrategy(strategyPath: string, candles: Candle[]): Strategy {
