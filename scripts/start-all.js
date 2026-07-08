@@ -3,7 +3,18 @@ import { join } from 'path';
 
 const strategies = ['consensus', 'a1', 'a2', 'donchian-breakout', 'ema-cross', 'supertrend', 'bollinger-bands', 'trend-pullback', 'freedom', 'freedom_b'];
 const intervals = ['15m', '1h', '4h'];
-const coins = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT'];
+const coins = [
+	'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT', 
+	'ADAUSDT', 'AVAXUSDT', 'LINKUSDT', 'NEARUSDT', 'SUIUSDT', 
+	'APTUSDT', 'DOTUSDT', 'LTCUSDT', 'POLUSDT', 'FTMUSDT', 
+	'ARBUSDT', 'OPUSDT', 'DOGEUSDT', 'SHIBUSDT', 'PEPEUSDT',
+	'WIFUSDT', 'RENDERUSDT', 'GRTUSDT', 'TIAUSDT', 'ATOMUSDT',
+	'INJUSDT', 'LDOUSDT', 'FETUSDT', 'WLDUSDT', 'RUNEUSDT',
+	'AAVEUSDT', 'MKRUSDT', 'UNIUSDT', 'FILUSDT', 'ETCUSDT',
+	'ICPUSDT', 'SEIUSDT', 'IMXUSDT', 'STXUSDT', 'GALAUSDT',
+	'JASMYUSDT', 'BONKUSDT', 'FLOKIUSDT', 'NOTUSDT', 'ORDIUSDT',
+	'JUPUSDT', 'PYTHUSDT', 'PENDLEUSDT', 'ONDOUSDT', 'PEOPLEUSDT'
+];
 
 const resultsDir = join(process.cwd(), 'results');
 if (!existsSync(resultsDir)) {
