@@ -323,7 +323,7 @@
         let chartInstance = null;
         let consoleLogs = [];
         let previousStatus = 'stopped';
-        let previousPositionsCount = 0;
+        let previousPositionsCount = -1;
 
         const strategyMetadata = {
             'consensus': { label: 'Consensus Hybrid', icon: '🤖' },
@@ -822,13 +822,27 @@
             const positions = state.activePositions || [];
             
             // Position opening/closing logging
-            if (positions.length > previousPositionsCount) {
-                const newPos = positions[positions.length - 1];
-                addConsoleLog(`[ALIM SİNYALİ] ${newPos.coin} için long pozisyon açıldı. Giriş Fiyatı: $${newPos.entryPrice}`, 'success');
-            } else if (positions.length < previousPositionsCount) {
-                addConsoleLog(`[SATIM SİNYALİ] Pozisyon başarıyla kapatıldı. Kar realize edildi.`, 'system');
+            if (previousPositionsCount === -1) {
+                previousPositionsCount = positions.length;
+            } else {
+                if (positions.length > previousPositionsCount) {
+                    const newPos = positions[positions.length - 1];
+                    const stratLabel = (newPos.strategyName || 'Otopilot').toUpperCase();
+                    addConsoleLog(`[🤖 ${stratLabel}] [ALIM SİNYALİ] ${newPos.coin} için long pozisyon açıldı. Giriş: $${newPos.entryPrice}`, 'success');
+                } else if (positions.length < previousPositionsCount) {
+                    const closedTrades = state.closedTrades || [];
+                    if (closedTrades.length > 0) {
+                        const latestClosed = closedTrades[closedTrades.length - 1];
+                        const stratLabel = (latestClosed.strategyName || 'Otopilot').toUpperCase();
+                        const pnlSign = latestClosed.realizedPnLUsdt >= 0 ? '+' : '';
+                        const logType = latestClosed.realizedPnLUsdt >= 0 ? 'success' : 'error';
+                        addConsoleLog(`[🤖 ${stratLabel}] [SATIM SİNYALİ] ${latestClosed.coin} pozisyonu kapatıldı (${latestClosed.exitReason}). Giriş: $${latestClosed.entryPrice.toFixed(4)} | Çıkış: $${latestClosed.exitPrice.toFixed(4)} | Net PnL: ${pnlSign}$${latestClosed.realizedPnLUsdt.toFixed(2)} (${pnlSign}${latestClosed.realizedPnLPercent.toFixed(2)}%)`, logType);
+                    } else {
+                        addConsoleLog(`[SATIM SİNYALİ] Pozisyon kapatıldı.`, 'system');
+                    }
+                }
+                previousPositionsCount = positions.length;
             }
-            previousPositionsCount = positions.length;
 
             if (positions.length === 0) {
                 positionsContainer.innerHTML = `
