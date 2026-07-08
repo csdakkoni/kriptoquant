@@ -207,7 +207,14 @@ export class ExecutionEngine {
 				this.state.uptime += 1;
 				this.state.heartbeat = new Date().toISOString();
 				this.updatePortfolioEquity();
-				this.saveAndBroadcast();
+				
+				// Broadcast state via WebSocket on every tick in memory
+				this.broadcast();
+				
+				// Write state file to disk only once every 15 seconds to prevent high disk I/O load
+				if (this.state.uptime % 15 === 0) {
+					this.saveToDisk();
+				}
 			}
 		}, 1000);
 
@@ -633,7 +640,7 @@ export class ExecutionEngine {
 		}
 	}
 
-	private saveAndBroadcast(): void {
+	private saveToDisk(): void {
 		try {
 			const dir = join(process.cwd(), 'results');
 			if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
@@ -641,10 +648,17 @@ export class ExecutionEngine {
 		} catch (e) {
 			logError(`Failed to save live state to disk: ${e}`);
 		}
+	}
 
+	private broadcast(): void {
 		if (this.onUpdateCallback) {
 			this.onUpdateCallback(this.state);
 		}
+	}
+
+	private saveAndBroadcast(): void {
+		this.saveToDisk();
+		this.broadcast();
 	}
 }
 
