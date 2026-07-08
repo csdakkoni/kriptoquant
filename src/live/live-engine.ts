@@ -149,6 +149,11 @@ export class ExecutionEngine {
 	public async start(): Promise<void> {
 		if (this.state.engineStatus === 'running') return;
 
+		// Add a random delay up to 8 seconds to avoid spamming Binance on startup when multiple engines boot at once
+		const startupDelay = Math.random() * 8000;
+		log(`ExecutionEngine start called. Delaying boot by ${(startupDelay / 1000).toFixed(2)}s to protect Binance Rate Limits...`);
+		await new Promise(resolve => setTimeout(resolve, startupDelay));
+
 		log(`Live ExecutionEngine (Binance TR mode) is starting...`);
 		this.state.engineStatus = 'running';
 		this.state.startTime = new Date().toISOString();
@@ -185,6 +190,8 @@ export class ExecutionEngine {
 				const history = await this.fetchHistory(coin, this.interval, historyLimit);
 				this.candlesMap.set(coin, history);
 				log(`  ✓ Loaded ${history.length} candles for ${coin}`);
+				// 150ms sleep to avoid spamming Binance REST API
+				await new Promise(resolve => setTimeout(resolve, 150));
 			} catch (e) {
 				logError(`Failed to bootstrap history for ${coin}: ${e}`);
 				this.candlesMap.set(coin, []);
