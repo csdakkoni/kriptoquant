@@ -476,18 +476,34 @@ export class ExecutionEngine {
 			const hasPosition = this.state.activePositions.some(p => p.coin === coin);
 
 			if (activeSignal.side === 'BUY' && !hasPosition) {
-				// Spend 20% of current cash on this buy order
-				const budget = this.state.cash * 0.2;
+				// Risk-Based Sizing: Risk 1.5% of total portfolio equity per trade
+				// But cap the maximum allocation at 10% of total equity (max $1000 for a $10000 portfolio)
+				const totalEquity = this.state.currentEquity || this.state.cash;
+				const riskAmount = totalEquity * 0.015; // Risk exactly 1.5% of total equity
+
+				const entryPrice = lastCandle.close;
+				const stopLossPrice = activeSignal.stopLoss ?? activeSignal.metadata?.sl ?? entryPrice * 0.98;
+				const takeProfitPrice = activeSignal.takeProfit ?? activeSignal.metadata?.tp ?? entryPrice * 1.06;
+
+				// Calculate stop distance in percent (decimal)
+				const stopDistance = Math.abs(entryPrice - stopLossPrice) / entryPrice;
+				const stopDistancePercent = stopDistance > 0 ? stopDistance : 0.02; // Fallback to 2% if zero
+
+				// Position size = Risk / Stop Distance
+				let calculatedSize = riskAmount / stopDistancePercent;
+
+				// Cap at 10% of Total Equity (max $1000 for a $10000 portfolio)
+				const maxAllocation = totalEquity * 0.10;
+				let budget = Math.min(calculatedSize, maxAllocation);
+
+				// Ensure we don't exceed current cash
+				budget = Math.min(budget, this.state.cash);
+
 				if (budget >= 10) {
 					const fill = await this.broker.buy(coin, lastCandle.closeTime, lastCandle.close, budget);
 					this.state.cash -= budget;
 
-					// Risk calculations: Use strategy-defined stopLoss/takeProfit if provided, else fallback to metadata.sl/tp or default 2% / 6%
-					const stopLossPrice = activeSignal.stopLoss ?? activeSignal.metadata?.sl ?? fill.price * 0.98;
-					const takeProfitPrice = activeSignal.takeProfit ?? activeSignal.metadata?.tp ?? fill.price * 1.06;
-					const riskPercent = (activeSignal.stopLoss ?? activeSignal.metadata?.sl)
-						? Math.abs((fill.price - (activeSignal.stopLoss ?? activeSignal.metadata?.sl ?? fill.price)) / fill.price * 100)
-						: 2.0;
+					const riskPercent = Math.abs((fill.price - stopLossPrice) / fill.price * 100);
 
 					this.state.activePositions.push({
 						coin,
@@ -507,7 +523,7 @@ export class ExecutionEngine {
 						strategyName: strategy.name,
 					});
 
-					log(`[🤖 ${strategy.name.toUpperCase()}] [${coin}] Pozisyon AÇILDI. Miktar: ${fill.quantity.toFixed(4)} | Giriş: $${fill.price.toFixed(2)}`);
+					log(`[🤖 ${strategy.name.toUpperCase()}] [${coin}] Pozisyon AÇILDI. Miktar: ${fill.quantity.toFixed(4)} | Giriş: $${fill.price.toFixed(2)} | Bütçe: $${budget.toFixed(2)} | Risk: $${(budget * (riskPercent/100)).toFixed(2)} (${riskPercent.toFixed(2)}%)`);
 				}
 			} else if (activeSignal.side === 'SELL' && hasPosition) {
 				const idx = this.state.activePositions.findIndex(p => p.coin === coin);
