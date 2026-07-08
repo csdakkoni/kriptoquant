@@ -632,7 +632,8 @@
                 let positionsHtml = '';
                 if (strat.positions && strat.positions.length > 0) {
                     strat.positions.forEach(pos => {
-                        positionsHtml += `<span class="px-2 py-0.5 rounded bg-emerald-950/40 text-emerald-400 border border-emerald-900/30 text-[9px] font-bold">${pos}</span>`;
+                        const cleanCoin = pos.split(' ')[0].replace('USDT', '') + '_USDT';
+                        positionsHtml += `<a href="https://www.binance.com/en/trade/${cleanCoin}" target="_blank" onclick="event.stopPropagation()" class="px-2 py-0.5 rounded bg-emerald-950/40 text-emerald-400 border border-emerald-500/20 text-[9px] font-bold hover:bg-emerald-900/60 hover:text-white transition-all select-all">${pos}</a>`;
                     });
                 } else {
                     positionsHtml = '<span class="text-slate-600 italic text-[9px]">Açık pozisyon yok</span>';
@@ -800,7 +801,12 @@
                                 <div class="text-slate-300 font-bold">${exitTimeStr}</div>
                                 <div class="text-slate-600">Giriş: ${entryTimeStr}</div>
                             </td>
-                            <td class="py-3.5 font-bold text-slate-200">${trade.coin.replace('USDT', '')}</td>
+                            <td class="py-3.5">
+                                <a href="https://www.binance.com/en/trade/${trade.coin.replace('USDT', '_USDT')}" target="_blank" class="font-bold text-slate-200 hover:text-teal-400 hover:underline flex items-center space-x-1 select-all">
+                                    <span>${trade.coin.replace('USDT', '')}</span>
+                                    <span class="text-[9px] text-slate-500 opacity-60">🔗</span>
+                                </a>
+                            </td>
                             <td class="py-3.5 text-slate-400 font-semibold text-[10px]"><span class="px-1.5 py-0.5 rounded bg-emerald-950/40 text-emerald-400 border border-emerald-900/30">LONG</span></td>
                             <td class="py-3.5 font-mono text-slate-400 text-[10px]">${trade.strategyName || '-'}</td>
                             <td class="py-3.5 font-mono text-slate-300">
@@ -864,7 +870,12 @@
                 const sizeUsdt = pos.positionSizeUsdt ?? (pos.entryPrice * pos.quantity);
 
                 row.innerHTML = `
-                    <td class="py-2.5 font-bold text-slate-200">${pos.coin.replace('USDT', '')}</td>
+                    <td class="py-2.5">
+                        <a href="https://www.binance.com/en/trade/${pos.coin.replace('USDT', '_USDT')}" target="_blank" class="font-bold text-slate-200 hover:text-teal-400 hover:underline flex items-center space-x-1 select-all">
+                            <span>${pos.coin.replace('USDT', '')}</span>
+                            <span class="text-[9px] text-slate-500 opacity-60">🔗</span>
+                        </a>
+                    </td>
                     <td class="py-2.5 font-mono text-slate-300">
                         <div>$${pos.entryPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</div>
                         <div class="text-[10px] text-slate-500 font-semibold">$${sizeUsdt.toFixed(2)} USDT</div>
