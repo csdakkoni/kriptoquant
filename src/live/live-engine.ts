@@ -15,6 +15,7 @@ import { createA1Strategy } from '../research/strategies/a1/index.js';
 import { createA2Strategy } from '../research/strategies/a2/index.js';
 import { createTrendPullbackStrategy } from '../research/strategies/trend-pullback/index.js';
 import { createFreedomStrategy } from '../research/strategies/freedom/index.js';
+import { createFreedomBStrategy } from '../research/strategies/freedom_b/index.js';
 import { createSupertrendStrategy } from '../research/strategies/supertrend/index.js';
 import { MetaLabeler } from '../research/meta-labeling.js';
 import { OnlineLearner } from '../research/online-learning.js';
@@ -314,7 +315,7 @@ export class ExecutionEngine {
 			// Freedom Soft Stop check at candle close!
 			const softPositionsToClose: number[] = [];
 			this.state.activePositions.forEach((p, idx) => {
-				if (p.coin === coin && p.strategyName === 'freedom') {
+				if (p.coin === coin && (p.strategyName === 'freedom' || p.strategyName === 'freedom_b')) {
 					if (price <= p.stopLoss) {
 						softPositionsToClose.push(idx);
 					}
@@ -373,7 +374,21 @@ export class ExecutionEngine {
 				}
 
 				// 3) Standard limits checks
-				if (p.strategyName === 'freedom') {
+				if (p.strategyName === 'freedom_b') {
+					// Freedom B Hybrid stop model with INSTANT breakeven:
+					// - Hard stop is checked on every tick (instantly at entry - 4.5%)
+					// - If breakeven is triggered, stopLoss (entryPrice) is checked on every tick!
+					// - Soft stop (Swing Low) is checked only on candle close
+					// - TP is checked on every tick
+					const hardStopPrice = p.entryPrice * 0.955;
+					if (price <= hardStopPrice) {
+						positionsToClose.push({ idx, reason: 'Hard Emergency Stop', exitPrice: hardStopPrice });
+					} else if (p.breakevenTriggered && price <= p.stopLoss) {
+						positionsToClose.push({ idx, reason: 'Breakeven Stop (Instant)', exitPrice: p.stopLoss });
+					} else if (p.takeProfit > 0 && price >= p.takeProfit) {
+						positionsToClose.push({ idx, reason: 'TP', exitPrice: p.takeProfit });
+					}
+				} else if (p.strategyName === 'freedom') {
 					// Freedom Hybrid stop model:
 					// - Hard stop is checked on every tick (instantly at entry - 4.5%)
 					// - Soft stop (Swing Low) is checked only on candle close
@@ -569,6 +584,7 @@ export class ExecutionEngine {
 		if (strategyPath === 'a2') return createA2Strategy();
 		if (strategyPath === 'trend-pullback') return createTrendPullbackStrategy();
 		if (strategyPath === 'freedom') return createFreedomStrategy();
+		if (strategyPath === 'freedom_b') return createFreedomBStrategy();
 
 		throw new Error(`Strategy resolver failed: ${strategyPath}`);
 	}
