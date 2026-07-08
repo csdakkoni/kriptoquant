@@ -39,6 +39,8 @@ export interface ActivePosition {
 	mae: number;
 	mfe: number;
 	strategyName: string;
+	highestPrice?: number;
+	breakevenTriggered?: boolean;
 }
 
 export interface ClosedTrade {
@@ -288,6 +290,11 @@ export class ExecutionEngine {
 				p.currentPnLUsdt = rawPnL;
 				p.currentPnLPercent = (p.currentPrice - p.entryPrice) / p.entryPrice * 100;
 
+				// Track highest price for trailing stop
+				if (price > (p.highestPrice ?? p.entryPrice)) {
+					p.highestPrice = price;
+				}
+
 				// Track MAE (max drawdown) & MFE (max run-up) as positive percentages
 				const currentDrawdown = p.currentPnLPercent < 0 ? Math.abs(p.currentPnLPercent) : 0;
 				const currentRunUp = p.currentPnLPercent > 0 ? p.currentPnLPercent : 0;
@@ -347,6 +354,25 @@ export class ExecutionEngine {
 
 		this.state.activePositions.forEach((p, idx) => {
 			if (p.coin === coin) {
+				// 1) Dynamic Breakeven check:
+				// If position PnL hits +2%, move Stop Loss to Entry Price
+				if (p.currentPnLPercent >= 2.0 && !p.breakevenTriggered) {
+					p.stopLoss = p.entryPrice;
+					p.breakevenTriggered = true;
+					log(`[${coin}] Breakeven triggered. Stop Loss moved to Entry Price: $${p.entryPrice.toFixed(2)}`);
+				}
+
+				// 2) Dynamic Trailing Stop check:
+				// Activated only after price gains at least 2.0% from entry
+				const highest = p.highestPrice ?? p.entryPrice;
+				const trailingStopPrice = highest * 0.98; // 2% trailing distance
+
+				if (highest >= p.entryPrice * 1.02 && price <= trailingStopPrice) {
+					positionsToClose.push({ idx, reason: 'Trailing Stop', exitPrice: price });
+					return;
+				}
+
+				// 3) Standard limits checks
 				if (p.strategyName === 'freedom') {
 					// Freedom Hybrid stop model:
 					// - Hard stop is checked on every tick (instantly at entry - 4.5%)
@@ -432,11 +458,11 @@ export class ExecutionEngine {
 					const fill = await this.broker.buy(lastCandle.closeTime, lastCandle.close, budget);
 					this.state.cash -= budget;
 
-					// Risk calculations: Use strategy-defined stopLoss/takeProfit if provided, else fallback to 2% / 6%
-					const stopLossPrice = activeSignal.stopLoss ?? fill.price * 0.98;
-					const takeProfitPrice = activeSignal.takeProfit ?? fill.price * 1.06;
-					const riskPercent = activeSignal.stopLoss 
-						? Math.abs((fill.price - activeSignal.stopLoss) / fill.price * 100)
+					// Risk calculations: Use strategy-defined stopLoss/takeProfit if provided, else fallback to metadata.sl/tp or default 2% / 6%
+					const stopLossPrice = activeSignal.stopLoss ?? activeSignal.metadata?.sl ?? fill.price * 0.98;
+					const takeProfitPrice = activeSignal.takeProfit ?? activeSignal.metadata?.tp ?? fill.price * 1.06;
+					const riskPercent = (activeSignal.stopLoss ?? activeSignal.metadata?.sl)
+						? Math.abs((fill.price - (activeSignal.stopLoss ?? activeSignal.metadata?.sl ?? fill.price)) / fill.price * 100)
 						: 2.0;
 
 					this.state.activePositions.push({
