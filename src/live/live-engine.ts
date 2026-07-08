@@ -16,6 +16,8 @@ import { createA2Strategy } from '../research/strategies/a2/index.js';
 import { createTrendPullbackStrategy } from '../research/strategies/trend-pullback/index.js';
 import { createFreedomStrategy } from '../research/strategies/freedom/index.js';
 import { createFreedomBStrategy } from '../research/strategies/freedom_b/index.js';
+import { createGemini1Strategy } from '../research/strategies/gemini_1/index.js';
+import { createGemini2Strategy } from '../research/strategies/gemini_2/index.js';
 import { createSupertrendStrategy } from '../research/strategies/supertrend/index.js';
 import { MetaLabeler } from '../research/meta-labeling.js';
 import { OnlineLearner } from '../research/online-learning.js';
@@ -585,6 +587,8 @@ export class ExecutionEngine {
 		if (strategyPath === 'trend-pullback') return createTrendPullbackStrategy();
 		if (strategyPath === 'freedom') return createFreedomStrategy();
 		if (strategyPath === 'freedom_b') return createFreedomBStrategy();
+		if (strategyPath === 'gemini_1') return createGemini1Strategy();
+		if (strategyPath === 'gemini_2') return createGemini2Strategy();
 
 		throw new Error(`Strategy resolver failed: ${strategyPath}`);
 	}
@@ -717,7 +721,9 @@ export function getAllExecutionEnginesSummary(): StrategySummary[] {
 		{ name: 'bollinger-bands', label: 'Bollinger Bands' },
 		{ name: 'trend-pullback', label: 'Trend Pullback' },
 		{ name: 'freedom', label: 'Freedom Strategy' },
-		{ name: 'freedom_b', label: 'Freedom B Strategy' }
+		{ name: 'freedom_b', label: 'Freedom B Strategy' },
+		{ name: 'gemini_1', label: 'Gemini 1 Strategy' },
+		{ name: 'gemini_2', label: 'Gemini 2 Strategy' }
 	];
 
 	const intervals = ['15m', '1h', '4h'];

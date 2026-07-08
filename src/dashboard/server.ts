@@ -43,6 +43,8 @@ import { createA2Strategy } from '../research/strategies/a2/index.js';
 import { createTrendPullbackStrategy } from '../research/strategies/trend-pullback/index.js';
 import { createFreedomStrategy } from '../research/strategies/freedom/index.js';
 import { createFreedomBStrategy } from '../research/strategies/freedom_b/index.js';
+import { createGemini1Strategy } from '../research/strategies/gemini_1/index.js';
+import { createGemini2Strategy } from '../research/strategies/gemini_2/index.js';
 import { createSupertrendStrategy } from '../research/strategies/supertrend/index.js';
 import { createStrategyFromConfig } from '../research/strategies/factory/index.js';
 import { CSVProvider } from '../data/csv-provider.js';
@@ -456,7 +458,7 @@ export function startDashboardServer(port: number = 3000): any {
 			// ── 1ccc) GET /api/live-paper/all-states ➔ Tüm Stratejilerin Durumu ──
 			if (url === '/api/live-paper/all-states' && req.method === 'GET') {
 				const states: any[] = [];
-				const registeredStrategies = ['consensus', 'a1', 'a2', 'donchian-breakout', 'ema-cross', 'supertrend', 'bollinger-bands', 'trend-pullback', 'freedom', 'freedom_b'];
+				const registeredStrategies = ['consensus', 'a1', 'a2', 'donchian-breakout', 'ema-cross', 'supertrend', 'bollinger-bands', 'trend-pullback', 'freedom', 'freedom_b', 'gemini_1', 'gemini_2'];
 				const intervals = ['15m', '1h', '4h'];
 				for (const strat of registeredStrategies) {
 					for (const intv of intervals) {
@@ -776,7 +778,7 @@ export function startDashboardServer(port: number = 3000): any {
 
 		// Check for auto-resume on server startup for all strategies & intervals
 		try {
-			const registeredStrategies = ['consensus', 'a1', 'a2', 'donchian-breakout', 'ema-cross', 'supertrend', 'bollinger-bands', 'trend-pullback', 'freedom', 'freedom_b'];
+			const registeredStrategies = ['consensus', 'a1', 'a2', 'donchian-breakout', 'ema-cross', 'supertrend', 'bollinger-bands', 'trend-pullback', 'freedom', 'freedom_b', 'gemini_1', 'gemini_2'];
 			const intervals = ['15m', '1h', '4h'];
 			for (const strat of registeredStrategies) {
 				for (const interval of intervals) {
