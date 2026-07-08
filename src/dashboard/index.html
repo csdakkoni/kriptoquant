@@ -821,28 +821,7 @@
             
             const positions = state.activePositions || [];
             
-            // Position opening/closing logging
-            if (previousPositionsCount === -1) {
-                previousPositionsCount = positions.length;
-            } else {
-                if (positions.length > previousPositionsCount) {
-                    const newPos = positions[positions.length - 1];
-                    const stratLabel = (newPos.strategyName || 'Otopilot').toUpperCase();
-                    addConsoleLog(`[🤖 ${stratLabel}] [ALIM SİNYALİ] ${newPos.coin} için long pozisyon açıldı. Giriş: $${newPos.entryPrice}`, 'success');
-                } else if (positions.length < previousPositionsCount) {
-                    const closedTrades = state.closedTrades || [];
-                    if (closedTrades.length > 0) {
-                        const latestClosed = closedTrades[closedTrades.length - 1];
-                        const stratLabel = (latestClosed.strategyName || 'Otopilot').toUpperCase();
-                        const pnlSign = latestClosed.realizedPnLUsdt >= 0 ? '+' : '';
-                        const logType = latestClosed.realizedPnLUsdt >= 0 ? 'success' : 'error';
-                        addConsoleLog(`[🤖 ${stratLabel}] [SATIM SİNYALİ] ${latestClosed.coin} pozisyonu kapatıldı (${latestClosed.exitReason}). Giriş: $${latestClosed.entryPrice.toFixed(4)} | Çıkış: $${latestClosed.exitPrice.toFixed(4)} | Net PnL: ${pnlSign}$${latestClosed.realizedPnLUsdt.toFixed(2)} (${pnlSign}${latestClosed.realizedPnLPercent.toFixed(2)}%)`, logType);
-                    } else {
-                        addConsoleLog(`[SATIM SİNYALİ] Pozisyon kapatıldı.`, 'system');
-                    }
-                }
-                previousPositionsCount = positions.length;
-            }
+            // Position opening/closing logging removed (now handled globally for all strategies by pollGlobalActivity)
 
             if (positions.length === 0) {
                 positionsContainer.innerHTML = `
@@ -1024,10 +1003,73 @@
             }
         }
 
+        let globalActivePositions = {};
+        let isGlobalTrackerInitialized = false;
+
+        async function pollGlobalActivity() {
+            try {
+                const res = await fetch('/api/live-paper/all-states');
+                if (!res.ok) return;
+                const states = await res.json();
+
+                if (!isGlobalTrackerInitialized) {
+                    states.forEach(state => {
+                        const keyPrefix = `${state.strategy}_${state.interval}`;
+                        state.activePositions.forEach(pos => {
+                            const posKey = `${keyPrefix}_${pos.coin}`;
+                            globalActivePositions[posKey] = pos.entryPrice;
+                        });
+                    });
+                    isGlobalTrackerInitialized = true;
+                    return;
+                }
+
+                states.forEach(state => {
+                    const keyPrefix = `${state.strategy}_${state.interval}`;
+                    const currentCoins = {};
+
+                    state.activePositions.forEach(pos => {
+                        const posKey = `${keyPrefix}_${pos.coin}`;
+                        currentCoins[posKey] = true;
+
+                        if (!globalActivePositions[posKey]) {
+                            globalActivePositions[posKey] = pos.entryPrice;
+                            const stratLabel = state.strategy.toUpperCase();
+                            addConsoleLog(`[🤖 ${stratLabel} (${state.interval})] [ALIM SİNYALİ] ${pos.coin} için long pozisyon açıldı. Giriş: $${pos.entryPrice}`, 'success');
+                        }
+                    });
+
+                    // Check if any tracked position was closed
+                    Object.keys(globalActivePositions).forEach(posKey => {
+                        if (posKey.startsWith(keyPrefix) && !currentCoins[posKey]) {
+                            delete globalActivePositions[posKey];
+                            const coinName = posKey.replace(`${keyPrefix}_`, '');
+
+                            // Find the corresponding closed trade details
+                            const correspondingClosed = state.closedTrades.filter(t => t.coin === coinName);
+                            if (correspondingClosed.length > 0) {
+                                const latestClosed = correspondingClosed[correspondingClosed.length - 1];
+                                const stratLabel = state.strategy.toUpperCase();
+                                const pnlSign = latestClosed.realizedPnLUsdt >= 0 ? '+' : '';
+                                const logType = latestClosed.realizedPnLUsdt >= 0 ? 'success' : 'error';
+                                addConsoleLog(`[🤖 ${stratLabel} (${state.interval})] [SATIM SİNYALİ] ${latestClosed.coin} pozisyonu kapatıldı (${latestClosed.exitReason}). Giriş: $${latestClosed.entryPrice.toFixed(4)} | Çıkış: $${latestClosed.exitPrice.toFixed(4)} | Net PnL: ${pnlSign}$${latestClosed.realizedPnLUsdt.toFixed(2)} (${pnlSign}${latestClosed.realizedPnLPercent.toFixed(2)}%)`, logType);
+                            } else {
+                                addConsoleLog(`[🤖 ${state.strategy.toUpperCase()} (${state.interval})] [SATIM SİNYALİ] ${coinName} pozisyonu kapatıldı.`, 'system');
+                            }
+                        }
+                    });
+                });
+            } catch (e) {
+                console.error('Failed polling global activity', e);
+            }
+        }
+
         // Start connection on page load
         renderCoinCheckboxes();
         setupWebsocket();
         setInterval(fetchStrategySummaries, 5000);
+        setInterval(pollGlobalActivity, 2500);
+        pollGlobalActivity();
 
         // Bind dropdown change event to synchronize tabs
         const intvDropdown = document.getElementById('autopilot-interval');

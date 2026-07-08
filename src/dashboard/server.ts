@@ -452,6 +452,30 @@ export function startDashboardServer(port: number = 3000): any {
 				return;
 			}
 
+			// ── 1ccc) GET /api/live-paper/all-states ➔ Tüm Stratejilerin Durumu ──
+			if (url === '/api/live-paper/all-states' && req.method === 'GET') {
+				const states: any[] = [];
+				const registeredStrategies = ['consensus', 'a1', 'a2', 'donchian-breakout', 'ema-cross', 'supertrend', 'bollinger-bands', 'trend-pullback', 'freedom'];
+				const intervals = ['15m', '1h', '4h'];
+				for (const strat of registeredStrategies) {
+					for (const intv of intervals) {
+						const state = getExecutionEngineState(strat, intv);
+						if (state) {
+							states.push({
+								strategy: strat,
+								interval: intv,
+								engineStatus: state.engineStatus,
+								activePositions: state.activePositions || [],
+								closedTrades: state.closedTrades || []
+							});
+						}
+					}
+				}
+				res.writeHead(200, { 'Content-Type': 'application/json' });
+				res.end(JSON.stringify(states));
+				return;
+			}
+
 			// ── 1d) POST /api/live-paper/start ➔ Motoru Canlı Başlat ──────────
 			if (url === '/api/live-paper/start' && req.method === 'POST') {
 				let body = '';
