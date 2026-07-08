@@ -716,7 +716,8 @@ export function getAllExecutionEnginesSummary(): StrategySummary[] {
 		{ name: 'supertrend', label: 'Supertrend' },
 		{ name: 'bollinger-bands', label: 'Bollinger Bands' },
 		{ name: 'trend-pullback', label: 'Trend Pullback' },
-		{ name: 'freedom', label: 'Freedom Strategy' }
+		{ name: 'freedom', label: 'Freedom Strategy' },
+		{ name: 'freedom_b', label: 'Freedom B Strategy' }
 	];
 
 	const intervals = ['15m', '1h', '4h'];
