@@ -55,7 +55,7 @@ export class BinanceTrBroker {
 	 * Market buy order on Binance TR.
 	 * USDT base quantity is passed as 'quoteOrderQty' to spend exact amount of USDT.
 	 */
-	public async buy(timestamp: number, price: number, usdtAmount: number): Promise<Fill> {
+	public async buy(coin: string, timestamp: number, price: number, usdtAmount: number): Promise<Fill> {
 		if (this.isPaperMode) {
 			// Paper Trading Simulation
 			const commissionRate = 0.0010; // Binance TR 0.1% taker fee
@@ -66,7 +66,7 @@ export class BinanceTrBroker {
 			const netUsdtAmount = usdtAmount - commission;
 			const quantity = netUsdtAmount / executedPrice;
 
-			log(`[Binance TR Broker - PAPER] Buy Executed: ${quantity.toFixed(6)} units at $${executedPrice.toFixed(2)} USDT (Spent ${usdtAmount} USDT)`);
+			log(`[Binance TR Broker - PAPER] Buy Executed for ${coin}: ${quantity.toFixed(6)} units at $${executedPrice.toFixed(4)} (Spent ${usdtAmount} USDT)`);
 
 			return {
 				timestamp,
@@ -81,7 +81,7 @@ export class BinanceTrBroker {
 		try {
 			// standard Binance query format
 			const params: Record<string, string> = {
-				symbol: 'BTCUSDT', // Replace or resolve dynamically based on asset
+				symbol: coin, // Resolved dynamically based on asset
 				side: 'BUY',
 				type: 'MARKET',
 				quoteOrderQty: usdtAmount.toFixed(2), // Spend exact USDT amount
@@ -144,15 +144,26 @@ export class BinanceTrBroker {
 			};
 		} catch (e) {
 			logError(`[Binance TR Broker] Live Order execution failed: ${e}. Falling back to paper fill.`);
-			// Fail-safe: execute as paper trade rather than crashing the loop
-			return this.buy(timestamp, price, usdtAmount);
+			// Fail-safe: execute as paper trade locally rather than crashing
+			const commissionRate = 0.0010;
+			const slippageRate = 0.0005;
+			const executedPrice = price * (1 + slippageRate);
+			const commission = usdtAmount * commissionRate;
+			const netQuantity = (usdtAmount - commission) / executedPrice;
+			return {
+				timestamp,
+				side: 'BUY',
+				price: executedPrice,
+				quantity: netQuantity,
+				commission
+			};
 		}
 	}
 
 	/**
 	 * Market sell order on Binance TR.
 	 */
-	public async sell(timestamp: number, price: number, quantity: number): Promise<Fill> {
+	public async sell(coin: string, timestamp: number, price: number, quantity: number): Promise<Fill> {
 		if (this.isPaperMode) {
 			// Paper Trading Simulation
 			const commissionRate = 0.0010;
@@ -162,7 +173,7 @@ export class BinanceTrBroker {
 			const grossUsdt = quantity * executedPrice;
 			const commission = grossUsdt * commissionRate;
 
-			log(`[Binance TR Broker - PAPER] Sell Executed: ${quantity.toFixed(6)} units at $${executedPrice.toFixed(2)} USDT`);
+			log(`[Binance TR Broker - PAPER] Sell Executed for ${coin}: ${quantity.toFixed(6)} units at $${executedPrice.toFixed(4)}`);
 
 			return {
 				timestamp,
@@ -173,10 +184,9 @@ export class BinanceTrBroker {
 			};
 		}
 
-		// Live API Execution
 		try {
 			const params: Record<string, string> = {
-				symbol: 'BTCUSDT',
+				symbol: coin,
 				side: 'SELL',
 				type: 'MARKET',
 				quantity: quantity.toFixed(6), // Sell raw quantity
@@ -237,7 +247,19 @@ export class BinanceTrBroker {
 			};
 		} catch (e) {
 			logError(`[Binance TR Broker] Live Sell Order execution failed: ${e}. Falling back to paper fill.`);
-			return this.sell(timestamp, price, quantity);
+			// Fail-safe: execute as paper trade locally rather than crashing
+			const commissionRate = 0.0010;
+			const slippageRate = 0.0005;
+			const executedPrice = price * (1 - slippageRate);
+			const grossUsdt = quantity * executedPrice;
+			const commission = grossUsdt * commissionRate;
+			return {
+				timestamp,
+				side: 'SELL',
+				price: executedPrice,
+				quantity,
+				commission
+			};
 		}
 	}
 }

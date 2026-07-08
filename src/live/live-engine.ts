@@ -455,7 +455,7 @@ export class ExecutionEngine {
 				// Spend 20% of current cash on this buy order
 				const budget = this.state.cash * 0.2;
 				if (budget >= 10) {
-					const fill = await this.broker.buy(lastCandle.closeTime, lastCandle.close, budget);
+					const fill = await this.broker.buy(coin, lastCandle.closeTime, lastCandle.close, budget);
 					this.state.cash -= budget;
 
 					// Risk calculations: Use strategy-defined stopLoss/takeProfit if provided, else fallback to metadata.sl/tp or default 2% / 6%
@@ -499,7 +499,7 @@ export class ExecutionEngine {
 	}
 
 	private async closePosition(pos: ActivePosition, exitPrice: number, reason: string, timestamp: number): Promise<void> {
-		const fill = await this.broker.sell(timestamp, exitPrice, pos.quantity);
+		const fill = await this.broker.sell(pos.coin, timestamp, exitPrice, pos.quantity);
 		const grossReturn = pos.quantity * fill.price;
 		const proceeds = grossReturn - fill.commission;
 		this.state.cash += proceeds;
