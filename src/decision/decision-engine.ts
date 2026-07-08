@@ -125,13 +125,14 @@ export class DecisionEngine {
 
 		let signal: 'BUY' | 'SELL' | 'WAIT' = 'WAIT';
 		let confidence = 0;
+		const threshold = 50; // Minimum 50% confidence required to trigger action (forces at least 2 strategies to agree)
 
 		if (buyWeightSum > Math.abs(sellWeightSum)) {
-			signal = 'BUY';
 			confidence = Math.min(100, Math.round(buyWeightSum * 100));
+			signal = confidence >= threshold ? 'BUY' : 'WAIT';
 		} else if (Math.abs(sellWeightSum) > buyWeightSum) {
-			signal = 'SELL';
 			confidence = Math.min(100, Math.round(Math.abs(sellWeightSum) * 100));
+			signal = confidence >= threshold ? 'SELL' : 'WAIT';
 		} else {
 			signal = 'WAIT';
 			confidence = 0;
