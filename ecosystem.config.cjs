@@ -2,6 +2,7 @@ module.exports = {
   apps: [
     {
       name: 'kriptoquant-bot',
+      cwd: '/home/aslan_erdm/kriptoquant',
       script: './src/cli.ts',
       args: 'dashboard --port 3008',
       interpreter: 'node',
