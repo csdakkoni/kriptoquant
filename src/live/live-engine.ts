@@ -860,6 +860,8 @@ export function getAllExecutionEnginesSummary(): StrategySummary[] {
 	return registeredStrategies.map(strat => {
 		let isAnyRunning = false;
 		let totalPnLUsdt = 0;
+		let totalCash = 0;
+		let totalRealizedPnL = 0;
 		let activePositionsCount = 0;
 		const activePositions: string[] = [];
 		const activeIntervals: string[] = [];
@@ -873,6 +875,8 @@ export function getAllExecutionEnginesSummary(): StrategySummary[] {
 				const equity = state.currentEquity ?? state.cash ?? startCash;
 				const pnl = equity - startCash;
 				totalPnLUsdt += pnl;
+				totalCash += state.cash ?? startCash;
+				totalRealizedPnL += state.realizedPnL ?? 0;
 
 				if (state.engineStatus === 'running') {
 					isAnyRunning = true;
@@ -896,6 +900,8 @@ export function getAllExecutionEnginesSummary(): StrategySummary[] {
 			name: strat.name,
 			status: isAnyRunning ? 'running' : 'stopped',
 			equity: totalEquity,
+			cash: totalCash || 10000,
+			realizedPnL: totalRealizedPnL,
 			positionsCount: activePositionsCount,
 			positions: activePositions,
 			pnlUsdt: totalPnLUsdt,

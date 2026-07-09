@@ -677,6 +677,15 @@
                         `</div>`;
                 }
 
+                const realized = strat.realizedPnL ?? 0;
+                const floating = (strat.pnlUsdt ?? 0) - realized;
+
+                const realizedSign = realized >= 0 ? '+' : '';
+                const realizedClass = realized >= 0 ? 'text-emerald-400 font-mono font-bold' : 'text-rose-500 font-mono font-bold';
+
+                const floatingSign = floating >= 0 ? '+' : '';
+                const floatingClass = floating >= 0 ? 'text-emerald-400 font-mono font-bold' : 'text-rose-500 font-mono font-bold';
+
                 const newContent = `
                     <div class="flex items-center justify-between border-b border-white/5 pb-2">
                         <div class="flex flex-col">
@@ -692,12 +701,29 @@
                         </div>
                     </div>
                     
-                    <div class="py-2">
-                        <div class="text-[15px] font-black text-slate-100 font-mono tracking-tight">$${strat.equity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                        <div class="text-[10px] ${pnlClass} font-bold mt-0.5">${pnlSign}${strat.pnlPercent.toFixed(2)}% (${pnlSign}$${strat.pnlUsdt.toFixed(2)})</div>
+                    <div class="py-2 border-b border-white/5 pb-2.5">
+                        <div class="flex justify-between items-center text-[10px]">
+                            <span class="text-slate-500 font-bold uppercase tracking-wider">Nakit Kasa:</span>
+                            <span class="text-slate-200 font-black font-mono">$${(strat.cash || 10000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                        <div class="flex justify-between items-center text-[10px] mt-1">
+                            <span class="text-slate-500 font-bold uppercase tracking-wider">Toplam Varlık:</span>
+                            <span class="text-emerald-400 font-black font-mono">$${strat.equity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
                     </div>
 
-                    <div class="border-t border-white/5 pt-2 flex flex-col space-y-1.5">
+                    <div class="py-2 flex justify-between items-center text-[9px] border-b border-white/5 pb-2">
+                        <div class="flex flex-col">
+                            <span class="text-slate-500 font-bold uppercase tracking-wider text-[8px]">Realize PnL:</span>
+                            <span class="${realizedClass}">${realizedSign}$${realized.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                        <div class="flex flex-col items-end">
+                            <span class="text-slate-500 font-bold uppercase tracking-wider text-[8px]">Açık PnL:</span>
+                            <span class="${floatingClass}">${floatingSign}$${floating.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                    </div>
+
+                    <div class="pt-2 flex flex-col space-y-1.5">
                         <div class="flex flex-wrap gap-1 items-center">
                             <span class="text-[9px] text-slate-500 font-bold uppercase tracking-wider mr-1">Pozlar:</span>
                             ${positionsHtml}
@@ -811,8 +837,8 @@
                     <tr class="border-b border-slate-800/80 text-slate-500 text-[10px] uppercase font-bold tracking-wider">
                         <th class="py-2.5">Coin</th>
                         <th class="py-2.5">Giriş / Tutar</th>
-                        <th class="py-2.5">Mevcut Fiyat</th>
-                        <th class="py-2.5">Giriş Zamanı</th>
+                        <th class="py-2.5">Fiyat / Zirve</th>
+                        <th class="py-2.5">Kâr Koruma / Hedefler</th>
                         <th class="py-2.5 text-right">PnL (%) / USD</th>
                     </tr>
                 </thead>
@@ -826,13 +852,28 @@
                 row.className = 'hover:bg-slate-900/10 transition-colors duration-150';
                 
                 const pnl = pos.currentPnLPercent ?? 0;
-                const pnlClass = pnl >= 0 ? 'text-emerald-400' : 'text-rose-500';
+                const pnlClass = pnl >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-500 font-bold';
                 const pnlSign = pnl >= 0 ? '+' : '';
                 const pnlUsdt = pos.currentPnLUsdt ?? 0;
                 const pnlUsdtSign = pnlUsdt >= 0 ? '+' : '';
                 
-                const timeFormatted = formatLocalTime(pos.entryTime);
                 const sizeUsdt = pos.positionSizeUsdt ?? (pos.entryPrice * pos.quantity);
+                const highest = pos.highestPrice ? `▲ $${pos.highestPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : '-';
+                
+                // Build Profit Stage / Stop Loss label
+                let lockBadge = '';
+                if (pos.profitStage === 1) {
+                    lockBadge = `<span class="bg-blue-950/60 text-blue-400 border border-blue-500/30 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider">🛡️ Başa Baş</span>`;
+                } else if (pos.profitStage === 2) {
+                    lockBadge = `<span class="bg-emerald-950/80 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider">🔒 +%1 Kilit</span>`;
+                } else if (pos.profitStage === 3) {
+                    lockBadge = `<span class="bg-purple-950/80 text-purple-400 border border-purple-500/30 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider">🔥 +%2 Kilit</span>`;
+                } else {
+                    lockBadge = `<span class="text-slate-500 text-[10px]">Normal Stop</span>`;
+                }
+
+                const slVal = pos.stopLoss ? `$${pos.stopLoss.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : '-';
+                const tpVal = pos.takeProfit ? `$${pos.takeProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : '-';
 
                 row.innerHTML = `
                     <td class="py-2.5">
@@ -840,13 +881,23 @@
                             <span>${pos.coin.replace('USDT', '')}</span>
                             <span class="text-[9px] text-slate-500 opacity-60">🔗</span>
                         </a>
+                        <div class="text-[9px] text-slate-500 uppercase font-black tracking-tight mt-0.5">${pos.strategyName || '-'}</div>
                     </td>
                     <td class="py-2.5 font-mono text-slate-300">
                         <div>$${pos.entryPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</div>
                         <div class="text-[10px] text-slate-500 font-semibold">$${sizeUsdt.toFixed(2)} USDT</div>
                     </td>
-                    <td class="py-2.5 font-mono text-slate-300">$${pos.currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</td>
-                    <td class="py-2.5 font-mono text-slate-400 text-[10px]">${timeFormatted}</td>
+                    <td class="py-2.5 font-mono text-slate-300">
+                        <div>$${pos.currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</div>
+                        <div class="text-[9px] text-slate-500 font-bold">${highest}</div>
+                    </td>
+                    <td class="py-2.5 font-mono text-slate-300">
+                        <div class="flex items-center space-x-1.5">
+                            ${lockBadge}
+                            <span class="text-[10px] text-slate-400">SL: ${slVal}</span>
+                        </div>
+                        <div class="text-[9px] text-slate-500 font-bold mt-1">Hedef (TP): ${tpVal}</div>
+                    </td>
                     <td class="py-2.5 text-right font-black font-mono ${pnlClass}">
                         <div>${pnlSign}${pnl.toFixed(2)}%</div>
                         <div class="text-[10px] font-bold">${pnlUsdtSign}$${pnlUsdt.toFixed(2)}</div>
