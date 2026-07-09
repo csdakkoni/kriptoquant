@@ -766,71 +766,7 @@
             // Render Live Chart
             updateChart(state.equityCurveLive || []);
 
-            // Render Closed Trades (Transaction History)
-            const closedTradesContainer = document.getElementById('closed-trades-list');
-            if (closedTradesContainer) {
-                const closedTrades = state.closedTrades || [];
-                if (closedTrades.length === 0) {
-                    closedTradesContainer.innerHTML = `
-                        <tr>
-                            <td colspan="8" class="text-slate-500 text-center py-8">Kapanan pozisyon bulunmuyor.</td>
-                        </tr>
-                    `;
-                } else {
-                    closedTradesContainer.innerHTML = '';
-                    const sortedTrades = [...closedTrades].sort((a, b) => new Date(b.exitTime).getTime() - new Date(a.exitTime).getTime()).slice(0, 15);
-                    
-                    sortedTrades.forEach(trade => {
-                        const tr = document.createElement('tr');
-                        tr.className = 'hover:bg-slate-900/10 border-b border-slate-900/60 transition-colors duration-150';
-                        
-                        const pnlPct = trade.realizedPnLPercent ?? 0;
-                        const pnlVal = trade.realizedPnLUsdt ?? 0;
-                        
-                        const pnlPctClass = pnlPct >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-500 font-bold';
-                        const pnlValClass = pnlVal >= 0 ? 'text-emerald-400 font-black' : 'text-rose-500 font-black';
-                        
-                        const pnlPctSign = pnlPct >= 0 ? '+' : '';
-                        const pnlValSign = pnlVal >= 0 ? '+' : '';
-                        
-                        const durationSec = trade.holdingDurationSeconds ?? 0;
-                        const durationStr = durationSec < 60 ? `${durationSec}s` : `${Math.round(durationSec / 60)} dk`;
-                        
-                        const formatTime = (isoStr) => {
-                            if (!isoStr) return '-';
-                            const d = new Date(isoStr);
-                            const pad = (n) => String(n).padStart(2, '0');
-                            return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-                        };
-                        
-                        const entryTimeStr = formatTime(trade.entryTime);
-                        const exitTimeStr = formatTime(trade.exitTime);
-
-                        tr.innerHTML = `
-                            <td class="py-3.5 pl-2 text-slate-500 font-mono text-[10px]">
-                                <div class="text-slate-300 font-bold">${exitTimeStr}</div>
-                                <div class="text-slate-600">Giriş: ${entryTimeStr}</div>
-                            </td>
-                            <td class="py-3.5">
-                                <a href="https://www.binance.com/en/trade/${trade.coin.replace('USDT', '_USDT')}" target="_blank" class="font-bold text-slate-200 hover:text-teal-400 hover:underline flex items-center space-x-1 select-all">
-                                    <span>${trade.coin.replace('USDT', '')}</span>
-                                    <span class="text-[9px] text-slate-500 opacity-60">🔗</span>
-                                </a>
-                            </td>
-                            <td class="py-3.5 text-slate-400 font-semibold text-[10px]"><span class="px-1.5 py-0.5 rounded bg-emerald-950/40 text-emerald-400 border border-emerald-900/30">LONG</span></td>
-                            <td class="py-3.5 font-mono text-slate-400 text-[10px]">${trade.strategyName || '-'}</td>
-                            <td class="py-3.5 font-mono text-slate-300">
-                                <div>$${trade.exitPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
-                                <div class="text-[10px] text-slate-500">Giriş: $${trade.entryPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
-                            </td>
-                            <td class="py-3.5 font-mono text-slate-400">${durationStr}</td>
-                            <td class="py-3.5 text-right font-mono ${pnlValClass}">${pnlValSign}$${pnlVal.toFixed(2)}</td>
-                            <td class="py-3.5 text-right font-mono ${pnlPctClass} pr-2">${pnlPctSign}${pnlPct.toFixed(2)}%</td>
-                        `;
-                        closedTradesContainer.appendChild(tr);
-                    });
-                }
-            }
+            // Render Closed Trades (now handled globally for all strategies by pollGlobalActivity)
 
             const positionsContainer = document.getElementById('positions-list');
             positionsContainer.innerHTML = '';
@@ -1027,11 +963,93 @@
         let globalActivePositions = {};
         let isGlobalTrackerInitialized = false;
 
+        function renderGlobalClosedTrades(states) {
+            const closedTradesContainer = document.getElementById('closed-trades-list');
+            if (!closedTradesContainer) return;
+
+            // Gather closed trades from all states
+            const allClosedTrades = [];
+            states.forEach(state => {
+                const trades = state.closedTrades || [];
+                trades.forEach(t => {
+                    allClosedTrades.push({
+                        ...t,
+                        strategyName: t.strategyName || state.strategy
+                    });
+                });
+            });
+
+            if (allClosedTrades.length === 0) {
+                closedTradesContainer.innerHTML = `
+                    <tr>
+                        <td colspan="8" class="text-slate-500 text-center py-8">Kapanan pozisyon bulunmuyor.</td>
+                    </tr>
+                `;
+            } else {
+                // Sort by exitTime descending and limit to 15
+                const sortedTrades = allClosedTrades.sort((a, b) => new Date(b.exitTime).getTime() - new Date(a.exitTime).getTime()).slice(0, 15);
+                
+                closedTradesContainer.innerHTML = '';
+                sortedTrades.forEach(trade => {
+                    const tr = document.createElement('tr');
+                    tr.className = 'hover:bg-slate-900/10 border-b border-slate-900/60 transition-colors duration-150';
+                    
+                    const pnlPct = trade.realizedPnLPercent ?? 0;
+                    const pnlVal = trade.realizedPnLUsdt ?? 0;
+                    
+                    const pnlPctClass = pnlPct >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-500 font-bold';
+                    const pnlValClass = pnlVal >= 0 ? 'text-emerald-400 font-black' : 'text-rose-500 font-black';
+                    
+                    const pnlPctSign = pnlPct >= 0 ? '+' : '';
+                    const pnlValSign = pnlVal >= 0 ? '+' : '';
+                    
+                    const durationSec = trade.holdingDurationSeconds ?? 0;
+                    const durationStr = durationSec < 60 ? `${durationSec}s` : `${Math.round(durationSec / 60)} dk`;
+                    
+                    const formatTime = (isoStr) => {
+                        if (!isoStr) return '-';
+                        const d = new Date(isoStr);
+                        const pad = (n) => String(n).padStart(2, '0');
+                        return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+                    };
+                    
+                    const entryTimeStr = formatTime(trade.entryTime);
+                    const exitTimeStr = formatTime(trade.exitTime);
+
+                    tr.innerHTML = `
+                        <td class="py-3.5 pl-2 text-slate-500 font-mono text-[10px]">
+                            <div class="text-slate-300 font-bold">${exitTimeStr}</div>
+                            <div class="text-slate-600">Giriş: ${entryTimeStr}</div>
+                        </td>
+                        <td class="py-3.5">
+                            <a href="https://www.binance.com/en/trade/${trade.coin.replace('USDT', '_USDT')}" target="_blank" class="font-bold text-slate-200 hover:text-teal-400 hover:underline flex items-center space-x-1 select-all">
+                                <span>${trade.coin.replace('USDT', '')}</span>
+                                <span class="text-[9px] text-slate-500 opacity-60">🔗</span>
+                            </a>
+                        </td>
+                        <td class="py-3.5 text-slate-400 font-semibold text-[10px]"><span class="px-1.5 py-0.5 rounded bg-emerald-950/40 text-emerald-400 border border-emerald-900/30">LONG</span></td>
+                        <td class="py-3.5 font-mono text-slate-400 text-[10px]">${trade.strategyName || '-'}</td>
+                        <td class="py-3.5 font-mono text-slate-300">
+                            <div>$${trade.exitPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                            <div class="text-[10px] text-slate-500">Giriş: $${trade.entryPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                        </td>
+                        <td class="py-3.5 font-mono text-slate-400">${durationStr}</td>
+                        <td class="py-3.5 text-right font-mono ${pnlValClass}">${pnlValSign}$${pnlVal.toFixed(2)}</td>
+                        <td class="py-3.5 text-right font-mono ${pnlPctClass} pr-2">${pnlPctSign}${pnlPct.toFixed(2)}%</td>
+                    `;
+                    closedTradesContainer.appendChild(tr);
+                });
+            }
+        }
+
         async function pollGlobalActivity() {
             try {
                 const res = await fetch('/api/live-paper/all-states');
                 if (!res.ok) return;
                 const states = await res.json();
+
+                // Render global closed trades
+                renderGlobalClosedTrades(states);
 
                 if (!isGlobalTrackerInitialized) {
                     states.forEach(state => {
