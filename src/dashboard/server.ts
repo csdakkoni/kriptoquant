@@ -479,6 +479,65 @@ export function startDashboardServer(port: number = 3000): any {
 				return;
 			}
 
+			// ── 1cccc) GET /api/live-paper/export-csv ➔ İşlem geçmişini CSV olarak indir ──
+			if (url === '/api/live-paper/export-csv' && req.method === 'GET') {
+				const registeredStrategies = ['consensus', 'a1', 'a2', 'donchian-breakout', 'ema-cross', 'supertrend', 'bollinger-bands', 'trend-pullback', 'freedom', 'freedom_b', 'gemini_1', 'gemini_2'];
+				const intervals = ['15m', '1h', '4h'];
+				const closedTrades: any[] = [];
+
+				for (const strat of registeredStrategies) {
+					for (const intv of intervals) {
+						const state = getExecutionEngineState(strat, intv);
+						if (state && state.closedTrades && Array.isArray(state.closedTrades)) {
+							for (const trade of state.closedTrades) {
+								closedTrades.push({
+									strategy: strat,
+									coin: trade.coin,
+									entryTime: trade.entryTime,
+									exitTime: trade.exitTime,
+									entryPrice: trade.entryPrice,
+									exitPrice: trade.exitPrice,
+									quantity: trade.quantity || 0,
+									pnlPercent: trade.realizedPnLPercent || 0,
+									pnlUsdt: trade.realizedPnLUsdt || 0,
+									reason: trade.exitReason,
+									durationSeconds: trade.holdingDurationSeconds || 0
+								});
+							}
+						}
+					}
+				}
+
+				closedTrades.sort((a, b) => new Date(b.exitTime).getTime() - new Date(a.exitTime).getTime());
+
+				const headers = ['Strategy', 'Coin', 'Entry Time', 'Exit Time', 'Entry Price', 'Exit Price', 'Quantity', 'PnL %', 'PnL $', 'Exit Reason', 'Duration (Seconds)'];
+				const csvRows = [headers.join(',')];
+
+				for (const t of closedTrades) {
+					const row = [
+						t.strategy,
+						t.coin,
+						t.entryTime,
+						t.exitTime,
+						t.entryPrice,
+						t.exitPrice,
+						t.quantity,
+						t.pnlPercent.toFixed(4),
+						t.pnlUsdt.toFixed(2),
+						t.reason,
+						t.durationSeconds
+					];
+					csvRows.push(row.map(val => `"${val}"`).join(','));
+				}
+
+				res.writeHead(200, {
+					'Content-Type': 'text/csv',
+					'Content-Disposition': 'attachment; filename="all_live_closed_trades.csv"'
+				});
+				res.end(csvRows.join('\n'));
+				return;
+			}
+
 			// ── 1d) POST /api/live-paper/start ➔ Motoru Canlı Başlat ──────────
 			if (url === '/api/live-paper/start' && req.method === 'POST') {
 				let body = '';
