@@ -458,10 +458,15 @@ export function startDashboardServer(port: number = 3000): any {
 			// ── 1ccc) GET /api/live-paper/all-states ➔ Tüm Stratejilerin Durumu ──
 			if (url === '/api/live-paper/all-states' && req.method === 'GET') {
 				const states: any[] = [];
-				const registeredStrategies = ['consensus', 'a1', 'a2', 'donchian-breakout', 'ema-cross', 'supertrend', 'bollinger-bands', 'trend-pullback', 'freedom', 'freedom_b', 'gemini_1', 'gemini_2'];
-				const intervals = ['15m', '1h', '4h'];
-				for (const strat of registeredStrategies) {
-					for (const intv of intervals) {
+				const strategyIntervals: Record<string, string[]> = {
+					'bollinger-bands': ['15m'],
+					'a2': ['15m'],
+					'consensus': ['1h'],
+					'supertrend': ['4h'],
+					'ema-cross': ['4h']
+				};
+				for (const [strat, intvs] of Object.entries(strategyIntervals)) {
+					for (const intv of intvs) {
 						const state = getExecutionEngineState(strat, intv);
 						if (state) {
 							states.push({
@@ -484,12 +489,17 @@ export function startDashboardServer(port: number = 3000): any {
 
 			// ── 1cccc) GET /api/live-paper/export-csv ➔ İşlem geçmişini CSV olarak indir ──
 			if (url === '/api/live-paper/export-csv' && req.method === 'GET') {
-				const registeredStrategies = ['consensus', 'a1', 'a2', 'donchian-breakout', 'ema-cross', 'supertrend', 'bollinger-bands', 'trend-pullback', 'freedom', 'freedom_b', 'gemini_1', 'gemini_2'];
-				const intervals = ['15m', '1h', '4h'];
+				const strategyIntervals: Record<string, string[]> = {
+					'bollinger-bands': ['15m'],
+					'a2': ['15m'],
+					'consensus': ['1h'],
+					'supertrend': ['4h'],
+					'ema-cross': ['4h']
+				};
 				const closedTrades: any[] = [];
 
-				for (const strat of registeredStrategies) {
-					for (const intv of intervals) {
+				for (const [strat, intvs] of Object.entries(strategyIntervals)) {
+					for (const intv of intvs) {
 						const state = getExecutionEngineState(strat, intv);
 						if (state && state.closedTrades && Array.isArray(state.closedTrades)) {
 							for (const trade of state.closedTrades) {
@@ -841,10 +851,15 @@ export function startDashboardServer(port: number = 3000): any {
 
 		// Check for auto-resume on server startup for all strategies & intervals
 		try {
-			const registeredStrategies = ['consensus', 'a1', 'a2', 'donchian-breakout', 'ema-cross', 'supertrend', 'bollinger-bands', 'trend-pullback', 'freedom', 'freedom_b', 'gemini_1', 'gemini_2'];
-			const intervals = ['15m', '1h', '4h'];
-			for (const strat of registeredStrategies) {
-				for (const interval of intervals) {
+			const strategyIntervals: Record<string, string[]> = {
+				'bollinger-bands': ['15m'],
+				'a2': ['15m'],
+				'consensus': ['1h'],
+				'supertrend': ['4h'],
+				'ema-cross': ['4h']
+			};
+			for (const [strat, intvs] of Object.entries(strategyIntervals)) {
+				for (const interval of intvs) {
 					const state = getExecutionEngineState(strat, interval);
 					if (state && state.engineStatus === 'running' && state.coins && state.interval && state.strategyPath) {
 						log(`[Auto-Resume] Resuming previously running ExecutionEngine for ${strat} (${interval}) with ${state.coins.length} coins...`);

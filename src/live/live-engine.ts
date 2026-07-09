@@ -924,21 +924,12 @@ export interface StrategySummary {
 
 export function getAllExecutionEnginesSummary(): StrategySummary[] {
 	const registeredStrategies = [
-		{ name: 'consensus', label: 'Consensus Hybrid' },
-		{ name: 'a1', label: 'A1 Scalper' },
-		{ name: 'a2', label: 'A2 Bollinger (Volt)' },
-		{ name: 'donchian-breakout', label: 'Donchian Breakout' },
-		{ name: 'ema-cross', label: 'EMA Crossover' },
-		{ name: 'supertrend', label: 'Supertrend' },
-		{ name: 'bollinger-bands', label: 'Bollinger Bands' },
-		{ name: 'trend-pullback', label: 'Trend Pullback' },
-		{ name: 'freedom', label: 'Freedom Strategy' },
-		{ name: 'freedom_b', label: 'Freedom B Strategy' },
-		{ name: 'gemini_1', label: 'Gemini 1 Strategy' },
-		{ name: 'gemini_2', label: 'Gemini 2 Strategy' }
+		{ name: 'consensus', label: 'Consensus Hybrid', interval: '1h' },
+		{ name: 'a2', label: 'A2 Bollinger (Volt)', interval: '15m' },
+		{ name: 'ema-cross', label: 'EMA Crossover', interval: '4h' },
+		{ name: 'supertrend', label: 'Supertrend', interval: '4h' },
+		{ name: 'bollinger-bands', label: 'Bollinger Bands', interval: '15m' }
 	];
-
-	const intervals = ['15m', '1h', '4h'];
 
 	return registeredStrategies.map(strat => {
 		let isAnyRunning = false;
@@ -951,27 +942,25 @@ export function getAllExecutionEnginesSummary(): StrategySummary[] {
 		let maxUptime = 0;
 		let latestCandleTime = '';
 
-		for (const interval of intervals) {
-			const state = getExecutionEngineState(strat.name, interval);
-			if (state) {
-				const startCash = 10000;
-				const equity = state.currentEquity ?? state.cash ?? startCash;
-				const pnl = equity - startCash;
-				totalPnLUsdt += pnl;
-				totalCash += state.cash ?? startCash;
-				totalRealizedPnL += state.realizedPnL ?? 0;
+		const state = getExecutionEngineState(strat.name, strat.interval);
+		if (state) {
+			const startCash = 10000;
+			const equity = state.currentEquity ?? state.cash ?? startCash;
+			const pnl = equity - startCash;
+			totalPnLUsdt += pnl;
+			totalCash += state.cash ?? startCash;
+			totalRealizedPnL += state.realizedPnL ?? 0;
 
-				if (state.engineStatus === 'running') {
-					isAnyRunning = true;
-					activeIntervals.push(interval);
-					activePositionsCount += state.activePositions?.length || 0;
-					(state.activePositions || []).forEach(p => {
-						activePositions.push(`${p.coin.replace('USDT', '')} (${interval})`);
-					});
-					maxUptime = Math.max(maxUptime, state.uptime || 0);
-					if (state.lastCandleTime && state.lastCandleTime > latestCandleTime) {
-						latestCandleTime = state.lastCandleTime;
-					}
+			if (state.engineStatus === 'running') {
+				isAnyRunning = true;
+				activeIntervals.push(strat.interval);
+				activePositionsCount += state.activePositions?.length || 0;
+				(state.activePositions || []).forEach(p => {
+					activePositions.push(`${p.coin.replace('USDT', '')} (${strat.interval})`);
+				});
+				maxUptime = Math.max(maxUptime, state.uptime || 0);
+				if (state.lastCandleTime && state.lastCandleTime > latestCandleTime) {
+					latestCandleTime = state.lastCandleTime;
 				}
 			}
 		}
