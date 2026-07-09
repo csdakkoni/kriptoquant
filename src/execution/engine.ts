@@ -159,7 +159,56 @@ export function runExecution(
 			let exitSignal: { exitPrice: number; reason: string } | null = null;
 			const pos = portfolio.positions.getPositionInfo();
 
-			if (pos) {
+			if (strategy.name === 'a2' && pos) {
+				const entryPrice = pos.entryPrice;
+				const currentAtr = pos.atrAtEntry || (entryPrice * 0.02);
+
+				// 1. Time Exit: check if open for >= 24 hours (86400000 ms)
+				const elapsedMs = candle.openTime - pos.entryTimestamp;
+				if (elapsedMs >= 24 * 60 * 60 * 1000) {
+					exitSignal = { exitPrice: candle.close, reason: 'Time Exit' };
+				}
+
+				// 2. Initial Stop Loss check
+				if (!exitSignal && candle.low <= portfolio.positions.stopLossPrice) {
+					const exitPrice = Math.min(candle.open, portfolio.positions.stopLossPrice);
+					exitSignal = {
+						exitPrice,
+						reason: portfolio.positions.partialExitTriggered ? 'ATR Profit Lock' : 'SL (ATR)'
+					};
+				}
+
+				// 3. Level 1 Target check (+2 * ATR)
+				if (!exitSignal && !portfolio.positions.partialExitTriggered) {
+					const level1Target = entryPrice + 2 * currentAtr;
+					if (candle.high >= level1Target) {
+						// Execute partial TP of 50%
+						const fillPrice = Math.max(candle.open, level1Target);
+						const fill = broker.sell(candle.openTime, fillPrice, portfolio.positions.getQuantity() / 2);
+						if (fill) {
+							if (logger) logger.onFill(fill);
+							const partialTrade = portfolio.positions.partialClose(fill, 'Partial TP', coin);
+							portfolio.addTrade(partialTrade);
+							portfolio.addCapital(fill.quantity * fill.price - fill.commission);
+							if (logger) logger.onTrade(partialTrade);
+
+							// Move SL to Entry + commission + buffer (roundtrip ~0.25% buffer)
+							portfolio.positions.stopLossPrice = entryPrice * 1.0025;
+							portfolio.positions.profitStage = 1;
+						}
+					}
+				}
+
+				// 4. Level 2 Target check (+3 * ATR)
+				if (!exitSignal && portfolio.positions.partialExitTriggered && portfolio.positions.profitStage < 2) {
+					const level2Target = entryPrice + 3 * currentAtr;
+					if (candle.high >= level2Target) {
+						// Move stop loss to entry + 1.5 * ATR
+						portfolio.positions.stopLossPrice = entryPrice + 1.5 * currentAtr;
+						portfolio.positions.profitStage = 2;
+					}
+				}
+			} else if (pos) {
 				const entryPrice = pos.entryPrice;
 				
 				// DÜZELTME: Yüzdesel SL/TP girdisi 1'den büyük veya eşitse 100'e bölünür (%5 girdisi 0.05 olarak işlenir)
@@ -187,13 +236,13 @@ export function runExecution(
 						};
 					}
 				}
-			}
 
-			// C) ATR Stop Kuralı Kontrolü
-			if (!exitSignal) {
-				const stopSignal = portfolio.positions.evaluateStopLoss(candle, stopRule);
-				if (stopSignal) {
-					exitSignal = stopSignal;
+				// C) ATR Stop Kuralı Kontrolü
+				if (!exitSignal) {
+					const stopSignal = portfolio.positions.evaluateStopLoss(candle, stopRule);
+					if (stopSignal) {
+						exitSignal = stopSignal;
+					}
 				}
 			}
 

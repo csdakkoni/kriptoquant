@@ -1,30 +1,25 @@
 // ============================================================================
-// KRIPTOQUANT — A2 15m Scalper Strategy (Sprint 29)
+// KRIPTOQUANT — A2 Bollinger Bands (Oynaklık Tabanlı) (Sprint 30)
 // ============================================================================
-// Strateji Kuralları (15m Mumlar):
-// 1. BUY:
-//    - Close > EMA(20)
-//    - Volume > SMA(20) of Volume * 1.0 (volumeMultiplier)
-//    - RSI(14) <= 70
-// 2. Position Size: Bakiyenin %25'i.
-// 3. Automatic SL / TP:
-//    - Stop Loss: -1% (Entry * 0.99)
-//    - Take Profit: +3% (Entry * 1.03)
+// Strateji Kuralları:
+// 1. Giriş Filtresi (ADX < 25): Sadece yatay veya trend bulunmayan piyasalar.
+// 2. LONG Giriş: Fiyat alt Bollinger Bandına değdiğinde (Price <= Lower Band).
+// 3. Çıkış: Fiyat üst Bollinger Bandına ulaştığında (Price >= Upper Band)
+//    veya ATR tabanlı stop kuralı tetiklendiğinde (Engine & Live Engine tarafında).
 // ============================================================================
 
 import type { Candle, Signal, Strategy } from '../../../core/types.js';
-import { ema, rsi, sma } from '../../../core/indicators/index.js';
+import { bollingerBands, atr, adx } from '../../../core/indicators/index.js';
 
 export function createA2Strategy(
-	indicatorPeriod: number = 20,
-	rsiPeriod: number = 14,
-	volumeMultiplier: number = 1.0,
-	stopLossRatio: number = 0.01,
-	takeProfitRatio: number = 0.03
+	bbPeriod: number = 20,
+	bbMultiplier: number = 2,
+	atrPeriod: number = 14,
+	adxPeriod: number = 14
 ): Strategy {
 	return {
 		name: 'a2',
-		description: 'A2 15m Scalper (EMA & RSI & Volume)',
+		description: 'A2 Bollinger Bands (Oynaklık Tabanlı)',
 		warmupPeriod: 50,
 
 		evaluate(candles: Candle[]): Signal[] {
@@ -32,46 +27,53 @@ export function createA2Strategy(
 			if (candles.length < 50) return [];
 
 			const closes = candles.map(c => c.close);
-			const volumes = candles.map(c => c.volume);
-
-			const ema20 = ema(closes, indicatorPeriod);
-			const rsi14 = rsi(closes, rsiPeriod);
-			const smaVolume20 = sma(volumes, indicatorPeriod);
+			const bb = bollingerBands(closes, bbPeriod, bbMultiplier);
+			const atrValues = atr(candles, atrPeriod);
+			const adxResult = adx(candles, adxPeriod);
 
 			let lastSignalSide: 'BUY' | 'SELL' | null = null;
 
 			for (let i = 50; i < candles.length; i++) {
 				const current = candles[i];
-				
-				const isAboveEma = current.close > ema20[i];
-				const isHighVolume = current.volume > smaVolume20[i] * volumeMultiplier;
-				const isNotOverbought = rsi14[i] <= 70;
+				const adxVal = adxResult.adx[i];
+				const atrVal = atrValues[i];
+				const lowerBand = bb.lower[i];
+				const upperBand = bb.upper[i];
 
-				const isBuySetup = isAboveEma && isHighVolume && isNotOverbought;
+				if (Number.isNaN(lowerBand) || Number.isNaN(upperBand) || Number.isNaN(adxVal) || Number.isNaN(atrVal)) {
+					continue;
+				}
+
+				const isBuySetup = current.close <= lowerBand && adxVal < 25;
+				const isSellSetup = current.close >= upperBand;
 
 				if (isBuySetup && lastSignalSide !== 'BUY') {
+					const slPrice = current.close - 2 * atrVal;
+					// Standard hard TP as 4 * ATR (Level 1 is at 2*ATR, Level 2 trailing starts at 3*ATR)
+					const tpPrice = current.close + 4 * atrVal;
+
 					signals.push({
 						timestamp: current.openTime,
 						side: 'BUY',
 						price: current.close,
-						confidence: 0.80,
-						reason: `A2 BUY: Price > EMA20 (${current.close.toFixed(2)} > ${ema20[i].toFixed(2)}), Vol > SMA20 (${current.volume.toFixed(1)} > ${(smaVolume20[i]*volumeMultiplier).toFixed(1)}), RSI = ${rsi14[i].toFixed(1)}. SL = -1%, TP = +3%.`,
-						metadata: { sl: current.close * (1 - stopLossRatio), tp: current.close * (1 + takeProfitRatio) }
+						confidence: 0.85,
+						reason: `A2 BB BUY: Price <= Lower Band (${current.close.toFixed(4)} <= ${lowerBand.toFixed(4)}) & ADX = ${adxVal.toFixed(1)} < 25. ATR = ${atrVal.toFixed(4)}. SL = ${slPrice.toFixed(4)}, TP = ${tpPrice.toFixed(4)}.`,
+						metadata: {
+							sl: slPrice,
+							tp: tpPrice,
+							atr: atrVal
+						}
 					});
 					lastSignalSide = 'BUY';
-				} else if (!isBuySetup && lastSignalSide === 'BUY') {
-					// In a2, exits are purely handled by SL/TP in the engine.
-					// However, for backtest completeness we can exit if trend breaks (e.g. price drops below EMA20)
-					if (current.close < ema20[i]) {
-						signals.push({
-							timestamp: current.openTime,
-							side: 'SELL',
-							price: current.close,
-							confidence: 0.80,
-							reason: `A2 Exit: Price broke below EMA20 (${current.close.toFixed(2)} < ${ema20[i].toFixed(2)}).`,
-						});
-						lastSignalSide = 'SELL';
-					}
+				} else if (isSellSetup && lastSignalSide === 'BUY') {
+					signals.push({
+						timestamp: current.openTime,
+						side: 'SELL',
+						price: current.close,
+						confidence: 0.85,
+						reason: `A2 BB SELL (BB Upper Exit): Price >= Upper Band (${current.close.toFixed(4)} >= ${upperBand.toFixed(4)}).`
+					});
+					lastSignalSide = 'SELL';
 				}
 			}
 

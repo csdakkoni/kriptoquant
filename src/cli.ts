@@ -24,6 +24,14 @@ import { printReport, saveReport } from './research/report.js';
 import { createSmaCrossStrategy } from './research/strategies/sma-cross/index.js';
 import { createEmaCrossStrategy } from './research/strategies/ema-cross/index.js';
 import { createDonchianBreakoutStrategy } from './research/strategies/donchian-breakout/index.js';
+import { createA1Strategy } from './research/strategies/a1/index.js';
+import { createA2Strategy } from './research/strategies/a2/index.js';
+import { createConsensusStrategy } from './research/strategies/consensus/index.js';
+import { createTrendPullbackStrategy } from './research/strategies/trend-pullback/index.js';
+import { createFreedomStrategy } from './research/strategies/freedom/index.js';
+import { createFreedomBStrategy } from './research/strategies/freedom_b/index.js';
+import { createGemini1Strategy } from './research/strategies/gemini_1/index.js';
+import { createGemini2Strategy } from './research/strategies/gemini_2/index.js';
 import { DEFAULT_SWEEP } from './research/experiments/runner.js';
 import { runSweep, printLeaderboard, printMetadata, printStrategyComparison, exportSweepCSV, exportMetadataJSON } from './research/experiments/sweep.js';
 import { runWalkForward, printWalkForwardReport, exportWalkForwardJSON, exportWalkForwardCSV } from './research/walkforward/walkforward.js';
@@ -67,6 +75,14 @@ function resolveStrategy(name: string): Strategy | null {
 		'sma-cross': createSmaCrossStrategy(),
 		'ema-cross': createEmaCrossStrategy(),
 		'donchian-breakout': createDonchianBreakoutStrategy(),
+		'a1': createA1Strategy(),
+		'a2': createA2Strategy(),
+		'consensus': createConsensusStrategy(),
+		'trend-pullback': createTrendPullbackStrategy(),
+		'freedom': createFreedomStrategy(),
+		'freedom_b': createFreedomBStrategy(),
+		'gemini_1': createGemini1Strategy(),
+		'gemini_2': createGemini2Strategy(),
 	};
 	return strategies[name] ?? null;
 }
@@ -92,7 +108,7 @@ async function commandBacktest(
 	const strategy = resolveStrategy(strategyName);
 	if (!strategy) {
 		logError(`Bilinmeyen strateji: ${strategyName}`);
-		logError('Mevcut stratejiler: sma-cross, ema-cross, donchian-breakout');
+		logError('Mevcut stratejiler: sma-cross, ema-cross, donchian-breakout, a1, a2, consensus, trend-pullback, freedom, freedom_b, gemini_1, gemini_2');
 		process.exit(1);
 	}
 

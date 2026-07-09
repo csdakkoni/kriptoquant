@@ -11,16 +11,18 @@ import type { PositionInfo, StopRule, StopSignal } from './stop-rule.js';
 import { round } from '../core/utils.js';
 
 export class PositionManager {
-	private quantity: number = 0;
-	private entryPrice: number = 0;
-	private stopLossPrice: number = 0;
-	private atrAtEntry: number = 0;
-	private entryTimestamp: number = 0;
-	private entryCommission: number = 0;
-	private entryValue: number = 0;
-	private entryOrder: Order | null = null;
-	private highestPrice: number = 0;
-	private lowestPrice: number = 0;
+	public quantity: number = 0;
+	public entryPrice: number = 0;
+	public stopLossPrice: number = 0;
+	public atrAtEntry: number = 0;
+	public entryTimestamp: number = 0;
+	public entryCommission: number = 0;
+	public entryValue: number = 0;
+	public entryOrder: Order | null = null;
+	public highestPrice: number = 0;
+	public lowestPrice: number = 0;
+	public partialExitTriggered: boolean = false;
+	public profitStage: number = 0;
 
 	open(fill: Fill, quantityOrValue: number, atrAtEntry: number, stopLossPrice: number): void {
 		this.quantity = fill.quantity;
@@ -136,6 +138,66 @@ export class PositionManager {
 		if (low < this.lowestPrice) this.lowestPrice = low;
 	}
 
+	partialClose(fill: Fill, exitReason: string, coin: string): Trade {
+		if (!this.hasOpen()) {
+			throw new Error('Kısmi kapatılacak açık pozisyon bulunamadı.');
+		}
+
+		if (!this.entryOrder) {
+			throw new Error('Giriş emri bilgisi eksik.');
+		}
+
+		const sellQuantity = this.quantity / 2;
+		const sellValue = sellQuantity * fill.price;
+		const netValue = sellValue - fill.commission;
+
+		const exitOrder: Order = {
+			timestamp: fill.timestamp,
+			side: 'SELL',
+			price: fill.price,
+			quantity: sellQuantity,
+			value: netValue,
+		};
+
+		const grossPnl = sellQuantity * (fill.price - this.entryPrice);
+		const totalCommission = (this.entryCommission / 2) + fill.commission;
+		const entryValueSegment = this.entryValue / 2;
+		const netPnl = netValue - entryValueSegment;
+		const pnlPercent = (netPnl / entryValueSegment) * 100;
+
+		const trade: Trade = {
+			asset: coin,
+			entryOrder: {
+				...this.entryOrder,
+				quantity: sellQuantity,
+				value: entryValueSegment,
+			},
+			exitOrder,
+			positionSize: entryValueSegment,
+			commission: round(totalCommission, 4),
+			grossPnl: round(grossPnl, 4),
+			pnl: round(netPnl, 4),
+			pnlPercent: round(pnlPercent, 4),
+			holdingPeriod: fill.timestamp - this.entryTimestamp,
+			atrAtEntry: round(this.atrAtEntry, 4),
+			exitReason,
+			highestPrice: round(this.highestPrice, 4),
+			lowestPrice: round(this.lowestPrice, 4),
+			mae: 0,
+			mfe: 0,
+		};
+
+		// Reduce position by half
+		this.quantity -= sellQuantity;
+		this.entryValue -= entryValueSegment;
+		this.entryCommission -= (this.entryCommission / 2);
+
+		this.partialExitTriggered = true;
+		this.profitStage = 1;
+
+		return trade;
+	}
+
 	private reset(): void {
 		this.quantity = 0;
 		this.entryPrice = 0;
@@ -147,6 +209,8 @@ export class PositionManager {
 		this.entryOrder = null;
 		this.highestPrice = 0;
 		this.lowestPrice = 0;
+		this.partialExitTriggered = false;
+		this.profitStage = 0;
 	}
 }
 import type { Candle } from '../core/types.js';

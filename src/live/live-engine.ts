@@ -45,6 +45,8 @@ export interface ActivePosition {
 	highestPrice?: number;
 	breakevenTriggered?: boolean;
 	profitStage?: number;
+	initialAtr?: number;
+	partialExitTriggered?: boolean;
 }
 
 export interface ClosedTrade {
@@ -349,6 +351,87 @@ export class ExecutionEngine {
 
 		this.state.activePositions.forEach((p, idx) => {
 			if (p.coin === coin) {
+				if (p.strategyName === 'a2') {
+					const entryPrice = p.entryPrice;
+					const currentAtr = p.initialAtr || (entryPrice * 0.02);
+
+					// 1. Time Exit: check if open for >= 24 hours (86400000 ms)
+					const elapsedMs = timestamp - new Date(p.entryTime).getTime();
+					if (elapsedMs >= 24 * 60 * 60 * 1000) {
+						positionsToClose.push({ idx, reason: 'Time Exit', exitPrice: price });
+						return;
+					}
+
+					// 2. Initial Stop Loss / Trailing Stop Loss check
+					if (price <= p.stopLoss) {
+						const reason = p.partialExitTriggered ? 'ATR Profit Lock' : 'SL (ATR)';
+						positionsToClose.push({ idx, reason, exitPrice: p.stopLoss });
+						return;
+					}
+
+					// 3. Level 1 Target check (+2 * ATR)
+					if (!p.partialExitTriggered) {
+						const level1Target = entryPrice + 2 * currentAtr;
+						if (price >= level1Target) {
+							// Execute partial TP of 50%
+							const sellQty = p.quantity / 2;
+							log(`[🤖 A2] [${coin}] Kademeli Kar Al (+2 ATR) Tetiklendi. Fiyat: $${price.toFixed(4)} | Satilan: ${sellQty.toFixed(4)}`);
+							
+							// Run asynchronously so we don't block the iteration
+							this.broker.sell(coin, timestamp, price, sellQty).then(fill => {
+								// Record the partial closed trade to history
+								const partialPnLPercent = ((price - entryPrice) / entryPrice) * 100;
+								const partialPnLUsdt = (price - entryPrice) * sellQty - fill.commission;
+								
+								this.state.closedTrades.push({
+									coin,
+									direction: 'LONG',
+									entryTime: p.entryTime,
+									exitTime: new Date(timestamp).toISOString(),
+									entryPrice,
+									exitPrice: price,
+									quantity: sellQty,
+									realizedPnLPercent: partialPnLPercent,
+									realizedPnLUsdt: partialPnLUsdt,
+									entryReason: 'BUY',
+									exitReason: 'Partial TP',
+									holdingDurationSeconds: Math.floor((timestamp - new Date(p.entryTime).getTime()) / 1000),
+									mae: p.mae || 0,
+									mfe: p.mfe || 0,
+									rMultiple: partialPnLPercent / (p.riskPercent || 1),
+									strategyName: p.strategyName,
+								});
+
+								// Reduce position parameters by half
+								p.quantity -= sellQty;
+								p.positionSizeUsdt /= 2;
+
+								// Move SL to Entry + commission + buffer (roundtrip ~0.25% buffer)
+								p.stopLoss = entryPrice * 1.0025;
+								p.profitStage = 1;
+								p.partialExitTriggered = true;
+
+								log(`[🤖 A2] [${coin}] Kademeli Kar Al Sonrasi Stop Loss Basabas (+0.25% Buffer) Cekildi: $${p.stopLoss.toFixed(4)}`);
+								this.saveAndBroadcast();
+							}).catch(err => {
+								logError(`[🤖 A2] [${coin}] Kademeli Kar Al Satim Hatasi: ${err}`);
+							});
+						}
+					}
+
+					// 4. Level 2 Target check (+3 * ATR)
+					if (p.partialExitTriggered && (!p.profitStage || p.profitStage < 2)) {
+						const level2Target = entryPrice + 3 * currentAtr;
+						if (price >= level2Target) {
+							// Move stop loss to entry + 1.5 * ATR
+							p.stopLoss = entryPrice + 1.5 * currentAtr;
+							p.profitStage = 2;
+							log(`[🤖 A2] [${coin}] Dinamik Kar Kilitleme +1.5 ATR (Stage 2) Tetiklendi. Yeni Stop Loss: $${p.stopLoss.toFixed(4)}`);
+						}
+					}
+					return;
+				}
+
 				// 1) Multi-Stage Profit Lock-in (Kademeli Kâr Kilitleme):
 				// Stage 1 (Breakeven): PnL >= +1.5% -> Lock in Entry Price
 				if (p.currentPnLPercent >= 1.5 && (!p.profitStage || p.profitStage < 1)) {
@@ -843,7 +926,7 @@ export function getAllExecutionEnginesSummary(): StrategySummary[] {
 	const registeredStrategies = [
 		{ name: 'consensus', label: 'Consensus Hybrid' },
 		{ name: 'a1', label: 'A1 Scalper' },
-		{ name: 'a2', label: 'A2 15m Scalper' },
+		{ name: 'a2', label: 'A2 Bollinger (Volt)' },
 		{ name: 'donchian-breakout', label: 'Donchian Breakout' },
 		{ name: 'ema-cross', label: 'EMA Crossover' },
 		{ name: 'supertrend', label: 'Supertrend' },
