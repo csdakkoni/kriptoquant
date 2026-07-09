@@ -198,8 +198,8 @@ export class ExecutionEngine {
 			}
 		}
 
-		// 2) Establish WebSocket connection to Binance Kline stream (shared global order book prices)
-		this.connectWebSocket();
+		// 2) Register this engine with the shared global WebSocket stream manager
+		sharedStreamManager.register(this.interval, this.coins, this);
 
 		// 3) Start 1-second interval timer for Uptime and Heartbeat
 		this.timer = setInterval(() => {
@@ -228,10 +228,7 @@ export class ExecutionEngine {
 		log(`Live ExecutionEngine is stopping...`);
 		this.state.engineStatus = 'stopped';
 		
-		if (this.ws) {
-			this.ws.close();
-			this.ws = null;
-		}
+		sharedStreamManager.unregister(this.interval, this);
 
 		if (this.timer) {
 			clearInterval(this.timer);
@@ -247,36 +244,16 @@ export class ExecutionEngine {
 		return this.state;
 	}
 
-	private connectWebSocket(): void {
-		const streams = this.coins.map(c => `${c.toLowerCase()}@kline_${this.interval}`).join('/');
-		const wsUrl = `wss://stream.binance.com:9443/ws/${streams}`;
+	public getInterval(): string {
+		return this.interval;
+	}
 
-		log(`Connecting to Binance WebSocket: ${wsUrl}`);
-		this.ws = new WebSocket(wsUrl);
+	public isEngineRunning(): boolean {
+		return this.state.engineStatus === 'running';
+	}
 
-		this.ws.on('message', async (data: string) => {
-			try {
-				const msg = JSON.parse(data);
-				if (msg.e === 'kline') {
-					await this.handleKlineTick(msg.s, msg.k);
-				}
-			} catch (e) {
-				logError(`Error parsing WS kline tick: ${e}`);
-			}
-		});
-
-		this.ws.on('error', (err) => {
-			logError(`Binance WebSocket error: ${err}`);
-		});
-
-		this.ws.on('close', () => {
-			if (this.state.engineStatus === 'running') {
-				log(`Binance WebSocket closed unexpectedly. Reconnecting in 5s...`);
-				setTimeout(() => {
-					if (this.state.engineStatus === 'running') this.connectWebSocket();
-				}, 5000);
-			}
-		});
+	public async handleSharedKlineTick(coin: string, k: any): Promise<void> {
+		await this.handleKlineTick(coin, k);
 	}
 
 	private async fetchHistory(symbol: string, interval: string, limit: number = 200): Promise<Candle[]> {
@@ -669,6 +646,94 @@ function posTotalValue(positions: ActivePosition[]): number {
 	});
 	return total;
 }
+
+class SharedStreamManager {
+	private connections = new Map<string, WebSocket>();
+	private listeners = new Map<string, Set<ExecutionEngine>>();
+
+	public register(interval: string, coins: string[], engine: ExecutionEngine) {
+		let set = this.listeners.get(interval);
+		if (!set) {
+			set = new Set<ExecutionEngine>();
+			this.listeners.set(interval, set);
+		}
+		set.add(engine);
+
+		this.ensureConnection(interval, coins);
+	}
+
+	public unregister(interval: string, engine: ExecutionEngine) {
+		const set = this.listeners.get(interval);
+		if (set) {
+			set.delete(engine);
+			if (set.size === 0) {
+				this.closeConnection(interval);
+			}
+		}
+	}
+
+	private ensureConnection(interval: string, coins: string[]) {
+		if (this.connections.has(interval)) return;
+
+		const streams = coins.map(c => `${c.toLowerCase()}@kline_${interval}`).join('/');
+		const wsUrl = `wss://stream.binance.com:9443/ws/${streams}`;
+
+		log(`[SharedStreamManager] Creating single shared WebSocket for interval: ${interval}`);
+		const ws = new WebSocket(wsUrl);
+		this.connections.set(interval, ws);
+
+		ws.on('message', async (data: string) => {
+			try {
+				const msg = JSON.parse(data);
+				if (msg.e === 'kline') {
+					const coin = msg.s;
+					const k = msg.k;
+
+					const set = this.listeners.get(interval);
+					if (set) {
+						for (const engine of set) {
+							if (engine.isEngineRunning()) {
+								engine.handleSharedKlineTick(coin, k).catch(e => {
+									logError(`Error handling shared tick in engine: ${e}`);
+								});
+							}
+						}
+					}
+				}
+			} catch (e) {
+				logError(`[SharedStreamManager] Error parsing WS tick on interval ${interval}: ${e}`);
+			}
+		});
+
+		ws.on('error', (err) => {
+			logError(`[SharedStreamManager] WebSocket error on interval ${interval}: ${err}`);
+		});
+
+		ws.on('close', () => {
+			log(`[SharedStreamManager] WebSocket closed for interval ${interval}.`);
+			this.connections.delete(interval);
+
+			const set = this.listeners.get(interval);
+			if (set && set.size > 0) {
+				log(`[SharedStreamManager] Reconnecting interval ${interval} in 5s...`);
+				setTimeout(() => {
+					this.ensureConnection(interval, coins);
+				}, 5000);
+			}
+		});
+	}
+
+	private closeConnection(interval: string) {
+		const ws = this.connections.get(interval);
+		if (ws) {
+			ws.close();
+			this.connections.delete(interval);
+			log(`[SharedStreamManager] Closed shared WebSocket for interval: ${interval} (no active listeners)`);
+		}
+	}
+}
+
+export const sharedStreamManager = new SharedStreamManager();
 
 // ─── Global singleton management ─────────────────────────────────────────────
 
