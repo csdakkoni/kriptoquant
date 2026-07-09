@@ -161,16 +161,7 @@
                 
                 <!-- Controls Column (Left 5 cols) -->
                 <div class="lg:col-span-5 flex flex-col space-y-5">
-                    <!-- Coin Checkboxes Selection -->
-                    <div class="space-y-2">
-                        <div class="flex items-center justify-between">
-                            <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Takip Edilecek Coinler</label>
-                            <button id="toggle-all-btn" onclick="toggleAllCoins()" class="text-[9px] text-emerald-400 hover:text-emerald-300 font-bold bg-slate-900/60 px-2 py-0.5 rounded border border-white/5 active:scale-95 transition-all">Tümünü Kaldır</button>
-                        </div>
-                        <div id="coins-checkboxes-grid" class="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 bg-slate-950/60 p-4 rounded-xl border border-slate-800/80">
-                            <!-- Generated dynamically by JS -->
-                        </div>
-                    </div>
+
 
                     <!-- Strategy Select (Full Width) -->
                     <div class="space-y-2">
@@ -350,32 +341,7 @@
             "JUPUSDT", "PYTHUSDT", "PENDLEUSDT", "ONDOUSDT", "PEOPLEUSDT"
         ];
         
-        function renderCoinCheckboxes() {
-            const grid = document.getElementById('coins-checkboxes-grid');
-            if (!grid) return;
-            grid.innerHTML = '';
-            watchCoins.forEach(coin => {
-                const cleanName = coin.replace('USDT', '');
-                const label = document.createElement('label');
-                label.className = 'flex items-center space-x-2 cursor-pointer text-slate-300 hover:text-white select-none';
-                label.innerHTML = `
-                    <input type="checkbox" name="autopilot-coins" value="${coin}" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-950">
-                    <span class="font-semibold text-[11px] tracking-wide">${cleanName}</span>
-                `;
-                grid.appendChild(label);
-            });
-        }
-        
         const previousPrices = {};
-
-        let allCoinsSelected = true;
-        function toggleAllCoins() {
-            const checkboxes = document.querySelectorAll('input[name="autopilot-coins"]');
-            allCoinsSelected = !allCoinsSelected;
-            checkboxes.forEach(cb => cb.checked = allCoinsSelected);
-            const btn = document.getElementById('toggle-all-btn');
-            btn.innerText = allCoinsSelected ? 'Tümünü Kaldır' : 'Tümünü Seç';
-        }
 
         function addConsoleLog(message, type = 'info') {
             const timeStr = new Date().toLocaleTimeString();
@@ -880,12 +846,7 @@
 
         // Autopilot action APIs
         async function startAutopilot() {
-            const checkedCoins = Array.from(document.querySelectorAll('input[name="autopilot-coins"]:checked'))
-                                    .map(el => el.value);
-            if (checkedCoins.length === 0) {
-                alert('Lütfen işlem yapılacak en az bir coin seçin.');
-                return;
-            }
+            const checkedCoins = watchCoins;
             const strategy = document.getElementById('autopilot-strategy').value;
             const interval = strategyLockedIntervals[strategy] || '15m';
             const mlVeto = document.getElementById('autopilot-ml-veto').checked;
@@ -1181,7 +1142,6 @@
         }
 
         // Start connection on page load
-        renderCoinCheckboxes();
         setupWebsocket();
         setInterval(fetchStrategySummaries, 5000);
         setInterval(pollGlobalActivity, 2500);
