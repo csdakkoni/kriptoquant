@@ -461,6 +461,7 @@ export function startDashboardServer(port: number = 3000): any {
 				const strategyIntervals: Record<string, string[]> = {
 					'bollinger-bands': ['15m'],
 					'a2': ['15m'],
+					'vwap-reversion': ['15m'],
 					'consensus': ['1h'],
 					'supertrend': ['4h'],
 					'ema-cross': ['4h']
@@ -492,6 +493,7 @@ export function startDashboardServer(port: number = 3000): any {
 				const strategyIntervals: Record<string, string[]> = {
 					'bollinger-bands': ['15m'],
 					'a2': ['15m'],
+					'vwap-reversion': ['15m'],
 					'consensus': ['1h'],
 					'supertrend': ['4h'],
 					'ema-cross': ['4h']
@@ -854,6 +856,7 @@ export function startDashboardServer(port: number = 3000): any {
 			const strategyIntervals: Record<string, string[]> = {
 				'bollinger-bands': ['15m'],
 				'a2': ['15m'],
+				'vwap-reversion': ['15m'],
 				'consensus': ['1h'],
 				'supertrend': ['4h'],
 				'ema-cross': ['4h']

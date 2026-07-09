@@ -169,6 +169,7 @@
                         <select id="autopilot-strategy" class="w-full bg-slate-950 border border-slate-800/80 rounded-xl px-4 py-3 text-slate-200 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 transition duration-300 text-sm font-semibold">
                             <option value="consensus">Consensus Ensemble (Hibrit Mod - 1H)</option>
                             <option value="a2">A2 Bollinger (Oynaklık Tabanlı - 15M)</option>
+                            <option value="vwap-reversion">VWAP Reversion (Z-Score & ADX - 15M)</option>
                             <option value="ema-cross">EMA Crossover (4H)</option>
                             <option value="supertrend">Supertrend (4H)</option>
                             <option value="bollinger-bands">Bollinger Bands (15M)</option>
@@ -309,6 +310,7 @@
         const strategyMetadata = {
             'consensus': { label: 'Consensus Hybrid', icon: '🤖' },
             'a2': { label: 'A2 Bollinger (Volt)', icon: '🛡️' },
+            'vwap-reversion': { label: 'VWAP Reversion', icon: '🔄' },
             'ema-cross': { label: 'EMA Crossover', icon: '📈' },
             'supertrend': { label: 'Supertrend', icon: '🦅' },
             'bollinger-bands': { label: 'Bollinger Bands', icon: '📊' }
@@ -317,6 +319,7 @@
         const strategyLockedIntervals = {
             'consensus': '1h',
             'a2': '15m',
+            'vwap-reversion': '15m',
             'ema-cross': '4h',
             'supertrend': '4h',
             'bollinger-bands': '15m'
