@@ -47,8 +47,9 @@ if (closedTrades.length === 0) {
 closedTrades.sort((a, b) => new Date(b.exitTime).getTime() - new Date(a.exitTime).getTime());
 
 // Generate CSV content
+const bom = '\uFEFF';
 const headers = ['Strategy', 'Coin', 'Entry Time', 'Exit Time', 'Entry Price', 'Exit Price', 'Quantity', 'PnL %', 'PnL $', 'Exit Reason', 'Duration (Seconds)'];
-const csvRows = [headers.join(',')];
+const csvRows = [headers.join(';')];
 
 for (const t of closedTrades) {
 	const row = [
@@ -64,12 +65,12 @@ for (const t of closedTrades) {
 		t.reason,
 		t.durationSeconds
 	];
-	// Escape values if necessary (none of these fields contain commas usually, but to be safe)
-	csvRows.push(row.map(val => `"${val}"`).join(','));
+	// Escape values if necessary
+	csvRows.push(row.map(val => `"${val}"`).join(';'));
 }
 
 const outputPath = join(resultsDir, 'all_live_closed_trades.csv');
-writeFileSync(outputPath, csvRows.join('\n'), 'utf-8');
+writeFileSync(outputPath, bom + csvRows.join('\n'), 'utf-8');
 
 console.log(`\n================================================================================`);
 console.log(`✅ SUCCESS: Exported ${closedTrades.length} trades to:`);

@@ -510,8 +510,9 @@ export function startDashboardServer(port: number = 3000): any {
 
 				closedTrades.sort((a, b) => new Date(b.exitTime).getTime() - new Date(a.exitTime).getTime());
 
+				const bom = '\uFEFF';
 				const headers = ['Strategy', 'Coin', 'Entry Time', 'Exit Time', 'Entry Price', 'Exit Price', 'Quantity', 'PnL %', 'PnL $', 'Exit Reason', 'Duration (Seconds)'];
-				const csvRows = [headers.join(',')];
+				const csvRows = [headers.join(';')];
 
 				for (const t of closedTrades) {
 					const row = [
@@ -527,14 +528,14 @@ export function startDashboardServer(port: number = 3000): any {
 						t.reason,
 						t.durationSeconds
 					];
-					csvRows.push(row.map(val => `"${val}"`).join(','));
+					csvRows.push(row.map(val => `"${val}"`).join(';'));
 				}
 
 				res.writeHead(200, {
-					'Content-Type': 'text/csv',
+					'Content-Type': 'text/csv; charset=utf-8',
 					'Content-Disposition': 'attachment; filename="all_live_closed_trades.csv"'
 				});
-				res.end(csvRows.join('\n'));
+				res.end(bom + csvRows.join('\n'));
 				return;
 			}
 
