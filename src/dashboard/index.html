@@ -149,13 +149,6 @@
                 </h2>
                 
                 <div class="flex items-center space-x-4">
-                    <!-- Interval Tabs -->
-                    <div class="flex bg-slate-950/60 p-1 rounded-xl border border-slate-800/80" id="timeframe-tabs">
-                        <button onclick="changeInterval('15m')" class="timeframe-tab px-3 py-1 rounded-lg text-[10px] font-bold uppercase transition duration-200 bg-slate-900 text-slate-100 border border-white/5 shadow-sm" data-interval="15m">15M</button>
-                        <button onclick="changeInterval('1h')" class="timeframe-tab px-3 py-1 rounded-lg text-[10px] font-bold uppercase transition duration-200 text-slate-400 hover:text-slate-200" data-interval="1h">1H</button>
-                        <button onclick="changeInterval('4h')" class="timeframe-tab px-3 py-1 rounded-lg text-[10px] font-bold uppercase transition duration-200 text-slate-400 hover:text-slate-200" data-interval="4h">4H</button>
-                    </div>
-
                     <div class="flex items-center space-x-2 bg-slate-950/40 px-3 py-1.5 rounded-full border border-slate-800">
                         <span id="autopilot-status-dot" class="w-2.5 h-2.5 rounded-full bg-slate-600 transition-all duration-300"></span>
                         <span id="autopilot-status-text" class="text-xs font-bold text-slate-400">Pasif (Durduruldu)</span>
@@ -179,26 +172,16 @@
                         </div>
                     </div>
 
-                    <!-- Strategy & Timeframe Select Grid -->
-                    <div class="grid grid-cols-2 gap-4">
-                        <div class="space-y-2">
-                            <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Strateji</label>
-                            <select id="autopilot-strategy" class="w-full bg-slate-950 border border-slate-800/80 rounded-xl px-4 py-3 text-slate-200 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 transition duration-300 text-sm font-semibold">
-                                <option value="consensus">Consensus Ensemble (Hibrit Mod - 1H)</option>
-                                <option value="a2">A2 Bollinger (Oynaklık Tabanlı - 15M)</option>
-                                <option value="ema-cross">EMA Crossover (4H)</option>
-                                <option value="supertrend">Supertrend (4H)</option>
-                                <option value="bollinger-bands">Bollinger Bands (15M)</option>
-                            </select>
-                        </div>
-                        <div class="space-y-2">
-                            <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Mum Periyodu</label>
-                            <select id="autopilot-interval" class="w-full bg-slate-950 border border-slate-800/80 rounded-xl px-4 py-3 text-slate-200 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 transition duration-300 text-sm font-semibold">
-                                <option value="15m">15 Dakika (15m)</option>
-                                <option value="1h">1 Saat (1h)</option>
-                                <option value="4h">4 Saat (4h)</option>
-                            </select>
-                        </div>
+                    <!-- Strategy Select (Full Width) -->
+                    <div class="space-y-2">
+                        <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Strateji</label>
+                        <select id="autopilot-strategy" class="w-full bg-slate-950 border border-slate-800/80 rounded-xl px-4 py-3 text-slate-200 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 transition duration-300 text-sm font-semibold">
+                            <option value="consensus">Consensus Ensemble (Hibrit Mod - 1H)</option>
+                            <option value="a2">A2 Bollinger (Oynaklık Tabanlı - 15M)</option>
+                            <option value="ema-cross">EMA Crossover (4H)</option>
+                            <option value="supertrend">Supertrend (4H)</option>
+                            <option value="bollinger-bands">Bollinger Bands (15M)</option>
+                        </select>
                     </div>
 
                     <!-- ML Veto Checkbox -->
@@ -344,6 +327,14 @@
             'ema-cross': { label: 'EMA Crossover', icon: '📈' },
             'supertrend': { label: 'Supertrend', icon: '🦅' },
             'bollinger-bands': { label: 'Bollinger Bands', icon: '📊' }
+        };
+
+        const strategyLockedIntervals = {
+            'consensus': '1h',
+            'a2': '15m',
+            'ema-cross': '4h',
+            'supertrend': '4h',
+            'bollinger-bands': '15m'
         };
         
         const watchCoins = [
@@ -548,37 +539,14 @@
 
         function changeInterval(interval) {
             selectedInterval = interval;
-
-            // Highlight selected tab
-            const tabs = document.querySelectorAll('.timeframe-tab');
-            tabs.forEach(tab => {
-                if (tab.dataset.interval === interval) {
-                    tab.className = 'timeframe-tab px-3 py-1 rounded-lg text-[10px] font-bold uppercase transition duration-200 bg-slate-900 text-slate-100 border border-white/5 shadow-sm';
-                } else {
-                    tab.className = 'timeframe-tab px-3 py-1 rounded-lg text-[10px] font-bold uppercase transition duration-200 text-slate-400 hover:text-slate-200';
-                }
-            });
-
-            // Synchronize with dropdown
-            const intervalDropdown = document.getElementById('autopilot-interval');
-            if (intervalDropdown) {
-                intervalDropdown.value = interval;
-            }
-
-            // Reload details for this strategy & interval
             fetchStrategyDetails(selectedStrategy, interval);
         }
 
         function selectStrategy(strategy) {
             selectedStrategy = strategy;
             
-            // Auto-switch to first active interval if any is running for this strategy
-            const summary = latestSummaries.find(s => s.name === strategy);
-            if (summary && summary.activeIntervals && summary.activeIntervals.length > 0) {
-                if (!summary.activeIntervals.includes(selectedInterval)) {
-                    selectedInterval = summary.activeIntervals[0];
-                }
-            }
+            const lockedInterval = strategyLockedIntervals[strategy] || '15m';
+            selectedInterval = lockedInterval;
             changeInterval(selectedInterval);
 
             // Highlight selected card instantly and cleanly
@@ -592,11 +560,11 @@
                 } hover:border-slate-700 hover:bg-slate-900/20 cursor-pointer transition-all duration-300 flex flex-col justify-between relative group select-none min-h-[160px]`;
             });
 
-            // Update active strategy panel title
+            // Update active strategy panel title with interval badge
             const info = strategyMetadata[strategy] || { label: strategy };
             const titleEl = document.getElementById('active-strategy-title');
             if (titleEl) {
-                titleEl.innerText = `Canlı Otopilot: ${info.label}`;
+                titleEl.innerHTML = `Canlı Otopilot: ${info.label} <span class="text-[10px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded ml-2 font-mono uppercase font-bold">${selectedInterval}</span>`;
             }
 
             // Update UI dropdown value if they want to start it
@@ -919,7 +887,7 @@
                 return;
             }
             const strategy = document.getElementById('autopilot-strategy').value;
-            const interval = document.getElementById('autopilot-interval').value;
+            const interval = strategyLockedIntervals[strategy] || '15m';
             const mlVeto = document.getElementById('autopilot-ml-veto').checked;
             
             try {
@@ -1227,18 +1195,11 @@
             });
         }
 
-        // Bind strategy dropdown change event to set correct default interval
+        // Bind strategy dropdown change event to select strategy and switch details tab
         const strategyDropdown = document.getElementById('autopilot-strategy');
         if (strategyDropdown) {
             strategyDropdown.addEventListener('change', (e) => {
-                const strat = e.target.value;
-                let defaultInterval = '15m';
-                if (strat === 'consensus') defaultInterval = '1h';
-                else if (strat === 'supertrend' || strat === 'ema-cross') defaultInterval = '4h';
-                
-                const intervalSelect = document.getElementById('autopilot-interval');
-                if (intervalSelect) intervalSelect.value = defaultInterval;
-                changeInterval(defaultInterval);
+                selectStrategy(e.target.value);
             });
         }
     </script>
