@@ -6,6 +6,7 @@ module.exports = {
       args: 'dashboard --port 3008',
       interpreter: 'node',
       interpreter_args: '--import tsx',
+      node_args: '--max-old-space-size=450',
       env: {
         NODE_ENV: 'production',
         PORT: 3008
