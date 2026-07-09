@@ -357,11 +357,11 @@ export class ExecutionEngine {
 				}
 
 				// 2) Dynamic Trailing Stop check:
-				// Activated only after price gains at least 2.0% from entry
+				// Activated only after price gains at least 3.0% from entry
 				const highest = p.highestPrice ?? p.entryPrice;
-				const trailingStopPrice = highest * 0.98; // 2% trailing distance
+				const trailingStopPrice = highest * 0.988; // 1.2% trailing distance
 
-				if (highest >= p.entryPrice * 1.02 && price <= trailingStopPrice) {
+				if (highest >= p.entryPrice * 1.03 && price <= trailingStopPrice) {
 					positionsToClose.push({ idx, reason: 'Trailing Stop', exitPrice: price });
 					return;
 				}
