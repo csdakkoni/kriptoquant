@@ -44,6 +44,7 @@ export interface ActivePosition {
 	strategyName: string;
 	highestPrice?: number;
 	breakevenTriggered?: boolean;
+	profitStage?: number;
 }
 
 export interface ClosedTrade {
@@ -348,44 +349,70 @@ export class ExecutionEngine {
 
 		this.state.activePositions.forEach((p, idx) => {
 			if (p.coin === coin) {
-				// 1) Dynamic Breakeven check:
-				// If position PnL hits +2%, move Stop Loss to Entry Price
-				if (p.currentPnLPercent >= 2.0 && !p.breakevenTriggered) {
+				// 1) Multi-Stage Profit Lock-in (Kademeli Kâr Kilitleme):
+				// Stage 1 (Breakeven): PnL >= +1.5% -> Lock in Entry Price
+				if (p.currentPnLPercent >= 1.5 && (!p.profitStage || p.profitStage < 1)) {
 					p.stopLoss = p.entryPrice;
+					p.profitStage = 1;
 					p.breakevenTriggered = true;
-					log(`[${coin}] Breakeven triggered. Stop Loss moved to Entry Price: $${p.entryPrice.toFixed(2)}`);
+					log(`[${coin}] [${p.strategyName}] Breakeven (Stage 1) triggered. Stop Loss moved to Entry: $${p.entryPrice.toFixed(4)}`);
+				}
+
+				// Stage 2 (Lock +1.0%): PnL >= +2.2% -> Lock in Entry Price + 1.0%
+				if (p.currentPnLPercent >= 2.2 && (!p.profitStage || p.profitStage < 2)) {
+					p.stopLoss = p.entryPrice * 1.01;
+					p.profitStage = 2;
+					log(`[${coin}] [${p.strategyName}] Profit Lock-in +1% (Stage 2) triggered. Stop Loss: $${p.stopLoss.toFixed(4)}`);
+				}
+
+				// Stage 3 (Lock +2.0%): PnL >= +3.0% -> Lock in Entry Price + 2.0% (User requested: %3 kârda en kötü %2'yi kilitle)
+				if (p.currentPnLPercent >= 3.0 && (!p.profitStage || p.profitStage < 3)) {
+					p.stopLoss = p.entryPrice * 1.02;
+					p.profitStage = 3;
+					log(`[${coin}] [${p.strategyName}] Profit Lock-in +2% (Stage 3) triggered. Stop Loss: $${p.stopLoss.toFixed(4)}`);
 				}
 
 				// 2) Dynamic Trailing Stop check:
-				// Activated only after price gains at least 3.0% from entry
+				// Activated once price gains at least 3.5% from entry.
+				// Trails the highest peak with a 1.0% distance.
 				const highest = p.highestPrice ?? p.entryPrice;
-				const trailingStopPrice = highest * 0.988; // 1.2% trailing distance
+				const trailingStopPrice = highest * 0.99; // 1.0% trailing distance
 
-				if (highest >= p.entryPrice * 1.03 && price <= trailingStopPrice) {
-					positionsToClose.push({ idx, reason: 'Trailing Stop', exitPrice: price });
+				if (highest >= p.entryPrice * 1.035 && price <= trailingStopPrice) {
+					// Ensure we never exit below our Stage 3 floor (+2.0% profit)
+					const floorPrice = p.entryPrice * 1.02;
+					const finalExitPrice = Math.max(price, floorPrice);
+					positionsToClose.push({ idx, reason: 'Trailing Stop', exitPrice: finalExitPrice });
 					return;
 				}
 
-				// 3) Standard limits checks
+				// 3) Standard stop & limit checks:
+				// RULE: If a stopLoss has been moved to or above entry price (meaning it is a profit lock or breakeven),
+				// we MUST check it on every tick instantly for ALL strategies to prevent slippage!
+				const isProfitLocked = p.stopLoss >= p.entryPrice;
+				if (isProfitLocked && price <= p.stopLoss) {
+					const reason = p.stopLoss > p.entryPrice ? 'Profit Lock Stop' : 'Breakeven Stop';
+					positionsToClose.push({ idx, reason, exitPrice: p.stopLoss });
+					return;
+				}
+
+				// Otherwise, check regular SL/TP parameters based on strategy type
 				if (p.strategyName === 'freedom_b') {
-					// Freedom B Hybrid stop model with INSTANT breakeven:
+					// Freedom B Hybrid stop model:
 					// - Hard stop is checked on every tick (instantly at entry - 4.5%)
-					// - If breakeven is triggered, stopLoss (entryPrice) is checked on every tick!
-					// - Soft stop (Swing Low) is checked only on candle close
 					// - TP is checked on every tick
+					// - Soft stop (Swing Low) is checked only on candle close
 					const hardStopPrice = p.entryPrice * 0.955;
 					if (price <= hardStopPrice) {
 						positionsToClose.push({ idx, reason: 'Hard Emergency Stop', exitPrice: hardStopPrice });
-					} else if (p.breakevenTriggered && price <= p.stopLoss) {
-						positionsToClose.push({ idx, reason: 'Breakeven Stop (Instant)', exitPrice: p.stopLoss });
 					} else if (p.takeProfit > 0 && price >= p.takeProfit) {
 						positionsToClose.push({ idx, reason: 'TP', exitPrice: p.takeProfit });
 					}
 				} else if (p.strategyName === 'freedom') {
 					// Freedom Hybrid stop model:
 					// - Hard stop is checked on every tick (instantly at entry - 4.5%)
-					// - Soft stop (Swing Low) is checked only on candle close
 					// - TP is checked on every tick
+					// - Soft stop (Swing Low) is checked only on candle close
 					const hardStopPrice = p.entryPrice * 0.955;
 					if (price <= hardStopPrice) {
 						positionsToClose.push({ idx, reason: 'Hard Emergency Stop', exitPrice: hardStopPrice });
@@ -393,7 +420,7 @@ export class ExecutionEngine {
 						positionsToClose.push({ idx, reason: 'TP', exitPrice: p.takeProfit });
 					}
 				} else {
-					// Standard strategies: SL & TP on every tick
+					// Standard strategies: SL & TP checked tick-by-tick
 					if (price <= p.stopLoss) {
 						positionsToClose.push({ idx, reason: 'SL', exitPrice: p.stopLoss });
 					} else if (p.takeProfit > 0 && price >= p.takeProfit) {
