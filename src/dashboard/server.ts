@@ -468,6 +468,9 @@ export function startDashboardServer(port: number = 3000): any {
 								strategy: strat,
 								interval: intv,
 								engineStatus: state.engineStatus,
+								cash: state.cash,
+								currentEquity: state.currentEquity || state.cash,
+								realizedPnL: state.realizedPnL || 0,
 								activePositions: state.activePositions || [],
 								closedTrades: state.closedTrades || []
 							});

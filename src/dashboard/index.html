@@ -241,13 +241,17 @@
                 <!-- Metrics & Analytics Column (Right 7 cols) -->
                 <div class="lg:col-span-7 flex flex-col space-y-6">
                     <!-- Sanal Kasa Bakiyesi (Virtual Balance) & Stats Cards Grid -->
-                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
                         <div class="bg-slate-950/60 p-4 rounded-xl border border-slate-800 flex flex-col">
-                            <span class="text-[9px] font-bold uppercase tracking-wider text-slate-500">Kasa (Equity)</span>
+                            <span class="text-[9px] font-bold uppercase tracking-wider text-slate-500">Nakit Bakiye (Cash)</span>
+                            <span id="virtual-cash" class="text-md font-black text-slate-100 font-mono mt-1">10.000,00 USDT</span>
+                        </div>
+                        <div class="bg-slate-950/60 p-4 rounded-xl border border-slate-800 flex flex-col">
+                            <span class="text-[9px] font-bold uppercase tracking-wider text-slate-500">Toplam Bakiye (Equity)</span>
                             <span id="virtual-balance" class="text-md font-black text-emerald-400 font-mono mt-1">10.000,00 USDT</span>
                         </div>
                         <div class="bg-slate-950/60 p-4 rounded-xl border border-slate-800 flex flex-col">
-                            <span class="text-[9px] font-bold uppercase tracking-wider text-slate-500">Gerçekleşen Kar/Zarar</span>
+                            <span class="text-[9px] font-bold uppercase tracking-wider text-slate-500">Gerçekleşen PnL</span>
                             <span id="realized-pnl" class="text-md font-black text-slate-300 font-mono mt-1">0,00 USDT</span>
                         </div>
                         <div class="bg-slate-950/60 p-4 rounded-xl border border-slate-800 flex flex-col">
@@ -257,6 +261,14 @@
                         <div class="bg-slate-950/60 p-4 rounded-xl border border-slate-800 flex flex-col">
                             <span class="text-[9px] font-bold uppercase tracking-wider text-slate-500">Çalışma Süresi</span>
                             <span id="engine-uptime" class="text-md font-black text-blue-400 font-mono mt-1">00:00:00</span>
+                        </div>
+                    </div>
+
+                    <!-- Zaman Dilimleri Karşılaştırma Detayları (Timeframe Overview Grid) -->
+                    <div class="bg-slate-950/40 p-4 rounded-xl border border-slate-900/60">
+                        <h3 class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2.5">Zaman Dilimi Kasaları (Timeframe Balances)</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3.5" id="timeframe-breakdown-grid">
+                            <!-- Generated dynamically by JS -->
                         </div>
                     </div>
 
@@ -754,10 +766,12 @@
             updateEngineUIState(state.engineStatus);
             
             // Cash equity and realized PnL formatting
+            const cash = state.cash ?? 10000;
             const equity = state.currentEquity ?? state.cash ?? 10000;
             const realized = state.realizedPnL ?? 0;
             const unrealized = state.unrealizedPnL ?? 0;
             
+            document.getElementById('virtual-cash').innerText = `${cash.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT`;
             document.getElementById('virtual-balance').innerText = `${equity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT`;
             
             const pnlEl = document.getElementById('realized-pnl');
@@ -1055,6 +1069,59 @@
 
                 // Render global closed trades
                 renderGlobalClosedTrades(states);
+
+                // Render Timeframe Breakdown Grid for Selected Strategy
+                const strategyStates = states.filter(s => s.strategy === selectedStrategy);
+                const breakdownContainer = document.getElementById('timeframe-breakdown-grid');
+                if (breakdownContainer) {
+                    breakdownContainer.innerHTML = '';
+                    const intervals = ['15m', '1h', '4h'];
+                    intervals.forEach(intv => {
+                        const sState = strategyStates.find(s => s.interval === intv);
+                        const isRunning = sState && sState.engineStatus === 'running';
+                        const dotClass = isRunning ? 'bg-emerald-500 shadow shadow-emerald-500/30' : 'bg-slate-600';
+                        const statusLabel = isRunning ? 'Çalışıyor' : 'Durduruldu';
+                        
+                        const cashVal = sState ? sState.cash : 10000;
+                        const equityVal = sState ? sState.currentEquity : 10000;
+                        const realizedVal = sState ? sState.realizedPnL : 0;
+                        const activePosCount = sState ? sState.activePositions.length : 0;
+
+                        const realizedSign = realizedVal >= 0 ? '+' : '';
+                        const realizedClass = realizedVal >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-500 font-bold';
+
+                        const div = document.createElement('div');
+                        div.className = `p-3 px-3.5 rounded-xl border transition-all duration-300 ${intv === selectedInterval ? 'border-emerald-500/40 bg-slate-900/10' : 'border-slate-800 bg-slate-950/40'}`;
+                        div.innerHTML = `
+                            <div class="flex items-center justify-between border-b border-white/5 pb-1.5 mb-2">
+                                <span class="text-xs font-bold text-slate-200 uppercase">${intv} Periyodu</span>
+                                <div class="flex items-center space-x-1.5">
+                                    <span class="w-1.5 h-1.5 rounded-full ${dotClass}"></span>
+                                    <span class="text-[9px] text-slate-400 font-semibold">${statusLabel}</span>
+                                </div>
+                            </div>
+                            <div class="space-y-1 text-[11px] font-mono">
+                                <div class="flex justify-between">
+                                    <span class="text-slate-500 text-[10px]">Nakit:</span>
+                                    <span class="text-slate-300 font-bold">$${cashVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-slate-500 text-[10px]">Varlık:</span>
+                                    <span class="text-slate-100 font-bold">$${equityVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-slate-500 text-[10px]">Net PnL:</span>
+                                    <span class="${realizedClass}">${realizedSign}$${realizedVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                </div>
+                                <div class="flex justify-between border-t border-white/5 pt-1 mt-1 text-[10px]">
+                                    <span class="text-slate-500">Açık Poz:</span>
+                                    <span class="text-emerald-400 font-bold">${activePosCount} Adet</span>
+                                </div>
+                            </div>
+                        `;
+                        breakdownContainer.appendChild(div);
+                    });
+                }
 
                 if (!isGlobalTrackerInitialized) {
                     states.forEach(state => {
