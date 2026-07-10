@@ -34,6 +34,7 @@ import { createGemini1Strategy } from './research/strategies/gemini_1/index.js';
 import { createGemini2Strategy } from './research/strategies/gemini_2/index.js';
 import { createVwapReversionStrategy } from './research/strategies/vwap-reversion/index.js';
 import { createBollingerRsiDivStrategy } from './research/strategies/bollinger-rsi-div/index.js';
+import { createRandomStrategy } from './research/strategies/random/index.js';
 import { DEFAULT_SWEEP } from './research/experiments/runner.js';
 import { runSweep, printLeaderboard, printMetadata, printStrategyComparison, exportSweepCSV, exportMetadataJSON } from './research/experiments/sweep.js';
 import { runWalkForward, printWalkForwardReport, exportWalkForwardJSON, exportWalkForwardCSV } from './research/walkforward/walkforward.js';
@@ -87,6 +88,7 @@ function resolveStrategy(name: string): Strategy | null {
 		'gemini_2': createGemini2Strategy(),
 		'vwap-reversion': createVwapReversionStrategy(),
 		'bollinger-rsi-div': createBollingerRsiDivStrategy(),
+		'random': createRandomStrategy(),
 	};
 	return strategies[name] ?? null;
 }
@@ -112,7 +114,7 @@ async function commandBacktest(
 	const strategy = resolveStrategy(strategyName);
 	if (!strategy) {
 		logError(`Bilinmeyen strateji: ${strategyName}`);
-		logError('Mevcut stratejiler: sma-cross, ema-cross, donchian-breakout, a1, a2, consensus, trend-pullback, freedom, freedom_b, gemini_1, gemini_2, vwap-reversion, bollinger-rsi-div');
+		logError('Mevcut stratejiler: sma-cross, ema-cross, donchian-breakout, a1, a2, consensus, trend-pullback, freedom, freedom_b, gemini_1, gemini_2, vwap-reversion, bollinger-rsi-div, random');
 		process.exit(1);
 	}
 

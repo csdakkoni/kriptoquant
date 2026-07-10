@@ -21,6 +21,7 @@ import { createGemini2Strategy } from '../research/strategies/gemini_2/index.js'
 import { createSupertrendStrategy } from '../research/strategies/supertrend/index.js';
 import { createVwapReversionStrategy } from '../research/strategies/vwap-reversion/index.js';
 import { createBollingerRsiDivStrategy } from '../research/strategies/bollinger-rsi-div/index.js';
+import { createRandomStrategy } from '../research/strategies/random/index.js';
 import { MetaLabeler } from '../research/meta-labeling.js';
 import { OnlineLearner } from '../research/online-learning.js';
 import { rsi, adx, sma } from '../core/indicators/index.js';
@@ -705,6 +706,7 @@ export class ExecutionEngine {
 		if (strategyPath === 'a2') return createA2Strategy();
 		if (strategyPath === 'vwap-reversion') return createVwapReversionStrategy();
 		if (strategyPath === 'bollinger-rsi-div') return createBollingerRsiDivStrategy();
+		if (strategyPath === 'random') return createRandomStrategy();
 		if (strategyPath === 'trend-pullback') return createTrendPullbackStrategy();
 		if (strategyPath === 'freedom') return createFreedomStrategy();
 		if (strategyPath === 'freedom_b') return createFreedomBStrategy();
@@ -981,6 +983,7 @@ export function getAllExecutionEnginesSummary(): StrategySummary[] {
 		{ name: 'a2', label: 'A2 Bollinger (Volt)', interval: '15m' },
 		{ name: 'vwap-reversion', label: 'VWAP Reversion', interval: '15m' },
 		{ name: 'bollinger-rsi-div', label: 'Bollinger + RSI Div', interval: '15m' },
+		{ name: 'random', label: 'Random Walk Baseline', interval: '15m' },
 		{ name: 'ema-cross', label: 'EMA Crossover', interval: '4h' },
 		{ name: 'supertrend', label: 'Supertrend', interval: '4h' },
 		{ name: 'bollinger-bands', label: 'Bollinger Bands', interval: '15m' }

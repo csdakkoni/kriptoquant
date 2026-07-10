@@ -464,6 +464,7 @@ export function startDashboardServer(port: number = 3000): any {
 					'a2': ['15m'],
 					'vwap-reversion': ['15m'],
 					'bollinger-rsi-div': ['15m'],
+					'random': ['15m'],
 					'consensus': ['1h'],
 					'supertrend': ['4h'],
 					'ema-cross': ['4h']
@@ -497,6 +498,7 @@ export function startDashboardServer(port: number = 3000): any {
 					'a2': ['15m'],
 					'vwap-reversion': ['15m'],
 					'bollinger-rsi-div': ['15m'],
+					'random': ['15m'],
 					'consensus': ['1h'],
 					'supertrend': ['4h'],
 					'ema-cross': ['4h']
@@ -891,6 +893,7 @@ export function startDashboardServer(port: number = 3000): any {
 				'a2': ['15m'],
 				'vwap-reversion': ['15m'],
 				'bollinger-rsi-div': ['15m'],
+				'random': ['15m'],
 				'consensus': ['1h'],
 				'supertrend': ['4h'],
 				'ema-cross': ['4h']
