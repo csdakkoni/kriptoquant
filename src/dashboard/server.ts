@@ -12,6 +12,7 @@ import {
 	stopExecutionEngine,
 	getExecutionEngineState,
 	getAllExecutionEnginesSummary,
+	resetExecutionEngineState,
 	EngineState,
 } from '../live/live-engine.js';
 import { ScreenerEngine } from '../decision/screener.js';
@@ -610,6 +611,36 @@ export function startDashboardServer(port: number = 3000): any {
 						logError(`Failed to stop execution engine: ${e}`);
 						res.writeHead(500, { 'Content-Type': 'text/plain' });
 						res.end(`Stop Engine Failed: ${e}`);
+					}
+				});
+				return;
+			}
+
+			// ── 1ee) POST /api/live-paper/reset ➔ Strateji Kasasını Sıfırla ──────────
+			if (url === '/api/live-paper/reset' && req.method === 'POST') {
+				let body = '';
+				req.on('data', chunk => { body += chunk; });
+				req.on('end', async () => {
+					try {
+						const params = JSON.parse(body || '{}');
+						const strategy = params.strategy || 'ema-cross';
+						const interval = params.interval || '15m';
+
+						log(`Resetting state for strategy: ${strategy} (${interval})`);
+
+						// Reset state file and cache
+						const resetState = await resetExecutionEngineState(strategy, interval);
+
+						// Broadcast stopped/reset state
+						broadcastEngineState(resetState);
+						broadcastPortfolioState(portfolio.getPortfolioAllocations());
+
+						res.writeHead(200, { 'Content-Type': 'application/json' });
+						res.end(JSON.stringify({ success: true, message: `Execution Engine state reset for ${strategy} (${interval})` }));
+					} catch (e) {
+						logError(`Failed to reset execution engine: ${e}`);
+						res.writeHead(500, { 'Content-Type': 'application/json' });
+						res.end(JSON.stringify({ error: String(e) }));
 					}
 				});
 				return;

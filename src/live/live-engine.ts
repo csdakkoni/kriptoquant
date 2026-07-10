@@ -913,6 +913,55 @@ export function getExecutionEngineState(strategyPath: string, interval: string):
 	return null;
 }
 
+export async function resetExecutionEngineState(strategyPath: string, interval: string): Promise<EngineState> {
+	const key = `${strategyPath}_${interval}`;
+	const wasRunning = activeEngines.has(key);
+	
+	if (wasRunning) {
+		stopExecutionEngine(strategyPath, interval);
+	}
+
+	const statePath = join(process.cwd(), 'results', `live_paper_state_${strategyPath}_${interval}.json`);
+	let coins = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT', 'AVAXUSDT', 'LINKUSDT', 'NEARUSDT', 'SUIUSDT'];
+	let mlVeto = false;
+
+	if (existsSync(statePath)) {
+		try {
+			const raw = readFileSync(statePath, 'utf-8');
+			const parsed = JSON.parse(raw) as EngineState;
+			if (parsed.coins && Array.isArray(parsed.coins)) coins = parsed.coins;
+			if (parsed.mlVeto !== undefined) mlVeto = parsed.mlVeto;
+		} catch {}
+	}
+
+	const initialState: EngineState = {
+		engineStatus: 'stopped',
+		startTime: '',
+		uptime: 0,
+		currentEquity: 10000,
+		cash: 10000,
+		unrealizedPnL: 0,
+		realizedPnL: 0,
+		activePositions: [],
+		pendingSignals: [],
+		closedTrades: [],
+		equityCurveLive: [
+			{ time: new Date().toLocaleTimeString(), equity: 10000 }
+		],
+		heartbeat: new Date().toISOString(),
+		lastCandleTime: '',
+		coins,
+		mlVeto,
+		strategyPath
+	} as any;
+
+	const { writeFileSync } = await import('node:fs');
+	writeFileSync(statePath, JSON.stringify(initialState, null, 2), 'utf-8');
+	stateCache.set(key, initialState);
+
+	return initialState;
+}
+
 export interface StrategySummary {
 	name: string;
 	status: 'running' | 'stopped';
