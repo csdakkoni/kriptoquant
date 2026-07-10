@@ -17,8 +17,6 @@ export function createRandomStrategy(): Strategy {
 			const signals: Signal[] = [];
 			if (candles.length < 5) return [];
 
-			let lastSignalSide: 'BUY' | 'SELL' | null = null;
-
 			for (let i = 5; i < candles.length; i++) {
 				const current = candles[i];
 
@@ -26,28 +24,26 @@ export function createRandomStrategy(): Strategy {
 				const seed = Math.sin(current.openTime) * 10000;
 				const rand = Math.abs(seed - Math.floor(seed));
 
-				// %3 ihtimalle AL, %3 ihtimalle SAT
-				const isBuySetup = rand < 0.03;
-				const isSellSetup = rand > 0.97;
+				// %10 ihtimalle AL, %10 ihtimalle SAT
+				const isBuySetup = rand < 0.10;
+				const isSellSetup = rand > 0.90;
 
-				if (isBuySetup && lastSignalSide !== 'BUY') {
+				if (isBuySetup) {
 					signals.push({
 						timestamp: current.openTime,
 						side: 'BUY',
 						price: current.close,
 						confidence: 0.50,
-						reason: `Random Walk BUY (Yazı-Tura: ${rand.toFixed(4)} < 0.0300)`
+						reason: `Random Walk BUY (Yazı-Tura: ${rand.toFixed(4)} < 0.1000)`
 					});
-					lastSignalSide = 'BUY';
-				} else if (isSellSetup && lastSignalSide === 'BUY') {
+				} else if (isSellSetup) {
 					signals.push({
 						timestamp: current.openTime,
 						side: 'SELL',
 						price: current.close,
 						confidence: 0.50,
-						reason: `Random Walk SELL (Yazı-Tura: ${rand.toFixed(4)} > 0.9700)`
+						reason: `Random Walk SELL (Yazı-Tura: ${rand.toFixed(4)} > 0.9000)`
 					});
-					lastSignalSide = 'SELL';
 				}
 			}
 
