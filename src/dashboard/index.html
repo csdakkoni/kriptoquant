@@ -705,6 +705,14 @@
         // Render current virtual cash balance and active positions list
         function renderAutopilotState(state) {
             if (!state) return;
+
+            // Synchronize ML Veto checkbox with backend state (if not currently focused/interacting)
+            if (state.mlVeto !== undefined) {
+                const mlVetoCheckbox = document.getElementById('autopilot-ml-veto');
+                if (mlVetoCheckbox) {
+                    mlVetoCheckbox.checked = state.mlVeto;
+                }
+            }
             
             // Console logging based on engine status changes
             if (state.engineStatus !== previousStatus) {
