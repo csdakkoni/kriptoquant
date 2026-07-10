@@ -20,8 +20,8 @@ export function createRandomStrategy(): Strategy {
 			for (let i = 5; i < candles.length; i++) {
 				const current = candles[i];
 
-				// Mum zaman damgasından (openTime) deterministik sözde rastgele değer üretimi
-				const seed = Math.sin(current.openTime) * 10000;
+				// Mum zaman damgası ve kapanış fiyatından deterministik sözde rastgele değer üretimi (her coine özel olması için)
+				const seed = Math.sin(current.openTime + current.close) * 10000;
 				const rand = Math.abs(seed - Math.floor(seed));
 
 				// %10 ihtimalle AL, %10 ihtimalle SAT
