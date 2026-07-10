@@ -476,13 +476,13 @@
         // Setup Direct Binance MiniTicker Websocket for Market Watch prices (Disabled)
 
         let selectedStrategy = 'consensus';
-        let selectedInterval = '15m';
+        let selectedInterval = strategyLockedIntervals[selectedStrategy] || '15m';
         let latestSummaries = [];
 
         // Fetch current autopilot state via REST API on startup or ws reconnect
         async function fetchInitialState() {
             fetchStrategySummaries();
-            fetchStrategyDetails(selectedStrategy, selectedInterval);
+            selectStrategy(selectedStrategy);
         }
 
         async function fetchStrategySummaries() {
