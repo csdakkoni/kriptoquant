@@ -34,11 +34,16 @@ describe('Live Execution Altyapısı', () => {
 
 	afterEach(() => {
 		vi.unstubAllGlobals();
-		const statePath = join(process.cwd(), 'results', 'live_paper_state.json');
-		if (existsSync(statePath)) {
-			try {
-				unlinkSync(statePath);
-			} catch {}
+		const filesToDelete = [
+			join(process.cwd(), 'results', 'live_paper_state.json'),
+			join(process.cwd(), 'results', 'live_paper_state_ema-cross_1m.json'),
+		];
+		for (const path of filesToDelete) {
+			if (existsSync(path)) {
+				try {
+					unlinkSync(path);
+				} catch {}
+			}
 		}
 	});
 
@@ -66,7 +71,7 @@ describe('Live Execution Altyapısı', () => {
 		const engine = new ExecutionEngine(['BTCUSDT'], '1m', 'ema-cross');
 		expect(engine.getState().engineStatus).toBe('stopped');
 
-		await engine.start();
+		await engine.start(true);
 
 		expect(engine.getState().engineStatus).toBe('running');
 		expect(engine.getState().uptime).toBe(0);
@@ -78,7 +83,7 @@ describe('Live Execution Altyapısı', () => {
 
 	it('ExecutionEngine kline tick aldığında PnL, MAE ve MFE değerlerini güncellemeli', async () => {
 		const engine = new ExecutionEngine(['BTCUSDT'], '1m', 'ema-cross');
-		await engine.start();
+		await engine.start(true);
 
 		// Manually inject an active position into engine state
 		engine.getState().activePositions.push({
