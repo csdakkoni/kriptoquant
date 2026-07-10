@@ -7,8 +7,11 @@ import { join } from 'node:path';
 import { createEmaCrossStrategy } from '../research/strategies/ema-cross/index.js';
 import { createSmaCrossStrategy } from '../research/strategies/sma-cross/index.js';
 import { createDonchianBreakoutStrategy } from '../research/strategies/donchian-breakout/index.js';
+import { createBollingerRsiDivStrategy } from '../research/strategies/bollinger-rsi-div/index.js';
+import { createVwapReversionStrategy } from '../research/strategies/vwap-reversion/index.js';
 import { PerformanceDB } from './performance-db.js';
 import { ModelRegistry } from '../research/model-registry.js';
+import { adx } from '../core/indicators/index.js';
 import type { Candle, Strategy } from '../core/types.js';
 
 export interface DecisionReason {
@@ -51,9 +54,11 @@ export class DecisionEngine {
 
 		if (Object.keys(this.baseWeights).length === 0) {
 			this.baseWeights = {
-				'ema-cross': 0.35,
-				'donchian-breakout': 0.45,
-				'sma-cross': 0.20,
+				'ema-cross': 0.25,
+				'donchian-breakout': 0.25,
+				'sma-cross': 0.15,
+				'bollinger-rsi-div': 0.20,
+				'vwap-reversion': 0.15,
 			};
 		}
 	}
@@ -63,16 +68,28 @@ export class DecisionEngine {
 			return { consensusScore: 0, signal: 'WAIT', confidence: 0, reasons: [] };
 		}
 
+		// Calculate ADX to determine if the market is choppy/range-bound (ADX < 20)
+		let isChoppy = false;
+		try {
+			const adxResult = adx(candles, 14);
+			const currentAdx = adxResult.adx[candles.length - 1];
+			isChoppy = !Number.isNaN(currentAdx) && currentAdx < 20;
+		} catch (e) {
+			console.error(`Failed to calculate ADX in DecisionEngine: ${e}`);
+		}
+
 		// Model Governance Check: Only run strategies/models that are marked 'LIVE' in ModelRegistry
 		const modelRegistry = new ModelRegistry();
 		const liveModels = modelRegistry.getActiveLiveModels();
 		const liveModelNames = liveModels.map(m => m.name);
 
-		// Dynamic Strategy Registry
+		// Dynamic Strategy Registry with Mean Reversion diversity
 		const registry: Record<string, Strategy> = {
 			'ema-cross': createEmaCrossStrategy(),
 			'donchian-breakout': createDonchianBreakoutStrategy(),
 			'sma-cross': createSmaCrossStrategy(),
+			'bollinger-rsi-div': createBollingerRsiDivStrategy(),
+			'vwap-reversion': createVwapReversionStrategy(),
 		};
 
 		let buyWeightSum = 0;
@@ -106,18 +123,28 @@ export class DecisionEngine {
 			dynamicWeight = Math.max(0.05, Math.min(1.00, dynamicWeight));
 			
 			// Normalize to roughly match sum ~ 1.0 (relative to baseline)
-			const baseW = this.baseWeights[name] ?? 0.33;
-			const weight = (dynamicWeight + baseW) / 2.0;
+			const baseW = this.baseWeights[name] ?? 0.20;
+			let weight = (dynamicWeight + baseW) / 2.0;
+
+			// ADX filter: Scale down weights of trend-following strategies in range-bound (choppy) market
+			const trendStrategies = ['ema-cross', 'sma-cross', 'donchian-breakout'];
+			let isVetoed = false;
+			if (isChoppy && trendStrategies.includes(name)) {
+				weight *= 0.5; // Scale down weight by 50%
+				isVetoed = true;
+			}
 
 			// Look for the last signal close to recent candles
 			const lastSignal = signals.find(s => s.timestamp === lastCandle.openTime);
 
 			if (lastSignal && lastSignal.side === 'BUY') {
 				buyWeightSum += weight;
-				reasons.push({ rule: `${strategy.name}`, passed: true, score: Math.round(weight * 100) });
+				const ruleLabel = isVetoed ? `${strategy.name} (Chop Veto 50%)` : `${strategy.name}`;
+				reasons.push({ rule: ruleLabel, passed: true, score: Math.round(weight * 100) });
 			} else if (lastSignal && lastSignal.side === 'SELL') {
 				sellWeightSum += weight;
-				reasons.push({ rule: `${strategy.name}`, passed: true, score: -Math.round(weight * 100) });
+				const ruleLabel = isVetoed ? `${strategy.name} (Chop Veto 50%)` : `${strategy.name}`;
+				reasons.push({ rule: ruleLabel, passed: true, score: -Math.round(weight * 100) });
 			} else {
 				reasons.push({ rule: `${strategy.name}`, passed: false, score: 0 });
 			}
