@@ -14,6 +14,7 @@ import type { Candle, Signal } from '../core/types.js';
 
 const strategyName = process.argv[2] || 'bollinger-bands-v2';
 const symbol = process.argv[3] || 'THYAO';
+const range = process.argv[4] || 'all'; // '1y' veya 'all'
 const interval = '1d';
 
 const dataPath = join(import.meta.dirname, `../../data/raw/${symbol}_${interval}.json`);
@@ -31,7 +32,7 @@ console.log(`\n[📂] ${candles.length} adet ${symbol} mumu yüklendi.`);
 
 // 2. Strateji Seçimi
 let strategy: any;
-if (strategyName === 'bollinger-bands-v2') {
+if (strategyName === 'bollinger-bands-v2' || strategyName === 'bollinger-bands') {
 	strategy = createBollingerBandsV2Strategy();
 } else if (strategyName === 'bollinger-bands-timestamp') {
 	strategy = createBollingerBandsTimestampStrategy();
@@ -42,11 +43,24 @@ if (strategyName === 'bollinger-bands-v2') {
 	process.exit(1);
 }
 
-// 3. Ham Sinyalleri Al
+// 3. Ham Sinyalleri Al (Warmup için tüm veriyle hesaplanır)
 const signals = strategy.evaluate(candles);
-console.log(`[📊] Üretilen Ham Sinyal Sayısı: ${signals.length}`);
 
-// 4. Filtresiz Simülasyon
+// 4. Zaman Aralığı Filtreleme (Son 1 Yıl vb.)
+let startIndex = 30;
+if (range === '1y' && candles.length > 0) {
+	const lastTime = candles[candles.length - 1].openTime;
+	const oneYearMs = 365 * 24 * 60 * 60 * 1000;
+	const cutoffTime = lastTime - oneYearMs;
+
+	const idx = candles.findIndex(c => c.openTime >= cutoffTime);
+	if (idx !== -1) {
+		startIndex = Math.max(30, idx);
+		console.log(`[⏰] Sadece son 1 yıl simüle ediliyor (Başlangıç Tarihi: ${new Date(candles[startIndex].openTime).toLocaleDateString()})`);
+	}
+}
+
+// 5. Filtresiz Simülasyon
 let cash = 10000;
 let position: { entryPrice: number; quantity: number; entryTime: number; stopLoss: number; partialTpTriggered: boolean } | null = null;
 let tradesCount = 0;
@@ -54,18 +68,16 @@ let wins = 0;
 let losses = 0;
 let totalPnL = 0;
 
-for (let i = 20; i < candles.length; i++) {
+for (let i = startIndex; i < candles.length; i++) {
 	const current = candles[i];
 	const price = current.close;
 
 	// Aktif pozisyon kontrolü (Stop Loss & Take Profit / Risk Yönetimi)
 	if (position) {
 		const entryPrice = position.entryPrice;
-		const initialAtr = entryPrice * 0.02; // Varsayılan ATR tahmini
 
 		// 1. Stop Loss check
 		if (price <= position.stopLoss) {
-			const isPartial = position.partialTpTriggered;
 			const exitPrice = position.stopLoss;
 			const pnlPercent = ((exitPrice - entryPrice) / entryPrice) * 100;
 			const pnlUsdt = position.quantity * (exitPrice - entryPrice);
@@ -75,14 +87,13 @@ for (let i = 20; i < candles.length; i++) {
 			tradesCount++;
 			if (pnlPercent > 0) wins++; else losses++;
 
-			console.log(`🔴 [SL] Çıkış: $${exitPrice.toFixed(2)} | PnL: %${pnlPercent.toFixed(2)} ($${pnlUsdt.toFixed(2)}) | Neden: SL (ATR)`);
+			console.log(`🔴 [SL] Çıkış: $${exitPrice.toFixed(2)} | PnL: %${pnlPercent.toFixed(2)} ($${pnlUsdt.toFixed(2)}) | Neden: Stop-Loss`);
 			position = null;
 			continue;
 		}
 
-		// 2. Kademeli Kar Al (Partial TP)
+		// 2. Kademeli Kar Al (Partial TP) - Sadece Bollinger Bands V2 için geçerli
 		if (strategyName === 'bollinger-bands-v2' && !position.partialTpTriggered) {
-			// bollinger-bands-v2 için 20 SMA orta bandı kontrol et
 			const segment = candles.slice(i - 20, i);
 			const sma20 = segment.reduce((sum, c) => sum + c.close, 0) / 20;
 
@@ -109,7 +120,13 @@ for (let i = 20; i < candles.length; i++) {
 			// Pozisyon Aç
 			const quantity = cash / price;
 			const initialAtr = price * 0.02; // Varsayılan ATR
-			const stopLoss = strategyName === 'bollinger-bands-v2' ? (price - 2 * initialAtr) : (price * 0.95);
+			
+			let stopLoss = price * 0.95;
+			if (strategyName === 'bollinger-bands-v2') {
+				stopLoss = price - 2 * initialAtr;
+			} else if (strategyName === 'bollinger-bands') {
+				stopLoss = price * (1 - 0.02098); // Sabit -2.098% Stop Loss
+			}
 
 			position = {
 				entryPrice: price,
@@ -160,6 +177,7 @@ console.log('\n================================================================'
 console.log(` 🏆 HAM STRATEJİ BACKTEST SONUCU — ${strategyName.toUpperCase()}`);
 console.log('================================================================');
 console.log(`  Hisse Senedi  : ${symbol}`);
+console.log(`  Zaman Aralığı : ${range === '1y' ? 'Son 1 Yıl' : 'Tüm Veri'}`);
 console.log(`  Başlangıç     : 10,000.00 USDT`);
 console.log(`  Bitiş Kasası  : ${finalEquity.toFixed(2)} USDT`);
 console.log(`  Net Getiri    : %${returnPct.toFixed(2)} (${totalPnL.toFixed(2)} USDT)`);
