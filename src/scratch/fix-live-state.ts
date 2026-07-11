@@ -1,5 +1,5 @@
 // ============================================================================
-// KRIPTOQUANT SCRATCH — Live State Recovery Script
+// KRIPTOQUANT SCRATCH — Live State Recovery Script (CORRECTED)
 // ============================================================================
 // Kademeli kâr alım (Partial TP) proceeds açığından dolayı bozulan canlı/paper
 // JSON durum dosyalarını otomatik tamir eder. İşlem geçmişinden kasa, realized PnL
@@ -19,7 +19,7 @@ if (!existsSync(resultsDir)) {
 const files = readdirSync(resultsDir).filter(f => f.startsWith('live_paper_state_') && f.endsWith('.json'));
 
 console.log(`\n======================================================`);
-`[⚙️] CANLI DURUM DOSYALARI ONARIM BAŞLIYOR...`;
+console.log(`[⚙️] CANLI DURUM DOSYALARI ONARIM BAŞLIYOR...`);
 console.log(`======================================================`);
 
 for (const file of files) {
@@ -28,10 +28,6 @@ for (const file of files) {
 		const raw = readFileSync(filePath, 'utf-8');
 		const state = JSON.parse(raw);
 
-		if (!state.closedTrades || state.closedTrades.length === 0) {
-			continue;
-		}
-
 		console.log(`\n📄 Dosya: ${file}`);
 		console.log(`   [Eski Durum] Kasa: $${state.cash?.toFixed(2)} | Realized PnL: $${state.realizedPnL?.toFixed(2)}`);
 
@@ -39,21 +35,20 @@ for (const file of files) {
 		let correctCash = 10000; // Başlangıç kasası
 		let correctRealizedPnL = 0;
 
-		// 1. Aktif pozisyonların giriş bütçelerini düş (kasadan ayrılan para)
+		// 1. Aktif pozisyonların güncel giriş bütçelerini düş (kasadan ayrılan para)
 		if (state.activePositions && state.activePositions.length > 0) {
 			for (const pos of state.activePositions) {
 				correctCash -= pos.positionSizeUsdt;
 			}
 		}
 
-		// 2. Kapatılan tüm işlemlerin (kısmi satışlar dahil) kasaya dönüşlerini ekle
-		for (const trade of state.closedTrades) {
-			// Matematiksel Formül: proceeds = realizedPnLUsdt + entryCost
-			const entryCost = trade.entryPrice * trade.quantity;
-			const proceeds = trade.realizedPnLUsdt + entryCost;
-
-			correctCash += proceeds;
-			correctRealizedPnL += trade.realizedPnLUsdt;
+		// 2. Kapatılan tüm işlemlerin net PnL değerlerini kasaya ekle
+		// Doğru Formül: kasa = başlangıç_kasası - aktif_pozisyonlar + toplam_gerçekleşen_pnl
+		if (state.closedTrades && state.closedTrades.length > 0) {
+			for (const trade of state.closedTrades) {
+				correctCash += trade.realizedPnLUsdt;
+				correctRealizedPnL += trade.realizedPnLUsdt;
+			}
 		}
 
 		// 3. Güncel Equity hesaplaması
