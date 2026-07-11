@@ -405,6 +405,11 @@ export class ExecutionEngine {
 										strategyName: p.strategyName,
 									});
 
+									// DÜZELTME: Kademeli satım gelirleri kasaya eklenir
+									const proceeds = fill.quantity * fill.price - fill.commission;
+									this.state.cash += proceeds;
+									this.state.realizedPnL += partialPnLUsdt;
+
 									p.quantity -= sellQty;
 									p.positionSizeUsdt /= 2;
 
@@ -484,6 +489,11 @@ export class ExecutionEngine {
 									rMultiple: partialPnLPercent / (p.riskPercent || 1),
 									strategyName: p.strategyName,
 								});
+
+								// DÜZELTME: Kademeli satım gelirleri kasaya eklenir
+								const proceeds = fill.quantity * fill.price - fill.commission;
+								this.state.cash += proceeds;
+								this.state.realizedPnL += partialPnLUsdt;
 
 								// Reduce position parameters by half
 								p.quantity -= sellQty;
