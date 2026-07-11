@@ -177,6 +177,7 @@
                             <option value="supertrend">Supertrend (4H)</option>
                             <option value="bollinger-bands">Bollinger Bands (15M)</option>
                             <option value="bollinger-bands-v2">Bollinger Bands v2 (Middle SMA TP - 15M)</option>
+                            <option value="bollinger-bands-timestamp">Bollinger Bands Timestamp (Saat Filtreli - 15M)</option>
                         </select>
                     </div>
 
@@ -326,7 +327,8 @@
             'ema-cross': { label: 'EMA Crossover', icon: '📈' },
             'supertrend': { label: 'Supertrend', icon: '🦅' },
             'bollinger-bands': { label: 'Bollinger Bands', icon: '📊' },
-            'bollinger-bands-v2': { label: 'Bollinger Bands v2', icon: '📊' }
+            'bollinger-bands-v2': { label: 'Bollinger Bands v2', icon: '📊' },
+            'bollinger-bands-timestamp': { label: 'Bollinger Bands Timestamp', icon: '⏰' }
         };
 
         const strategyLockedIntervals = {
@@ -339,7 +341,8 @@
             'ema-cross': '4h',
             'supertrend': '4h',
             'bollinger-bands': '15m',
-            'bollinger-bands-v2': '15m'
+            'bollinger-bands-v2': '15m',
+            'bollinger-bands-timestamp': '15m'
         };
         
         const watchCoins = [

@@ -37,6 +37,7 @@ import { createBollingerRsiDivStrategy } from './research/strategies/bollinger-r
 import { createRandomStrategy } from './research/strategies/random/index.js';
 import { createBollingerBandsV2Strategy } from './research/strategies/bollinger-bands-v2/index.js';
 import { createA2V2Strategy } from './research/strategies/a2-v2/index.js';
+import { createBollingerBandsTimestampStrategy } from './research/strategies/bollinger-bands-timestamp/index.js';
 import { DEFAULT_SWEEP } from './research/experiments/runner.js';
 import { runSweep, printLeaderboard, printMetadata, printStrategyComparison, exportSweepCSV, exportMetadataJSON } from './research/experiments/sweep.js';
 import { runWalkForward, printWalkForwardReport, exportWalkForwardJSON, exportWalkForwardCSV } from './research/walkforward/walkforward.js';
@@ -93,6 +94,7 @@ function resolveStrategy(name: string): Strategy | null {
 		'random': createRandomStrategy(),
 		'bollinger-bands-v2': createBollingerBandsV2Strategy(),
 		'a2-v2': createA2V2Strategy(),
+		'bollinger-bands-timestamp': createBollingerBandsTimestampStrategy(),
 	};
 	return strategies[name] ?? null;
 }
@@ -118,7 +120,7 @@ async function commandBacktest(
 	const strategy = resolveStrategy(strategyName);
 	if (!strategy) {
 		logError(`Bilinmeyen strateji: ${strategyName}`);
-		logError('Mevcut stratejiler: sma-cross, ema-cross, donchian-breakout, a1, a2, consensus, trend-pullback, freedom, freedom_b, gemini_1, gemini_2, vwap-reversion, bollinger-rsi-div, random, bollinger-bands-v2, a2-v2');
+		logError('Mevcut stratejiler: sma-cross, ema-cross, donchian-breakout, a1, a2, consensus, trend-pullback, freedom, freedom_b, gemini_1, gemini_2, vwap-reversion, bollinger-rsi-div, random, bollinger-bands-v2, a2-v2, bollinger-bands-timestamp');
 		process.exit(1);
 	}
 
