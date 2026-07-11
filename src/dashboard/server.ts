@@ -461,7 +461,9 @@ export function startDashboardServer(port: number = 3000): any {
 				const states: any[] = [];
 				const strategyIntervals: Record<string, string[]> = {
 					'bollinger-bands': ['15m'],
+					'bollinger-bands-v2': ['15m'],
 					'a2': ['15m'],
+					'a2-v2': ['15m'],
 					'vwap-reversion': ['15m'],
 					'bollinger-rsi-div': ['15m'],
 					'random': ['15m'],
@@ -495,7 +497,9 @@ export function startDashboardServer(port: number = 3000): any {
 			if (url === '/api/live-paper/export-csv' && req.method === 'GET') {
 				const strategyIntervals: Record<string, string[]> = {
 					'bollinger-bands': ['15m'],
+					'bollinger-bands-v2': ['15m'],
 					'a2': ['15m'],
+					'a2-v2': ['15m'],
 					'vwap-reversion': ['15m'],
 					'bollinger-rsi-div': ['15m'],
 					'random': ['15m'],
@@ -890,7 +894,9 @@ export function startDashboardServer(port: number = 3000): any {
 		try {
 			const strategyIntervals: Record<string, string[]> = {
 				'bollinger-bands': ['15m'],
+				'bollinger-bands-v2': ['15m'],
 				'a2': ['15m'],
+				'a2-v2': ['15m'],
 				'vwap-reversion': ['15m'],
 				'bollinger-rsi-div': ['15m'],
 				'random': ['15m'],

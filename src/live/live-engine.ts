@@ -22,6 +22,8 @@ import { createSupertrendStrategy } from '../research/strategies/supertrend/inde
 import { createVwapReversionStrategy } from '../research/strategies/vwap-reversion/index.js';
 import { createBollingerRsiDivStrategy } from '../research/strategies/bollinger-rsi-div/index.js';
 import { createRandomStrategy } from '../research/strategies/random/index.js';
+import { createBollingerBandsV2Strategy } from '../research/strategies/bollinger-bands-v2/index.js';
+import { createA2V2Strategy } from '../research/strategies/a2-v2/index.js';
 import { MetaLabeler } from '../research/meta-labeling.js';
 import { OnlineLearner } from '../research/online-learning.js';
 import { rsi, adx, sma } from '../core/indicators/index.js';
@@ -152,13 +154,15 @@ export class ExecutionEngine {
 		this.onUpdateCallback = cb;
 	}
 
-	public async start(): Promise<void> {
+	public async start(isTestMode: boolean = false): Promise<void> {
 		if (this.state.engineStatus === 'running') return;
 
-		// Add a random delay up to 8 seconds to avoid spamming Binance on startup when multiple engines boot at once
-		const startupDelay = Math.random() * 8000;
-		log(`ExecutionEngine start called. Delaying boot by ${(startupDelay / 1000).toFixed(2)}s to protect Binance Rate Limits...`);
-		await new Promise(resolve => setTimeout(resolve, startupDelay));
+		// Add a random delay up to 8 seconds to avoid spamming Binance on startup when multiple engines boot at once (skip in test mode)
+		const startupDelay = isTestMode ? 0 : Math.random() * 8000;
+		if (startupDelay > 0) {
+			log(`ExecutionEngine start called. Delaying boot by ${(startupDelay / 1000).toFixed(2)}s to protect Binance Rate Limits...`);
+			await new Promise(resolve => setTimeout(resolve, startupDelay));
+		}
 
 		log(`Live ExecutionEngine (Binance TR mode) is starting...`);
 		this.state.engineStatus = 'running';
@@ -354,9 +358,84 @@ export class ExecutionEngine {
 
 		this.state.activePositions.forEach((p, idx) => {
 			if (p.coin === coin) {
-				if (p.strategyName === 'a2') {
+				if (p.strategyName === 'bollinger-bands-v2') {
 					const entryPrice = p.entryPrice;
 					const currentAtr = p.initialAtr || (entryPrice * 0.02);
+
+					// Dynamic Stop Loss check (SL 2*ATR initially, moves to breakeven after partial TP)
+					if (price <= p.stopLoss) {
+						const reason = p.partialExitTriggered ? 'Profit Lock Stop (BB V2)' : 'SL (ATR)';
+						positionsToClose.push({ idx, reason, exitPrice: p.stopLoss });
+						return;
+					}
+
+					// Middle band (20 SMA) partial TP check:
+					if (!p.partialExitTriggered) {
+						const candles = this.candlesMap.get(coin) || [];
+						if (candles.length >= 20) {
+							const closes = candles.map(c => c.close);
+							const sma20 = sma(closes, 20);
+							const middleBand = sma20[sma20.length - 1];
+
+							if (!Number.isNaN(middleBand) && price >= middleBand) {
+								const sellQty = p.quantity / 2;
+								log(`[🤖 BB-V2] [${coin}] Kademeli Kar Al (Middle Band 20 SMA) Tetiklendi. Fiyat: $${price.toFixed(4)} | Orta Band: $${middleBand.toFixed(4)} | Satilan: ${sellQty.toFixed(4)}`);
+
+								this.broker.sell(coin, timestamp, price, sellQty).then(fill => {
+									const partialPnLPercent = ((price - entryPrice) / entryPrice) * 100;
+									const partialPnLUsdt = (price - entryPrice) * sellQty - fill.commission;
+
+									this.state.closedTrades.push({
+										coin,
+										direction: 'LONG',
+										entryTime: p.entryTime,
+										exitTime: new Date(timestamp).toISOString(),
+										entryPrice,
+										exitPrice: price,
+										quantity: sellQty,
+										realizedPnLPercent: partialPnLPercent,
+										realizedPnLUsdt: partialPnLUsdt,
+										entryReason: 'BUY',
+										exitReason: 'Partial TP',
+										holdingDurationSeconds: Math.floor((timestamp - new Date(p.entryTime).getTime()) / 1000),
+										mae: p.mae || 0,
+										mfe: p.mfe || 0,
+										rMultiple: partialPnLPercent / (p.riskPercent || 1),
+										strategyName: p.strategyName,
+									});
+
+									p.quantity -= sellQty;
+									p.positionSizeUsdt /= 2;
+
+									// Move SL to entry price
+									p.stopLoss = entryPrice;
+									p.profitStage = 1;
+									p.partialExitTriggered = true;
+
+									log(`[🤖 BB-V2] [${coin}] Kademeli Kar Al Sonrasi Stop Loss Basabas Cekildi: $${p.stopLoss.toFixed(4)}`);
+									this.saveAndBroadcast();
+								}).catch(err => {
+									logError(`[🤖 BB-V2] [${coin}] Kademeli Kar Al Satim Hatasi: ${err}`);
+								});
+							}
+						}
+					}
+					return;
+				}
+
+				if (p.strategyName === 'a2' || p.strategyName === 'a2-v2') {
+					const entryPrice = p.entryPrice;
+					const currentAtr = p.initialAtr || (entryPrice * 0.02);
+
+					// Dynamic Trailing Stop for a2-v2:
+					if (p.strategyName === 'a2-v2') {
+						const highest = p.highestPrice || entryPrice;
+						const trailingStop = highest - 2 * currentAtr;
+						if (trailingStop > p.stopLoss) {
+							p.stopLoss = trailingStop;
+							log(`[🤖 A2-V2] [${coin}] Trailing Stop guncellendi. Yeni SL: $${p.stopLoss.toFixed(4)} (Zirve: $${highest.toFixed(4)})`);
+						}
+					}
 
 					// 1. Time Exit: check if open for >= 24 hours (86400000 ms)
 					const elapsedMs = timestamp - new Date(p.entryTime).getTime();
@@ -378,7 +457,7 @@ export class ExecutionEngine {
 						if (price >= level1Target) {
 							// Execute partial TP of 50%
 							const sellQty = p.quantity / 2;
-							log(`[🤖 A2] [${coin}] Kademeli Kar Al (+2 ATR) Tetiklendi. Fiyat: $${price.toFixed(4)} | Satilan: ${sellQty.toFixed(4)}`);
+							log(`[🤖 ${p.strategyName.toUpperCase()}] [${coin}] Kademeli Kar Al (+2 ATR) Tetiklendi. Fiyat: $${price.toFixed(4)} | Satilan: ${sellQty.toFixed(4)}`);
 							
 							// Run asynchronously so we don't block the iteration
 							this.broker.sell(coin, timestamp, price, sellQty).then(fill => {
@@ -414,10 +493,10 @@ export class ExecutionEngine {
 								p.profitStage = 1;
 								p.partialExitTriggered = true;
 
-								log(`[🤖 A2] [${coin}] Kademeli Kar Al Sonrasi Stop Loss Basabas (+0.25% Buffer) Cekildi: $${p.stopLoss.toFixed(4)}`);
+								log(`[🤖 ${p.strategyName.toUpperCase()}] [${coin}] Kademeli Kar Al Sonrasi Stop Loss Basabas (+0.25% Buffer) Cekildi: $${p.stopLoss.toFixed(4)}`);
 								this.saveAndBroadcast();
 							}).catch(err => {
-								logError(`[🤖 A2] [${coin}] Kademeli Kar Al Satim Hatasi: ${err}`);
+								logError(`[🤖 ${p.strategyName.toUpperCase()}] [${coin}] Kademeli Kar Al Satim Hatasi: ${err}`);
 							});
 						}
 					}
@@ -429,7 +508,7 @@ export class ExecutionEngine {
 							// Move stop loss to entry + 1.5 * ATR
 							p.stopLoss = entryPrice + 1.5 * currentAtr;
 							p.profitStage = 2;
-							log(`[🤖 A2] [${coin}] Dinamik Kar Kilitleme +1.5 ATR (Stage 2) Tetiklendi. Yeni Stop Loss: $${p.stopLoss.toFixed(4)}`);
+							log(`[🤖 ${p.strategyName.toUpperCase()}] [${coin}] Dinamik Kar Kilitleme +1.5 ATR (Stage 2) Tetiklendi. Yeni Stop Loss: $${p.stopLoss.toFixed(4)}`);
 						}
 					}
 					return;
@@ -618,6 +697,7 @@ export class ExecutionEngine {
 						mae: 0,
 						mfe: 0,
 						strategyName: strategy.name,
+						initialAtr: activeSignal.metadata?.atr,
 					});
 
 					log(`[🤖 ${strategy.name.toUpperCase()}] [${coin}] Pozisyon AÇILDI. Miktar: ${fill.quantity.toFixed(4)} | Giriş: $${fill.price.toFixed(2)} | Bütçe: $${budget.toFixed(2)} | Risk: $${(budget * (riskPercent/100)).toFixed(2)} (${riskPercent.toFixed(2)}%)`);
@@ -626,6 +706,10 @@ export class ExecutionEngine {
 				const idx = this.state.activePositions.findIndex(p => p.coin === coin);
 				if (idx !== -1) {
 					const pos = this.state.activePositions[idx];
+					if (pos.strategyName === 'a2-v2') {
+						log(`[🤖 A2-V2] [${coin}] Karsit satis sinyali yoksayildi. Trailing Stop cikisi yonetecek.`);
+						return;
+					}
 					await this.closePosition(pos, lastCandle.close, 'Signal', lastCandle.closeTime);
 					this.state.activePositions.splice(idx, 1);
 				}
@@ -704,8 +788,10 @@ export class ExecutionEngine {
 		if (strategyPath === 'consensus') return createConsensusStrategy();
 		if (strategyPath === 'a1') return createA1Strategy();
 		if (strategyPath === 'a2') return createA2Strategy();
+		if (strategyPath === 'a2-v2') return createA2V2Strategy();
 		if (strategyPath === 'vwap-reversion') return createVwapReversionStrategy();
 		if (strategyPath === 'bollinger-rsi-div') return createBollingerRsiDivStrategy();
+		if (strategyPath === 'bollinger-bands-v2') return createBollingerBandsV2Strategy();
 		if (strategyPath === 'random') return createRandomStrategy();
 		if (strategyPath === 'trend-pullback') return createTrendPullbackStrategy();
 		if (strategyPath === 'freedom') return createFreedomStrategy();
@@ -981,12 +1067,14 @@ export function getAllExecutionEnginesSummary(): StrategySummary[] {
 	const registeredStrategies = [
 		{ name: 'consensus', label: 'Consensus Hybrid', interval: '1h' },
 		{ name: 'a2', label: 'A2 Bollinger (Volt)', interval: '15m' },
+		{ name: 'a2-v2', label: 'A2 Bollinger v2', interval: '15m' },
 		{ name: 'vwap-reversion', label: 'VWAP Reversion', interval: '15m' },
 		{ name: 'bollinger-rsi-div', label: 'Bollinger + RSI Div', interval: '15m' },
 		{ name: 'random', label: 'Random Walk Baseline', interval: '15m' },
 		{ name: 'ema-cross', label: 'EMA Crossover', interval: '4h' },
 		{ name: 'supertrend', label: 'Supertrend', interval: '4h' },
-		{ name: 'bollinger-bands', label: 'Bollinger Bands', interval: '15m' }
+		{ name: 'bollinger-bands', label: 'Bollinger Bands', interval: '15m' },
+		{ name: 'bollinger-bands-v2', label: 'Bollinger Bands v2', interval: '15m' }
 	];
 
 	return registeredStrategies.map(strat => {
