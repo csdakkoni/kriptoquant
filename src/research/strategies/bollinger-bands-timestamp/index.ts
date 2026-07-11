@@ -37,12 +37,14 @@ export function createBollingerBandsTimestampStrategy(
 					continue;
 				}
 
-				// UTC saatini bulma
+				// UTC saatini ve gününü bulma
 				const date = new Date(current.openTime);
 				const utcHour = date.getUTCHours();
+				const dayOfWeek = date.getUTCDay(); // 0: Pazar, 6: Cumartesi
+				const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
 
-				// 11:00 - 14:59 UTC arasını engelleme (Avrupa açılışı / volatilite saati)
-				const isBlockedHour = utcHour >= 11 && utcHour <= 14;
+				// 11:00 - 14:59 UTC arasını sadece HAFTA İÇİ engelleme (Avrupa açılışı / volatilite saati)
+				const isBlockedHour = !isWeekend && (utcHour >= 11 && utcHour <= 14);
 
 				const isBuySetup = current.close <= lowerBand && !isBlockedHour;
 				const isSellSetup = current.close >= upperBand; // Çıkış her zaman aktif kalabilir
