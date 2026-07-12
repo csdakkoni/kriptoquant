@@ -579,11 +579,11 @@ export function startDashboardServer(port: number = 3000): any {
 
 						log(`Deploying to Paper: Strategy = ${strategy}, Coins = ${coins.join(', ')}, Interval = ${interval}, ML Veto = ${mlVeto}`);
 						
-						// Start live in-process engine
+						// Start live in-process engine instantly (skip startup delay)
 						await startExecutionEngine(coins, interval, strategy, mlVeto, (state) => {
 							broadcastEngineState(state);
 							broadcastPortfolioState(portfolio.getPortfolioAllocations());
-						});
+						}, true);
 
 						res.writeHead(200, { 'Content-Type': 'application/json' });
 						res.end(JSON.stringify({ success: true, message: 'Execution Engine started' }));

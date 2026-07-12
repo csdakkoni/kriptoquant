@@ -155,11 +155,11 @@ export class ExecutionEngine {
 		this.onUpdateCallback = cb;
 	}
 
-	public async start(isTestMode: boolean = false): Promise<void> {
+	public async start(skipDelay: boolean = false): Promise<void> {
 		if (this.state.engineStatus === 'running') return;
 
-		// Add a random delay up to 8 seconds to avoid spamming Binance on startup when multiple engines boot at once (skip in test mode)
-		const startupDelay = isTestMode ? 0 : Math.random() * 8000;
+		// Add a random delay up to 8 seconds to avoid spamming Binance on startup when multiple engines boot at once (skip if skipDelay is true)
+		const startupDelay = skipDelay ? 0 : Math.random() * 8000;
 		if (startupDelay > 0) {
 			log(`ExecutionEngine start called. Delaying boot by ${(startupDelay / 1000).toFixed(2)}s to protect Binance Rate Limits...`);
 			await new Promise(resolve => setTimeout(resolve, startupDelay));
@@ -958,7 +958,8 @@ export async function startExecutionEngine(
 	interval: string,
 	strategyPath: string,
 	mlVeto: boolean,
-	cb: (state: EngineState) => void
+	cb: (state: EngineState) => void,
+	skipDelay: boolean = false
 ): Promise<ExecutionEngine> {
 	const key = `${strategyPath}_${interval}`;
 	let engine = activeEngines.get(key);
@@ -967,7 +968,7 @@ export async function startExecutionEngine(
 	}
 	engine = new ExecutionEngine(coins, interval, strategyPath, mlVeto);
 	engine.registerUpdateCallback(cb);
-	await engine.start();
+	await engine.start(skipDelay);
 	activeEngines.set(key, engine);
 	return engine;
 }
