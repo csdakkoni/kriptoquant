@@ -24,20 +24,13 @@ import { printReport, saveReport } from './research/report.js';
 import { createSmaCrossStrategy } from './research/strategies/sma-cross/index.js';
 import { createEmaCrossStrategy } from './research/strategies/ema-cross/index.js';
 import { createDonchianBreakoutStrategy } from './research/strategies/donchian-breakout/index.js';
-import { createA1Strategy } from './research/strategies/a1/index.js';
 import { createA2Strategy } from './research/strategies/a2/index.js';
 import { createConsensusStrategy } from './research/strategies/consensus/index.js';
-import { createTrendPullbackStrategy } from './research/strategies/trend-pullback/index.js';
-import { createFreedomStrategy } from './research/strategies/freedom/index.js';
-import { createFreedomBStrategy } from './research/strategies/freedom_b/index.js';
-import { createGemini1Strategy } from './research/strategies/gemini_1/index.js';
-import { createGemini2Strategy } from './research/strategies/gemini_2/index.js';
 import { createVwapReversionStrategy } from './research/strategies/vwap-reversion/index.js';
 import { createBollingerRsiDivStrategy } from './research/strategies/bollinger-rsi-div/index.js';
 import { createRandomStrategy } from './research/strategies/random/index.js';
 import { createBollingerBandsV2Strategy } from './research/strategies/bollinger-bands-v2/index.js';
 import { createA2V2Strategy } from './research/strategies/a2-v2/index.js';
-import { createBollingerBandsTimestampStrategy } from './research/strategies/bollinger-bands-timestamp/index.js';
 import { createSupertrendStrategy } from './research/strategies/supertrend/index.js';
 import { DEFAULT_SWEEP } from './research/experiments/runner.js';
 import { runSweep, printLeaderboard, printMetadata, printStrategyComparison, exportSweepCSV, exportMetadataJSON } from './research/experiments/sweep.js';
@@ -82,20 +75,13 @@ function resolveStrategy(name: string): Strategy | null {
 		'sma-cross': createSmaCrossStrategy(),
 		'ema-cross': createEmaCrossStrategy(),
 		'donchian-breakout': createDonchianBreakoutStrategy(),
-		'a1': createA1Strategy(),
 		'a2': createA2Strategy(),
 		'consensus': createConsensusStrategy(),
-		'trend-pullback': createTrendPullbackStrategy(),
-		'freedom': createFreedomStrategy(),
-		'freedom_b': createFreedomBStrategy(),
-		'gemini_1': createGemini1Strategy(),
-		'gemini_2': createGemini2Strategy(),
 		'vwap-reversion': createVwapReversionStrategy(),
 		'bollinger-rsi-div': createBollingerRsiDivStrategy(),
 		'random': createRandomStrategy(),
 		'bollinger-bands-v2': createBollingerBandsV2Strategy(),
 		'a2-v2': createA2V2Strategy(),
-		'bollinger-bands-timestamp': createBollingerBandsTimestampStrategy(),
 		'supertrend': createSupertrendStrategy(),
 	};
 	return strategies[name] ?? null;
@@ -122,7 +108,7 @@ async function commandBacktest(
 	const strategy = resolveStrategy(strategyName);
 	if (!strategy) {
 		logError(`Bilinmeyen strateji: ${strategyName}`);
-		logError('Mevcut stratejiler: sma-cross, ema-cross, donchian-breakout, a1, a2, consensus, trend-pullback, freedom, freedom_b, gemini_1, gemini_2, vwap-reversion, bollinger-rsi-div, random, bollinger-bands-v2, a2-v2, bollinger-bands-timestamp');
+		logError('Mevcut stratejiler: sma-cross, ema-cross, donchian-breakout, a2, consensus, vwap-reversion, bollinger-rsi-div, random, bollinger-bands-v2, a2-v2, supertrend');
 		process.exit(1);
 	}
 
@@ -430,7 +416,7 @@ async function commandPaperTrade(strategyName: string, coin: string, interval: s
 	startDashboardServer(3008);
 
 	// 2) Start the in-process ExecutionEngine
-	await startExecutionEngine(coins, interval, strategyName, false, (state: any) => {
+	await startExecutionEngine(coins, interval, strategyName, (state: any) => {
 		// Periodically print update status to console
 		if (state.uptime % 10 === 0) {
 			log(`[Live Engine Uptime: ${state.uptime}s] Equity: ${state.currentEquity.toFixed(2)} USDT | Cash: ${state.cash.toFixed(2)} | Active Positions: ${state.activePositions.length}`);

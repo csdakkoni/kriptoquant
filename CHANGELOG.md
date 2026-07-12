@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.0] - 2026-07-13 — Canlı Motor Overhaul
+
+### Changed (Breaking)
+- **Canlı motor backtest ile hizalandı**: Strateji-özel gizli kâr-kilitleme katmanı (breakeven/+1%/+2% kademeleri, genel trailing stop) tamamen kaldırıldı. Çıkışlar artık yalnızca SL / TP / karşıt sinyal ile yapılır — backtest motoruyla aynı kural yapısı.
+- **Gerçekçi dolumlar**: SL tetiklendiğinde stop fiyatından değil, gözlenen tik fiyatından satılır. Trailing stop'taki `Math.max(price, floor)` hayali dolumu kaldırıldı.
+- **Canlı kadro 5 stratejiye indirildi**: `a2-v2`, `vwap-reversion` (mean reversion, 15m), `donchian-breakout`, `ema-cross` (trend, 4h), `random` (bilimsel baseline). Trend stratejileri için varsayılan TP kaldırıldı (karşıt sinyalle çıkış); SL yoksa backtest ile aynı `2×ATR` kuralı uygulanır.
+- **Pozisyon boyutlandırma dürüstleştirildi**: `risk.json` üzerinden `riskPerTradePercent` (0.5%), `maxPositionPercent` (15%), `maxOrderValue`, `maxConcurrentPositions` (4) uygulanır; log gerçek riski yazar.
+
+### Added
+- **Günlük zarar kill-switch**: Gün içi equity düşüşü `maxDailyLossPercent`'i (%3) aşarsa gün sonuna kadar yeni giriş açılmaz (açık pozisyonlar SL/TP/sinyalle yönetilmeye devam eder).
+- **BTC rejim filtresi**: BTC 4h kapanışı 200-SMA altındayken (RISK_OFF) yeni long girişleri engellenir. `risk.json > enableBtcRegimeFilter` ile kapatılabilir.
+- **Restart gap koruması**: Motor kapalıyken stop seviyesi delinmiş pozisyonlar açılışta mevcut fiyattan tasfiye edilir.
+- Yeni birim testleri: gerçekçi SL dolumu ve kill-switch davranışı.
+
+### Removed
+- **Sahte ML katmanı**: `MetaLabeler` veto akışı ve hiç çağrılmayan `OnlineLearner` canlı motordan söküldü; UI'daki "ML Veto" kutusu kaldırıldı (yanıltıcı "SGD & Platt Scaling" logları dahil).
+- Çöp stratejiler silindi: `a1`, `freedom`, `freedom_b`, `gemini_1`, `gemini_2`, `trend-pullback`, `bollinger-bands-timestamp`.
+- Repo temizliği: `kriptoquant.tar.gz`, `kriptoquant_all_source_code.txt` silindi.
+
+### Security
+- **Sahte dolum fallback'i kaldırıldı**: Gerçek para modunda emir başarısız olursa artık sessizce paper dolum simüle edilmez; hata fırlatılır, alımlar atlanır, satışlar sonraki tikte tekrar denenir.
+- `config/keys.json` git takibinden çıkarıldı ve `.gitignore`'a eklendi; şablon olarak `config/keys.example.json` eklendi.
+
+---
+
 ## [1.0.0-rc1] - 2026-07-04
 
 ### Added

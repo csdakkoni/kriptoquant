@@ -143,20 +143,11 @@ export class BinanceTrBroker {
 				commission: totalCommission
 			};
 		} catch (e) {
-			logError(`[Binance TR Broker] Live Order execution failed: ${e}. Falling back to paper fill.`);
-			// Fail-safe: execute as paper trade locally rather than crashing
-			const commissionRate = 0.0010;
-			const slippageRate = 0.0005;
-			const executedPrice = price * (1 + slippageRate);
-			const commission = usdtAmount * commissionRate;
-			const netQuantity = (usdtAmount - commission) / executedPrice;
-			return {
-				timestamp,
-				side: 'BUY',
-				price: executedPrice,
-				quantity: netQuantity,
-				commission
-			};
+			// KRİTİK: Canlı emir başarısız olursa ASLA sahte (paper) dolum döndürülmez.
+			// Aksi halde motor "aldım" sanır ama borsada pozisyon yoktur — state ile
+			// gerçek bakiye sessizce ayrışır. Hata yukarı fırlatılır; motor girişi atlar.
+			logError(`[Binance TR Broker] Live BUY order failed for ${coin}: ${e}`);
+			throw e;
 		}
 	}
 
@@ -189,7 +180,10 @@ export class BinanceTrBroker {
 				symbol: coin,
 				side: 'SELL',
 				type: 'MARKET',
-				quantity: quantity.toFixed(6), // Sell raw quantity
+				// TODO(gerçek para öncesi ZORUNLU): exchangeInfo'dan LOT_SIZE/stepSize ve
+				// minNotional çekilip miktar ona göre yuvarlanmalı; toFixed(6) çoğu
+				// sembolde emir reddine yol açar.
+				quantity: quantity.toFixed(6),
 				timestamp: String(Date.now()),
 				recvWindow: '5000'
 			};
@@ -246,20 +240,10 @@ export class BinanceTrBroker {
 				commission: totalCommission
 			};
 		} catch (e) {
-			logError(`[Binance TR Broker] Live Sell Order execution failed: ${e}. Falling back to paper fill.`);
-			// Fail-safe: execute as paper trade locally rather than crashing
-			const commissionRate = 0.0010;
-			const slippageRate = 0.0005;
-			const executedPrice = price * (1 - slippageRate);
-			const grossUsdt = quantity * executedPrice;
-			const commission = grossUsdt * commissionRate;
-			return {
-				timestamp,
-				side: 'SELL',
-				price: executedPrice,
-				quantity,
-				commission
-			};
+			// KRİTİK: Satışta da sahte dolum yasak. Hata fırlatılır; motor pozisyonu
+			// korur ve bir sonraki tikte satışı tekrar dener.
+			logError(`[Binance TR Broker] Live SELL order failed for ${coin}: ${e}`);
+			throw e;
 		}
 	}
 }

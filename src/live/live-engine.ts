@@ -1,5 +1,14 @@
 // ============================================================================
-// KRIPTOQUANT — Live Execution Engine (Sprint 29 - Binance TR)
+// KRIPTOQUANT — Live Execution Engine (Temmuz 2026 Overhaul)
+// ============================================================================
+// Tasarım ilkeleri:
+// 1. Canlı motor, backtest motoruyla AYNI kural yapısını kullanır:
+//    giriş = strateji sinyali, çıkış = SL / TP / karşıt sinyal.
+//    Strateji-özel gizli kâr-kilitleme katmanları YOKTUR.
+// 2. Dolumlar gerçekçidir: stop tetiklendiğinde gözlenen tik fiyatından
+//    (slipaj broker'da) satılır; stop fiyatından "hayali" dolum yapılmaz.
+// 3. Risk kapıları: günlük zarar kill-switch, eşzamanlı pozisyon limiti,
+//    BTC rejim filtresi. Hepsi config/risk.json üzerinden yönetilir.
 // ============================================================================
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
@@ -8,29 +17,105 @@ import { WebSocket } from 'ws';
 import { createStrategyFromConfig } from '../research/strategies/factory/index.js';
 import type { StrategyConfig } from '../research/strategies/factory/types.js';
 import { createEmaCrossStrategy } from '../research/strategies/ema-cross/index.js';
-import { createSmaCrossStrategy } from '../research/strategies/sma-cross/index.js';
 import { createDonchianBreakoutStrategy } from '../research/strategies/donchian-breakout/index.js';
-import { createConsensusStrategy } from '../research/strategies/consensus/index.js';
-import { createA1Strategy } from '../research/strategies/a1/index.js';
-import { createA2Strategy } from '../research/strategies/a2/index.js';
-import { createTrendPullbackStrategy } from '../research/strategies/trend-pullback/index.js';
-import { createFreedomStrategy } from '../research/strategies/freedom/index.js';
-import { createFreedomBStrategy } from '../research/strategies/freedom_b/index.js';
-import { createGemini1Strategy } from '../research/strategies/gemini_1/index.js';
-import { createGemini2Strategy } from '../research/strategies/gemini_2/index.js';
-import { createSupertrendStrategy } from '../research/strategies/supertrend/index.js';
-import { createVwapReversionStrategy } from '../research/strategies/vwap-reversion/index.js';
-import { createBollingerRsiDivStrategy } from '../research/strategies/bollinger-rsi-div/index.js';
-import { createRandomStrategy } from '../research/strategies/random/index.js';
-import { createBollingerBandsV2Strategy } from '../research/strategies/bollinger-bands-v2/index.js';
 import { createA2V2Strategy } from '../research/strategies/a2-v2/index.js';
-import { createBollingerBandsTimestampStrategy } from '../research/strategies/bollinger-bands-timestamp/index.js';
-import { MetaLabeler } from '../research/meta-labeling.js';
-import { OnlineLearner } from '../research/online-learning.js';
-import { rsi, adx, sma } from '../core/indicators/index.js';
-import type { Candle, Strategy, Signal } from '../core/types.js';
+import { createVwapReversionStrategy } from '../research/strategies/vwap-reversion/index.js';
+import { createRandomStrategy } from '../research/strategies/random/index.js';
+import { atr, sma } from '../core/indicators/index.js';
+import type { Candle, Strategy } from '../core/types.js';
 import { BinanceTrBroker } from '../execution/binance-tr-broker.js';
 import { log, logError } from '../core/utils.js';
+
+// ─── Canlı Risk Konfigürasyonu ──────────────────────────────────────────────
+
+export interface LiveRiskConfig {
+	riskPerTradePercent: number; // İşlem başına hedeflenen sermaye riski (%)
+	maxPositionPercent: number; // Tek pozisyonun sermayeye oranı tavanı (%)
+	maxOrderValue: number; // Tek emrin mutlak USDT tavanı
+	maxConcurrentPositions: number; // Aynı anda açık pozisyon sayısı limiti
+	maxDailyLossPercent: number; // Günlük zarar kill-switch eşiği (%)
+	stopLossAtrMultiplier: number; // Strateji SL vermezse: SL = giriş - N*ATR
+	enableBtcRegimeFilter: boolean; // BTC 4h 200-SMA rejim filtresi
+}
+
+const DEFAULT_LIVE_RISK: LiveRiskConfig = {
+	riskPerTradePercent: 0.5,
+	maxPositionPercent: 15,
+	maxOrderValue: 2000,
+	maxConcurrentPositions: 4,
+	maxDailyLossPercent: 3,
+	stopLossAtrMultiplier: 2,
+	enableBtcRegimeFilter: true,
+};
+
+export function loadLiveRiskConfig(): LiveRiskConfig {
+	try {
+		const raw = readFileSync(join(process.cwd(), 'config', 'risk.json'), 'utf-8');
+		const parsed = JSON.parse(raw);
+		return { ...DEFAULT_LIVE_RISK, ...parsed };
+	} catch (e) {
+		logError(`config/risk.json okunamadı, varsayılan risk limitleri kullanılıyor: ${e}`);
+		return { ...DEFAULT_LIVE_RISK };
+	}
+}
+
+// ─── BTC Rejim Monitörü (paylaşımlı singleton) ──────────────────────────────
+// BTC 4h kapanışı 200-SMA üzerindeyse RISK_ON, altındaysa RISK_OFF.
+// Veri alınamazsa UNKNOWN — motor bu durumda girişleri engellemez (fail-open),
+// ama loglar. 15 dakikada bir tazelenir.
+
+export type BtcRegime = 'RISK_ON' | 'RISK_OFF' | 'UNKNOWN';
+
+class BtcRegimeMonitor {
+	private regime: BtcRegime = 'UNKNOWN';
+	private lastFetch = 0;
+	private fetching = false;
+	private static REFRESH_MS = 15 * 60 * 1000;
+
+	public getRegime(): BtcRegime {
+		this.refreshIfStale();
+		return this.regime;
+	}
+
+	private refreshIfStale(): void {
+		const now = Date.now();
+		if (this.fetching || now - this.lastFetch < BtcRegimeMonitor.REFRESH_MS) return;
+		this.fetching = true;
+		this.fetchRegime()
+			.then((r) => {
+				if (r !== this.regime) {
+					log(`[BTC Rejim] Değişti: ${this.regime} → ${r}`);
+				}
+				this.regime = r;
+				this.lastFetch = Date.now();
+			})
+			.catch((e) => {
+				logError(`[BTC Rejim] Veri alınamadı (mevcut: ${this.regime}): ${e}`);
+				this.lastFetch = Date.now(); // hata durumunda da bekle, API'yi dövme
+			})
+			.finally(() => {
+				this.fetching = false;
+			});
+	}
+
+	private async fetchRegime(): Promise<BtcRegime> {
+		const url = 'https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=4h&limit=210';
+		const res = await fetch(url);
+		if (!res.ok) throw new Error(`HTTP ${res.status}`);
+		const data = (await res.json()) as any[];
+		if (!Array.isArray(data) || data.length < 200) return 'UNKNOWN';
+		const closes = data.map((d) => parseFloat(d[4]));
+		const smaValues = sma(closes, 200);
+		const lastSma = smaValues[smaValues.length - 1];
+		const lastClose = closes[closes.length - 1];
+		if (!Number.isFinite(lastSma) || Number.isNaN(lastSma)) return 'UNKNOWN';
+		return lastClose > lastSma ? 'RISK_ON' : 'RISK_OFF';
+	}
+}
+
+export const btcRegimeMonitor = new BtcRegimeMonitor();
+
+// ─── State Tipleri ──────────────────────────────────────────────────────────
 
 export interface ActivePosition {
 	coin: string;
@@ -49,10 +134,7 @@ export interface ActivePosition {
 	mfe: number;
 	strategyName: string;
 	highestPrice?: number;
-	breakevenTriggered?: boolean;
-	profitStage?: number;
 	initialAtr?: number;
-	partialExitTriggered?: boolean;
 }
 
 export interface ClosedTrade {
@@ -91,39 +173,41 @@ export interface EngineState {
 	coins?: string[];
 	interval?: string;
 	strategyPath?: string;
-	mlVeto?: boolean;
+	// Günlük kill-switch takibi
+	tradingDay?: string; // UTC gün (YYYY-MM-DD)
+	dayStartEquity?: number; // Gün başındaki sermaye
+	entriesHalted?: boolean; // Günlük zarar limiti aşıldı, yeni giriş yok
+	btcRegime?: BtcRegime; // Son bilinen BTC rejimi (dashboard için)
 }
 
-// ─── ExecutionEngine Singleton & Service ────────────────────────────────────
+// ─── ExecutionEngine ────────────────────────────────────────────────────────
 
 export class ExecutionEngine {
 	private state: EngineState;
 	private broker: BinanceTrBroker;
-	private ws: WebSocket | null = null;
 	private timer: NodeJS.Timeout | null = null;
 	private candlesMap = new Map<string, Candle[]>();
 	private statePath: string;
 	private strategyPath: string;
 	private coins: string[];
+	private interval: string;
+	private riskConfig: LiveRiskConfig;
+	private haltLogged = false;
+	private regimeBlockLogged = false;
+	private onUpdateCallback: ((state: EngineState) => void) | null = null;
 
 	public getCoins(): string[] {
 		return this.coins;
 	}
-	private interval: string;
-	private mlVeto: boolean = false;
-	private metaLabeler = new MetaLabeler();
-	private onlineLearner = new OnlineLearner();
-	private onUpdateCallback: ((state: EngineState) => void) | null = null;
 
-	constructor(coins: string[], interval: string, strategyPath: string, mlVeto: boolean = false) {
+	constructor(coins: string[], interval: string, strategyPath: string) {
 		this.coins = coins;
 		this.interval = interval;
 		this.strategyPath = strategyPath;
-		this.mlVeto = mlVeto;
 		this.statePath = join(process.cwd(), 'results', `live_paper_state_${strategyPath}_${interval}.json`);
 		this.broker = new BinanceTrBroker();
+		this.riskConfig = loadLiveRiskConfig();
 
-		// Load or initialize state
 		this.state = this.loadSavedState();
 	}
 
@@ -132,7 +216,7 @@ export class ExecutionEngine {
 			try {
 				const raw = readFileSync(this.statePath, 'utf-8');
 				const parsed = JSON.parse(raw) as EngineState;
-				parsed.engineStatus = 'stopped'; // Reset to stopped initially
+				parsed.engineStatus = 'stopped';
 				return parsed;
 			} catch (e) {
 				logError(`Failed to load live_paper_state.json: ${e}`);
@@ -162,14 +246,14 @@ export class ExecutionEngine {
 	public async start(skipDelay: boolean = false): Promise<void> {
 		if (this.state.engineStatus === 'running') return;
 
-		// Add a random delay up to 8 seconds to avoid spamming Binance on startup when multiple engines boot at once (skip if skipDelay is true)
+		// Çoklu motor aynı anda açılırken Binance rate limitini korumak için rastgele gecikme
 		const startupDelay = skipDelay ? 0 : Math.random() * 8000;
 		if (startupDelay > 0) {
 			log(`ExecutionEngine start called. Delaying boot by ${(startupDelay / 1000).toFixed(2)}s to protect Binance Rate Limits...`);
-			await new Promise(resolve => setTimeout(resolve, startupDelay));
+			await new Promise((resolve) => setTimeout(resolve, startupDelay));
 		}
 
-		log(`Live ExecutionEngine (Binance TR mode) is starting...`);
+		log(`Live ExecutionEngine is starting... [${this.strategyPath} @ ${this.interval}]`);
 		this.state.engineStatus = 'running';
 		this.state.startTime = new Date().toISOString();
 		this.state.uptime = 0;
@@ -177,9 +261,8 @@ export class ExecutionEngine {
 		this.state.coins = this.coins;
 		this.state.interval = this.interval;
 		this.state.strategyPath = this.strategyPath;
-		this.state.mlVeto = this.mlVeto;
 
-		// Determine warmup period by resolving strategy once with dummy candles
+		// Warmup periyodunu bir kez çözerek belirle
 		let warmupPeriod = 200;
 		try {
 			const dummyCandles: Candle[] = Array.from({ length: 1000 }, () => ({
@@ -189,7 +272,7 @@ export class ExecutionEngine {
 				low: 100,
 				close: 100,
 				volume: 100,
-				closeTime: Date.now() + 60000
+				closeTime: Date.now() + 60000,
 			}));
 			const dummyStrategy = this.resolveStrategy(this.strategyPath, dummyCandles);
 			warmupPeriod = dummyStrategy.warmupPeriod || 200;
@@ -197,7 +280,7 @@ export class ExecutionEngine {
 			logError(`Failed to determine warmup period: ${e}`);
 		}
 
-		// 1) Bootstrap Candle history from Binance REST API in parallel (for indicator warm-up)
+		// 1) Geçmiş mumları REST'ten yükle (indikatör ısınması için)
 		const historyLimit = Math.max(200, warmupPeriod + 50);
 		log(`Bootstrapping historical candles for ${this.coins.join(', ')} (limit = ${historyLimit})...`);
 		for (const coin of this.coins) {
@@ -205,28 +288,30 @@ export class ExecutionEngine {
 				const history = await this.fetchHistory(coin, this.interval, historyLimit);
 				this.candlesMap.set(coin, history);
 				log(`  ✓ Loaded ${history.length} candles for ${coin}`);
-				// 150ms sleep to avoid spamming Binance REST API
-				await new Promise(resolve => setTimeout(resolve, 150));
+				await new Promise((resolve) => setTimeout(resolve, 150));
 			} catch (e) {
 				logError(`Failed to bootstrap history for ${coin}: ${e}`);
 				this.candlesMap.set(coin, []);
 			}
 		}
 
-		// 2) Register this engine with the shared global WebSocket stream manager
+		// 1b) Motor kapalıyken stop seviyesi delinmiş pozisyonları kapat.
+		// Not: Stop fiyatından değil, şu an gözlenen fiyattan kapatılır — motor
+		// kapalıyken emir borsada olmadığı için stop fiyatı garantisi yoktur.
+		await this.closeGappedPositions();
+
+		// 2) Paylaşımlı WebSocket akışına kaydol
 		sharedStreamManager.register(this.interval, this.coins, this);
 
-		// 3) Start 1-second interval timer for Uptime and Heartbeat
+		// 3) Uptime & heartbeat zamanlayıcısı
 		this.timer = setInterval(() => {
 			if (this.state.engineStatus === 'running') {
 				this.state.uptime += 1;
 				this.state.heartbeat = new Date().toISOString();
+				this.rollTradingDayIfNeeded();
 				this.updatePortfolioEquity();
-				
-				// Broadcast state via WebSocket on every tick in memory
 				this.broadcast();
-				
-				// Write state file to disk only once every 15 seconds to prevent high disk I/O load
+
 				if (this.state.uptime % 15 === 0) {
 					this.saveToDisk();
 				}
@@ -242,7 +327,7 @@ export class ExecutionEngine {
 
 		log(`Live ExecutionEngine is stopping...`);
 		this.state.engineStatus = 'stopped';
-		
+
 		sharedStreamManager.unregister(this.interval, this);
 
 		if (this.timer) {
@@ -275,7 +360,7 @@ export class ExecutionEngine {
 		const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
 		const res = await fetch(url);
 		if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-		const data = await res.json() as any[];
+		const data = (await res.json()) as any[];
 		return data.map((d: any) => ({
 			openTime: Number(d[0]),
 			open: parseFloat(d[1]),
@@ -287,54 +372,87 @@ export class ExecutionEngine {
 		}));
 	}
 
+	/** Motor kapalıyken SL altına düşmüş pozisyonları mevcut fiyattan tasfiye eder. */
+	private async closeGappedPositions(): Promise<void> {
+		const toClose: { pos: ActivePosition; price: number }[] = [];
+		for (const pos of this.state.activePositions) {
+			const candles = this.candlesMap.get(pos.coin);
+			if (!candles || candles.length === 0) continue;
+			const lastClose = candles[candles.length - 1].close;
+			if (lastClose <= pos.stopLoss) {
+				toClose.push({ pos, price: lastClose });
+			}
+		}
+		for (const { pos, price } of toClose) {
+			const ok = await this.closePosition(pos, price, 'SL (restart gap)', Date.now());
+			if (ok) {
+				const idx = this.state.activePositions.indexOf(pos);
+				if (idx !== -1) this.state.activePositions.splice(idx, 1);
+			}
+		}
+	}
+
+	/** UTC gün değiştiyse günlük kill-switch sayaçlarını sıfırlar. */
+	private rollTradingDayIfNeeded(): void {
+		const today = new Date().toISOString().slice(0, 10);
+		if (this.state.tradingDay !== today) {
+			this.state.tradingDay = today;
+			this.state.dayStartEquity = this.state.currentEquity;
+			if (this.state.entriesHalted) {
+				log(`[Kill-Switch] Yeni gün (${today}). Girişler tekrar açıldı.`);
+			}
+			this.state.entriesHalted = false;
+			this.haltLogged = false;
+		}
+	}
+
+	/** Günlük zarar limiti aşıldıysa true döner ve girişleri kilitler. */
+	private isDailyLossLimitHit(): boolean {
+		const dayStart = this.state.dayStartEquity ?? this.state.currentEquity;
+		if (dayStart <= 0) return false;
+		const dailyPnLPercent = ((this.state.currentEquity - dayStart) / dayStart) * 100;
+		if (dailyPnLPercent <= -this.riskConfig.maxDailyLossPercent) {
+			if (!this.haltLogged) {
+				log(
+					`[Kill-Switch] Günlük zarar limiti aşıldı: ${dailyPnLPercent.toFixed(2)}% <= -${this.riskConfig.maxDailyLossPercent}%. ` +
+					`Bugün yeni pozisyon açılmayacak. Açık pozisyonlar SL/TP/sinyal ile yönetilmeye devam eder.`,
+				);
+				this.haltLogged = true;
+			}
+			this.state.entriesHalted = true;
+			return true;
+		}
+		return false;
+	}
+
 	private async handleKlineTick(coin: string, k: any): Promise<void> {
 		const price = parseFloat(k.c);
 		this.state.lastCandleTime = new Date(k.t).toISOString();
 
-		// Update active positions on every tick
-		this.state.activePositions.forEach(p => {
+		// Her tikte açık pozisyonların PnL/MAE/MFE değerlerini güncelle
+		this.state.activePositions.forEach((p) => {
 			if (p.coin === coin) {
 				p.currentPrice = price;
-				const rawPnL = (p.currentPrice - p.entryPrice) * p.quantity;
-				p.currentPnLUsdt = rawPnL;
-				p.currentPnLPercent = (p.currentPrice - p.entryPrice) / p.entryPrice * 100;
+				p.currentPnLUsdt = (p.currentPrice - p.entryPrice) * p.quantity;
+				p.currentPnLPercent = ((p.currentPrice - p.entryPrice) / p.entryPrice) * 100;
 
-				// Track highest price for trailing stop
 				if (price > (p.highestPrice ?? p.entryPrice)) {
 					p.highestPrice = price;
 				}
 
-				// Track MAE (max drawdown) & MFE (max run-up) as positive percentages
 				const currentDrawdown = p.currentPnLPercent < 0 ? Math.abs(p.currentPnLPercent) : 0;
 				const currentRunUp = p.currentPnLPercent > 0 ? p.currentPnLPercent : 0;
-
 				if (currentDrawdown > p.mae) p.mae = currentDrawdown;
 				if (currentRunUp > p.mfe) p.mfe = currentRunUp;
 			}
 		});
 
-		// Check Stop Loss & Take Profit exits on every tick!
+		// SL/TP denetimi her tikte
 		await this.checkRiskExits(coin, price, k.T);
 
-		// Handle Closed Bar
+		// Kapanan mum: strateji değerlendirmesi
 		if (k.x === true) {
 			log(`[${coin}] Kline Closed at ${price}`);
-			
-			// Freedom Soft Stop check at candle close!
-			const softPositionsToClose: number[] = [];
-			this.state.activePositions.forEach((p, idx) => {
-				if (p.coin === coin && (p.strategyName === 'freedom' || p.strategyName === 'freedom_b')) {
-					if (price <= p.stopLoss) {
-						softPositionsToClose.push(idx);
-					}
-				}
-			});
-			for (let i = softPositionsToClose.length - 1; i >= 0; i--) {
-				const idx = softPositionsToClose[i];
-				const pos = this.state.activePositions[idx];
-				await this.closePosition(pos, price, 'Soft Stop (Swing Low)', k.T);
-				this.state.activePositions.splice(idx, 1);
-			}
 
 			const closedCandle: Candle = {
 				openTime: k.t,
@@ -348,313 +466,54 @@ export class ExecutionEngine {
 
 			const list = this.candlesMap.get(coin) || [];
 			list.push(closedCandle);
-			if (list.length > 1000) list.shift(); // Keep up to 1000 candles for warm-up strategies like Freedom
+			if (list.length > 1000) list.shift();
 			this.candlesMap.set(coin, list);
 
-			// Run strategy execution on closed bar
 			await this.evaluateStrategySignals(coin, list, closedCandle);
 		}
 
 		this.updatePortfolioEquity();
 	}
 
+	/**
+	 * SL/TP denetimi — TÜM stratejiler için tek ve aynı kural seti:
+	 * - price <= stopLoss  → gözlenen fiyattan kapat (slipajı broker ekler)
+	 * - takeProfit > 0 && price >= takeProfit → gözlenen fiyattan kapat
+	 * Backtest motorundaki SL/TP yapısının tik bazlı karşılığıdır.
+	 */
 	private async checkRiskExits(coin: string, price: number, timestamp: number): Promise<void> {
 		const positionsToClose: { idx: number; reason: string; exitPrice: number }[] = [];
 
 		this.state.activePositions.forEach((p, idx) => {
-			if (p.coin === coin) {
-				if (p.strategyName === 'bollinger-bands-v2') {
-					const entryPrice = p.entryPrice;
-					const currentAtr = p.initialAtr || (entryPrice * 0.02);
+			if (p.coin !== coin) return;
 
-					// Dynamic Stop Loss check (SL 2*ATR initially, moves to breakeven after partial TP)
-					if (price <= p.stopLoss) {
-						const reason = p.partialExitTriggered ? 'Profit Lock Stop (BB V2)' : 'SL (ATR)';
-						positionsToClose.push({ idx, reason, exitPrice: p.stopLoss });
-						return;
-					}
-
-					// Middle band (20 SMA) partial TP check:
-					if (!p.partialExitTriggered) {
-						const candles = this.candlesMap.get(coin) || [];
-						if (candles.length >= 20) {
-							const closes = candles.map(c => c.close);
-							const sma20 = sma(closes, 20);
-							const middleBand = sma20[sma20.length - 1];
-
-							if (!Number.isNaN(middleBand) && price >= middleBand) {
-								const sellQty = p.quantity / 2;
-								log(`[🤖 BB-V2] [${coin}] Kademeli Kar Al (Middle Band 20 SMA) Tetiklendi. Fiyat: $${price.toFixed(4)} | Orta Band: $${middleBand.toFixed(4)} | Satilan: ${sellQty.toFixed(4)}`);
-
-								p.partialExitTriggered = true;
-								this.broker.sell(coin, timestamp, price, sellQty).then(fill => {
-									const partialPnLPercent = ((price - entryPrice) / entryPrice) * 100;
-									const partialPnLUsdt = (price - entryPrice) * sellQty - fill.commission;
-
-									this.state.closedTrades.push({
-										coin,
-										direction: 'LONG',
-										entryTime: p.entryTime,
-										exitTime: new Date(timestamp).toISOString(),
-										entryPrice,
-										exitPrice: price,
-										quantity: sellQty,
-										realizedPnLPercent: partialPnLPercent,
-										realizedPnLUsdt: partialPnLUsdt,
-										entryReason: 'BUY',
-										exitReason: 'Partial TP',
-										holdingDurationSeconds: Math.floor((timestamp - new Date(p.entryTime).getTime()) / 1000),
-										mae: p.mae || 0,
-										mfe: p.mfe || 0,
-										rMultiple: partialPnLPercent / (p.riskPercent || 1),
-										strategyName: p.strategyName,
-									});
-
-									// DÜZELTME: Kademeli satım gelirleri kasaya eklenir
-									const proceeds = fill.quantity * fill.price - fill.commission;
-									this.state.cash += proceeds;
-									this.state.realizedPnL += partialPnLUsdt;
-
-									p.quantity -= sellQty;
-									p.positionSizeUsdt /= 2;
-
-									// Move SL to entry price
-									p.stopLoss = entryPrice;
-									p.profitStage = 1;
-
-									log(`[🤖 BB-V2] [${coin}] Kademeli Kar Al Sonrasi Stop Loss Basabas Cekildi: $${p.stopLoss.toFixed(4)}`);
-									this.saveAndBroadcast();
-								}).catch(err => {
-									logError(`[🤖 BB-V2] [${coin}] Kademeli Kar Al Satim Hatasi: ${err}`);
-								});
-							}
-						}
-					}
-					return;
-				}
-
-				if (p.strategyName === 'a2' || p.strategyName === 'a2-v2') {
-					const entryPrice = p.entryPrice;
-					const currentAtr = p.initialAtr || (entryPrice * 0.02);
-
-					// Dynamic Trailing Stop for a2-v2:
-					if (p.strategyName === 'a2-v2') {
-						const highest = p.highestPrice || entryPrice;
-						const trailingStop = highest - 2 * currentAtr;
-						if (trailingStop > p.stopLoss) {
-							p.stopLoss = trailingStop;
-							log(`[🤖 A2-V2] [${coin}] Trailing Stop guncellendi. Yeni SL: $${p.stopLoss.toFixed(4)} (Zirve: $${highest.toFixed(4)})`);
-						}
-					}
-
-					// 1. Time Exit: check if open for >= 24 hours (86400000 ms)
-					const elapsedMs = timestamp - new Date(p.entryTime).getTime();
-					if (elapsedMs >= 24 * 60 * 60 * 1000) {
-						positionsToClose.push({ idx, reason: 'Time Exit', exitPrice: price });
-						return;
-					}
-
-					// 2. Initial Stop Loss / Trailing Stop Loss check
-					if (price <= p.stopLoss) {
-						const reason = p.partialExitTriggered ? 'ATR Profit Lock' : 'SL (ATR)';
-						positionsToClose.push({ idx, reason, exitPrice: p.stopLoss });
-						return;
-					}
-
-					// 3. Level 1 Target check (+2 * ATR)
-					if (!p.partialExitTriggered) {
-						const level1Target = entryPrice + 2 * currentAtr;
-						if (price >= level1Target) {
-							// Execute partial TP of 50%
-							const sellQty = p.quantity / 2;
-							log(`[🤖 ${p.strategyName.toUpperCase()}] [${coin}] Kademeli Kar Al (+2 ATR) Tetiklendi. Fiyat: $${price.toFixed(4)} | Satilan: ${sellQty.toFixed(4)}`);
-							
-							// Run asynchronously so we don't block the iteration
-							p.partialExitTriggered = true;
-							this.broker.sell(coin, timestamp, price, sellQty).then(fill => {
-								// Record the partial closed trade to history
-								const partialPnLPercent = ((price - entryPrice) / entryPrice) * 100;
-								const partialPnLUsdt = (price - entryPrice) * sellQty - fill.commission;
-								
-								this.state.closedTrades.push({
-									coin,
-									direction: 'LONG',
-									entryTime: p.entryTime,
-									exitTime: new Date(timestamp).toISOString(),
-									entryPrice,
-									exitPrice: price,
-									quantity: sellQty,
-									realizedPnLPercent: partialPnLPercent,
-									realizedPnLUsdt: partialPnLUsdt,
-									entryReason: 'BUY',
-									exitReason: 'Partial TP',
-									holdingDurationSeconds: Math.floor((timestamp - new Date(p.entryTime).getTime()) / 1000),
-									mae: p.mae || 0,
-									mfe: p.mfe || 0,
-									rMultiple: partialPnLPercent / (p.riskPercent || 1),
-									strategyName: p.strategyName,
-								});
-
-								// DÜZELTME: Kademeli satım gelirleri kasaya eklenir
-								const proceeds = fill.quantity * fill.price - fill.commission;
-								this.state.cash += proceeds;
-								this.state.realizedPnL += partialPnLUsdt;
-
-								// Reduce position parameters by half
-								p.quantity -= sellQty;
-								p.positionSizeUsdt /= 2;
-
-								// Move SL to Entry + commission + buffer (roundtrip ~0.25% buffer)
-								p.stopLoss = entryPrice * 1.0025;
-								p.profitStage = 1;
-
-								log(`[🤖 ${p.strategyName.toUpperCase()}] [${coin}] Kademeli Kar Al Sonrasi Stop Loss Basabas (+0.25% Buffer) Cekildi: $${p.stopLoss.toFixed(4)}`);
-								this.saveAndBroadcast();
-							}).catch(err => {
-								logError(`[🤖 ${p.strategyName.toUpperCase()}] [${coin}] Kademeli Kar Al Satim Hatasi: ${err}`);
-							});
-						}
-					}
-
-					// 4. Level 2 Target check (+3 * ATR)
-					if (p.partialExitTriggered && (!p.profitStage || p.profitStage < 2)) {
-						const level2Target = entryPrice + 3 * currentAtr;
-						if (price >= level2Target) {
-							// Move stop loss to entry + 1.5 * ATR
-							p.stopLoss = entryPrice + 1.5 * currentAtr;
-							p.profitStage = 2;
-							log(`[🤖 ${p.strategyName.toUpperCase()}] [${coin}] Dinamik Kar Kilitleme +1.5 ATR (Stage 2) Tetiklendi. Yeni Stop Loss: $${p.stopLoss.toFixed(4)}`);
-						}
-					}
-					return;
-				}
-
-				// 1) Multi-Stage Profit Lock-in (Kademeli Kâr Kilitleme):
-				// Stage 1 (Breakeven): PnL >= +1.5% -> Lock in Entry Price
-				if (p.currentPnLPercent >= 1.5 && (!p.profitStage || p.profitStage < 1)) {
-					p.stopLoss = p.entryPrice;
-					p.profitStage = 1;
-					p.breakevenTriggered = true;
-					log(`[${coin}] [${p.strategyName}] Breakeven (Stage 1) triggered. Stop Loss moved to Entry: $${p.entryPrice.toFixed(4)}`);
-				}
-
-				// Stage 2 (Lock +1.0%): PnL >= +2.2% -> Lock in Entry Price + 1.0%
-				if (p.currentPnLPercent >= 2.2 && (!p.profitStage || p.profitStage < 2)) {
-					p.stopLoss = p.entryPrice * 1.01;
-					p.profitStage = 2;
-					log(`[${coin}] [${p.strategyName}] Profit Lock-in +1% (Stage 2) triggered. Stop Loss: $${p.stopLoss.toFixed(4)}`);
-				}
-
-				// Stage 3 (Lock +2.0%): PnL >= +3.0% -> Lock in Entry Price + 2.0% (User requested: %3 kârda en kötü %2'yi kilitle)
-				if (p.currentPnLPercent >= 3.0 && (!p.profitStage || p.profitStage < 3)) {
-					p.stopLoss = p.entryPrice * 1.02;
-					p.profitStage = 3;
-					log(`[${coin}] [${p.strategyName}] Profit Lock-in +2% (Stage 3) triggered. Stop Loss: $${p.stopLoss.toFixed(4)}`);
-				}
-
-				// 2) Dynamic Trailing Stop check:
-				// Activated once price gains at least 3.5% from entry.
-				// Trails the highest peak with a 1.0% distance.
-				const highest = p.highestPrice ?? p.entryPrice;
-				const trailingStopPrice = highest * 0.99; // 1.0% trailing distance
-
-				if (highest >= p.entryPrice * 1.035 && price <= trailingStopPrice) {
-					// Ensure we never exit below our Stage 3 floor (+2.0% profit)
-					const floorPrice = p.entryPrice * 1.02;
-					const finalExitPrice = Math.max(price, floorPrice);
-					positionsToClose.push({ idx, reason: 'Trailing Stop', exitPrice: finalExitPrice });
-					return;
-				}
-
-				// 3) Standard stop & limit checks:
-				// RULE: If a stopLoss has been moved to or above entry price (meaning it is a profit lock or breakeven),
-				// we MUST check it on every tick instantly for ALL strategies to prevent slippage!
-				const isProfitLocked = p.stopLoss >= p.entryPrice;
-				if (isProfitLocked && price <= p.stopLoss) {
-					const reason = p.stopLoss > p.entryPrice ? 'Profit Lock Stop' : 'Breakeven Stop';
-					positionsToClose.push({ idx, reason, exitPrice: p.stopLoss });
-					return;
-				}
-
-				// Otherwise, check regular SL/TP parameters based on strategy type
-				if (p.strategyName === 'freedom_b') {
-					// Freedom B Hybrid stop model:
-					// - Hard stop is checked on every tick (instantly at entry - 4.5%)
-					// - TP is checked on every tick
-					// - Soft stop (Swing Low) is checked only on candle close
-					const hardStopPrice = p.entryPrice * 0.955;
-					if (price <= hardStopPrice) {
-						positionsToClose.push({ idx, reason: 'Hard Emergency Stop', exitPrice: hardStopPrice });
-					} else if (p.takeProfit > 0 && price >= p.takeProfit) {
-						positionsToClose.push({ idx, reason: 'TP', exitPrice: p.takeProfit });
-					}
-				} else if (p.strategyName === 'freedom') {
-					// Freedom Hybrid stop model:
-					// - Hard stop is checked on every tick (instantly at entry - 4.5%)
-					// - TP is checked on every tick
-					// - Soft stop (Swing Low) is checked only on candle close
-					const hardStopPrice = p.entryPrice * 0.955;
-					if (price <= hardStopPrice) {
-						positionsToClose.push({ idx, reason: 'Hard Emergency Stop', exitPrice: hardStopPrice });
-					} else if (p.takeProfit > 0 && price >= p.takeProfit) {
-						positionsToClose.push({ idx, reason: 'TP', exitPrice: p.takeProfit });
-					}
-				} else {
-					// Standard strategies: SL & TP checked tick-by-tick
-					if (price <= p.stopLoss) {
-						positionsToClose.push({ idx, reason: 'SL', exitPrice: p.stopLoss });
-					} else if (p.takeProfit > 0 && price >= p.takeProfit) {
-						positionsToClose.push({ idx, reason: 'TP', exitPrice: p.takeProfit });
-					}
-				}
+			if (price <= p.stopLoss) {
+				// Gerçekçi dolum: stop fiyatı değil, stop'un delindiği anda gözlenen fiyat
+				positionsToClose.push({ idx, reason: 'SL', exitPrice: price });
+			} else if (p.takeProfit > 0 && price >= p.takeProfit) {
+				positionsToClose.push({ idx, reason: 'TP', exitPrice: price });
 			}
 		});
 
-		// Close positions in reverse index order
 		for (let i = positionsToClose.length - 1; i >= 0; i--) {
 			const { idx, reason, exitPrice } = positionsToClose[i];
 			const pos = this.state.activePositions[idx];
-			await this.closePosition(pos, exitPrice, reason, timestamp);
-			this.state.activePositions.splice(idx, 1);
+			const ok = await this.closePosition(pos, exitPrice, reason, timestamp);
+			if (ok) {
+				this.state.activePositions.splice(idx, 1);
+			}
 		}
 	}
 
 	private async evaluateStrategySignals(coin: string, candles: Candle[], lastCandle: Candle): Promise<void> {
 		try {
-			// Resolve strategy dynamically
 			const strategy = this.resolveStrategy(this.strategyPath, candles);
 			const signals = strategy.evaluate(candles);
 
-			// Find last signal matching this closed candle's openTime
-			const activeSignal = signals.find(s => s.timestamp === lastCandle.openTime);
+			const activeSignal = signals.find((s) => s.timestamp === lastCandle.openTime);
 			if (!activeSignal) return;
 
 			log(`[${coin}] Strategy Generated Signal: ${activeSignal.side} | Reason: ${activeSignal.reason}`);
-
-			// --- ML META-LABELING VETO CHECK ---
-			if (this.mlVeto && activeSignal.side === 'BUY') {
-				const closes = candles.map(c => c.close);
-				const volumes = candles.map(c => c.volume);
-				const rsiVal = rsi(closes, 14)[closes.length - 1] || 50;
-				const adxResult = adx(candles, 14);
-				const adxVal = adxResult.adx[candles.length - 1] || 20;
-				const smaVol = sma(volumes, 20)[volumes.length - 1] || 1;
-				const volumeSpike = lastCandle.volume > smaVol * 1.5 ? 1 : 0;
-
-				const meta = this.metaLabeler.evaluateMetaLabel(activeSignal.side, {
-					rsiVal,
-					adxVal,
-					atrPercentile: 0.5,
-					volumeSpike
-				});
-
-				if (meta.action === 'VETO_SKIP') {
-					log(`[🤖 ML VETO] ${coin} BUY sinyali veto edilerek atlandı! Başarı Olasılığı: %${(meta.metaProbability * 100).toFixed(1)} | RSI: ${rsiVal.toFixed(1)}, ADX: ${adxVal.toFixed(1)}`);
-					return; // Skip execution
-				} else {
-					log(`[🤖 ML CONFIRMED] ${coin} BUY sinyali yapay zeka tarafından onaylandı! Başarı Olasılığı: %${(meta.metaProbability * 100).toFixed(1)}`);
-				}
-			}
 
 			this.state.pendingSignals.push({
 				coin,
@@ -664,69 +523,18 @@ export class ExecutionEngine {
 			});
 			if (this.state.pendingSignals.length > 15) this.state.pendingSignals.shift();
 
-			const hasPosition = this.state.activePositions.some(p => p.coin === coin);
+			const hasPosition = this.state.activePositions.some((p) => p.coin === coin);
 
 			if (activeSignal.side === 'BUY' && !hasPosition) {
-				// Risk-Based Sizing: Risk 1.5% of total portfolio equity per trade
-				// But cap the maximum allocation at 10% of total equity (max $1000 for a $10000 portfolio)
-				const totalEquity = this.state.currentEquity || this.state.cash;
-				const riskAmount = totalEquity * 0.015; // Risk exactly 1.5% of total equity
-
-				const entryPrice = lastCandle.close;
-				const stopLossPrice = activeSignal.stopLoss ?? activeSignal.metadata?.sl ?? entryPrice * 0.98;
-				const takeProfitPrice = activeSignal.takeProfit ?? activeSignal.metadata?.tp ?? entryPrice * 1.06;
-
-				// Calculate stop distance in percent (decimal)
-				const stopDistance = Math.abs(entryPrice - stopLossPrice) / entryPrice;
-				const stopDistancePercent = stopDistance > 0 ? stopDistance : 0.02; // Fallback to 2% if zero
-
-				// Position size = Risk / Stop Distance
-				let calculatedSize = riskAmount / stopDistancePercent;
-
-				// Cap at 10% of Total Equity (max $1000 for a $10000 portfolio)
-				const maxAllocation = totalEquity * 0.10;
-				let budget = Math.min(calculatedSize, maxAllocation);
-
-				// Ensure we don't exceed current cash
-				budget = Math.min(budget, this.state.cash);
-
-				if (budget >= 10) {
-					const fill = await this.broker.buy(coin, lastCandle.closeTime, lastCandle.close, budget);
-					this.state.cash -= budget;
-
-					const riskPercent = Math.abs((fill.price - stopLossPrice) / fill.price * 100);
-
-					this.state.activePositions.push({
-						coin,
-						direction: 'LONG',
-						entryTime: new Date(fill.timestamp).toISOString(),
-						entryPrice: fill.price,
-						currentPrice: fill.price,
-						quantity: fill.quantity,
-						positionSizeUsdt: budget,
-						stopLoss: stopLossPrice,
-						takeProfit: takeProfitPrice,
-						riskPercent,
-						currentPnLPercent: 0,
-						currentPnLUsdt: 0,
-						mae: 0,
-						mfe: 0,
-						strategyName: strategy.name,
-						initialAtr: activeSignal.metadata?.atr,
-					});
-
-					log(`[🤖 ${strategy.name.toUpperCase()}] [${coin}] Pozisyon AÇILDI. Miktar: ${fill.quantity.toFixed(4)} | Giriş: $${fill.price.toFixed(2)} | Bütçe: $${budget.toFixed(2)} | Risk: $${(budget * (riskPercent/100)).toFixed(2)} (${riskPercent.toFixed(2)}%)`);
-				}
+				await this.tryOpenPosition(coin, candles, lastCandle, activeSignal, strategy);
 			} else if (activeSignal.side === 'SELL' && hasPosition) {
-				const idx = this.state.activePositions.findIndex(p => p.coin === coin);
+				const idx = this.state.activePositions.findIndex((p) => p.coin === coin);
 				if (idx !== -1) {
 					const pos = this.state.activePositions[idx];
-					if (pos.strategyName === 'a2-v2') {
-						log(`[🤖 A2-V2] [${coin}] Karsit satis sinyali yoksayildi. Trailing Stop cikisi yonetecek.`);
-						return;
+					const ok = await this.closePosition(pos, lastCandle.close, 'Signal', lastCandle.closeTime);
+					if (ok) {
+						this.state.activePositions.splice(idx, 1);
 					}
-					await this.closePosition(pos, lastCandle.close, 'Signal', lastCandle.closeTime);
-					this.state.activePositions.splice(idx, 1);
 				}
 			}
 		} catch (e) {
@@ -734,25 +542,135 @@ export class ExecutionEngine {
 		}
 	}
 
-	private async closePosition(pos: ActivePosition, exitPrice: number, reason: string, timestamp: number): Promise<void> {
-		const fill = await this.broker.sell(pos.coin, timestamp, exitPrice, pos.quantity);
+	private async tryOpenPosition(
+		coin: string,
+		candles: Candle[],
+		lastCandle: Candle,
+		activeSignal: { price: number; stopLoss?: number; takeProfit?: number; metadata?: any },
+		strategy: Strategy,
+	): Promise<void> {
+		// ── Risk Kapısı 1: Günlük zarar kill-switch ──
+		if (this.isDailyLossLimitHit()) return;
+
+		// ── Risk Kapısı 2: Eşzamanlı pozisyon limiti ──
+		if (this.state.activePositions.length >= this.riskConfig.maxConcurrentPositions) {
+			log(`[${coin}] Sinyal atlandı: eşzamanlı pozisyon limiti dolu (${this.riskConfig.maxConcurrentPositions}).`);
+			return;
+		}
+
+		// ── Risk Kapısı 3: BTC rejim filtresi ──
+		if (this.riskConfig.enableBtcRegimeFilter) {
+			const regime = btcRegimeMonitor.getRegime();
+			this.state.btcRegime = regime;
+			if (regime === 'RISK_OFF') {
+				if (!this.regimeBlockLogged) {
+					log(`[BTC Rejim] RISK_OFF (BTC 4h < 200-SMA). Yeni long girişleri engelleniyor.`);
+					this.regimeBlockLogged = true;
+				}
+				return;
+			}
+			this.regimeBlockLogged = false;
+		}
+
+		const entryPrice = lastCandle.close;
+
+		// SL: önce strateji metadata'sı; yoksa backtest ile aynı ATR kuralı
+		let stopLossPrice = activeSignal.stopLoss ?? activeSignal.metadata?.sl;
+		let initialAtr: number | undefined = activeSignal.metadata?.atr;
+		if (stopLossPrice === undefined || stopLossPrice <= 0) {
+			const atrValues = candles.length >= 15 ? atr(candles, 14) : [];
+			const lastAtr = atrValues.length > 0 ? atrValues[atrValues.length - 1] : Number.NaN;
+			if (Number.isFinite(lastAtr) && !Number.isNaN(lastAtr) && lastAtr > 0) {
+				stopLossPrice = entryPrice - lastAtr * this.riskConfig.stopLossAtrMultiplier;
+				initialAtr = lastAtr;
+			} else {
+				stopLossPrice = entryPrice * 0.97; // ATR hesaplanamazsa muhafazakâr %3 stop
+			}
+		}
+
+		// TP: strateji vermediyse TP YOK (trend stratejileri karşıt sinyalle çıkar).
+		const takeProfitPrice = activeSignal.takeProfit ?? activeSignal.metadata?.tp ?? 0;
+
+		// ── Pozisyon boyutlandırma ──
+		// Hedef: sermayenin riskPerTradePercent'i kadar risk; tavanlar:
+		// maxPositionPercent, maxOrderValue ve eldeki nakit.
+		const totalEquity = this.state.currentEquity || this.state.cash;
+		const riskAmount = totalEquity * (this.riskConfig.riskPerTradePercent / 100);
+		const stopDistance = Math.abs(entryPrice - stopLossPrice) / entryPrice;
+		const stopDistancePercent = stopDistance > 0 ? stopDistance : 0.02;
+
+		let budget = riskAmount / stopDistancePercent;
+		budget = Math.min(
+			budget,
+			totalEquity * (this.riskConfig.maxPositionPercent / 100),
+			this.riskConfig.maxOrderValue,
+			this.state.cash,
+		);
+
+		if (budget < 10) return;
+
+		let fill;
+		try {
+			fill = await this.broker.buy(coin, lastCandle.closeTime, lastCandle.close, budget);
+		} catch (e) {
+			logError(`[${coin}] ALIM emri başarısız, pozisyon açılmadı: ${e}`);
+			return;
+		}
+		this.state.cash -= budget;
+
+		const riskPercent = Math.abs(((fill.price - stopLossPrice) / fill.price) * 100);
+		const actualRiskUsdt = budget * (riskPercent / 100);
+
+		this.state.activePositions.push({
+			coin,
+			direction: 'LONG',
+			entryTime: new Date(fill.timestamp).toISOString(),
+			entryPrice: fill.price,
+			currentPrice: fill.price,
+			quantity: fill.quantity,
+			positionSizeUsdt: budget,
+			stopLoss: stopLossPrice,
+			takeProfit: takeProfitPrice,
+			riskPercent,
+			currentPnLPercent: 0,
+			currentPnLUsdt: 0,
+			mae: 0,
+			mfe: 0,
+			strategyName: strategy.name,
+			initialAtr,
+		});
+
+		log(
+			`[🤖 ${strategy.name.toUpperCase()}] [${coin}] Pozisyon AÇILDI. Miktar: ${fill.quantity.toFixed(4)} | ` +
+			`Giriş: $${fill.price.toFixed(4)} | Bütçe: $${budget.toFixed(2)} (${((budget / totalEquity) * 100).toFixed(1)}% sermaye) | ` +
+			`SL: $${stopLossPrice.toFixed(4)} | Gerçek risk: $${actualRiskUsdt.toFixed(2)} (sermayenin %${((actualRiskUsdt / totalEquity) * 100).toFixed(2)}'i)`,
+		);
+	}
+
+	/**
+	 * Pozisyonu kapatır. Emir başarısız olursa pozisyona DOKUNMAZ ve false döner —
+	 * bir sonraki tikte tekrar denenir. (Sessiz sahte dolum yasak.)
+	 */
+	private async closePosition(pos: ActivePosition, exitPrice: number, reason: string, timestamp: number): Promise<boolean> {
+		let fill;
+		try {
+			fill = await this.broker.sell(pos.coin, timestamp, exitPrice, pos.quantity);
+		} catch (e) {
+			logError(`[${pos.coin}] SATIM emri başarısız (${reason}), pozisyon korunuyor, tekrar denenecek: ${e}`);
+			return false;
+		}
+
 		const grossReturn = pos.quantity * fill.price;
 		const proceeds = grossReturn - fill.commission;
 		this.state.cash += proceeds;
 
 		const realizedPnLUsdt = proceeds - pos.positionSizeUsdt;
-		const realizedPnLPercent = (fill.price - pos.entryPrice) / pos.entryPrice * 100;
+		const realizedPnLPercent = ((fill.price - pos.entryPrice) / pos.entryPrice) * 100;
 		this.state.realizedPnL += realizedPnLUsdt;
-
-		if (this.mlVeto) {
-			const outcome = realizedPnLUsdt > 0 ? 1 : 0;
-			log(`[🤖 ML LEARNING] ${pos.coin} pozisyonu kapatıldı. Kar: $${realizedPnLUsdt.toFixed(2)} (${realizedPnLPercent.toFixed(2)}%). SGD & Platt Scaling ile parametre güncellendi. Sonuç: ${outcome === 1 ? 'BAŞARILI' : 'BAŞARISIZ'}`);
-		}
 
 		const entryTimeMs = new Date(pos.entryTime).getTime();
 		const durationSeconds = Math.max(1, Math.round((timestamp - entryTimeMs) / 1000));
 
-		// R-Multiple: (Exit Price - Entry Price) / (Entry Price - Stop Loss Price)
 		const stopDistance = pos.entryPrice - pos.stopLoss;
 		const rMultiple = stopDistance > 0 ? (fill.price - pos.entryPrice) / stopDistance : 0;
 
@@ -776,7 +694,11 @@ export class ExecutionEngine {
 		};
 
 		this.state.closedTrades.push(closedTrade);
-		log(`[🤖 ${pos.strategyName.toUpperCase()}] [${pos.coin}] Pozisyon KAPATILDI (${reason}). Giriş: $${pos.entryPrice.toFixed(2)} | Çıkış: $${fill.price.toFixed(2)} | Net PnL: $${realizedPnLUsdt.toFixed(2)} (${realizedPnLPercent.toFixed(2)}%)`);
+		log(
+			`[🤖 ${pos.strategyName.toUpperCase()}] [${pos.coin}] Pozisyon KAPATILDI (${reason}). ` +
+			`Giriş: $${pos.entryPrice.toFixed(4)} | Çıkış: $${fill.price.toFixed(4)} | Net PnL: $${realizedPnLUsdt.toFixed(2)} (${realizedPnLPercent.toFixed(2)}%)`,
+		);
+		return true;
 	}
 
 	private resolveStrategy(strategyPath: string, candles: Candle[]): Strategy {
@@ -786,49 +708,29 @@ export class ExecutionEngine {
 			return createStrategyFromConfig(configJson, candles).strategy;
 		}
 
-		if (strategyPath === 'supertrend') {
-			return createSupertrendStrategy();
-		}
-		if (strategyPath === 'bollinger-bands') {
-			const resolvedPath = join(process.cwd(), 'config', 'strategies', 'strategy_bollinger_bands.json');
-			const raw = readFileSync(resolvedPath, 'utf-8');
-			const configJson = JSON.parse(raw) as StrategyConfig;
-			return createStrategyFromConfig(configJson, candles).strategy;
-		}
-
-		if (strategyPath === 'ema-cross') return createEmaCrossStrategy();
-		if (strategyPath === 'fast-ema-cross') return createEmaCrossStrategy(2, 3);
-		if (strategyPath === 'sma-cross') return createSmaCrossStrategy();
-		if (strategyPath === 'donchian-breakout') return createDonchianBreakoutStrategy();
-		if (strategyPath === 'consensus') return createConsensusStrategy();
-		if (strategyPath === 'a1') return createA1Strategy();
-		if (strategyPath === 'a2') return createA2Strategy();
+		// Canlı test kadrosu (Temmuz 2026): 2 mean-reversion + 2 trend + 1 baseline
 		if (strategyPath === 'a2-v2') return createA2V2Strategy();
 		if (strategyPath === 'vwap-reversion') return createVwapReversionStrategy();
-		if (strategyPath === 'bollinger-rsi-div') return createBollingerRsiDivStrategy();
-		if (strategyPath === 'bollinger-bands-v2') return createBollingerBandsV2Strategy();
-		if (strategyPath === 'bollinger-bands-timestamp') return createBollingerBandsTimestampStrategy();
+		if (strategyPath === 'donchian-breakout') return createDonchianBreakoutStrategy();
+		if (strategyPath === 'ema-cross') return createEmaCrossStrategy();
 		if (strategyPath === 'random') return createRandomStrategy();
-		if (strategyPath === 'trend-pullback') return createTrendPullbackStrategy();
-		if (strategyPath === 'freedom') return createFreedomStrategy();
-		if (strategyPath === 'freedom_b') return createFreedomBStrategy();
-		if (strategyPath === 'gemini_1') return createGemini1Strategy();
-		if (strategyPath === 'gemini_2') return createGemini2Strategy();
 
-		throw new Error(`Strategy resolver failed: ${strategyPath}`);
+		throw new Error(
+			`Strategy resolver failed: "${strategyPath}". ` +
+			`Canlı kadro: a2-v2, vwap-reversion, donchian-breakout, ema-cross, random (veya bir factory .json yolu).`,
+		);
 	}
 
 	private updatePortfolioEquity(): void {
 		let unrealized = 0;
-		this.state.activePositions.forEach(p => {
+		this.state.activePositions.forEach((p) => {
 			unrealized += p.currentPnLUsdt;
 		});
 
 		this.state.unrealizedPnL = unrealized;
 		this.state.currentEquity = this.state.cash + posTotalValue(this.state.activePositions) + unrealized;
 
-		// Track Live Equity Curve (keep last 50 points)
-		const nowStr = new Date().toISOString().substring(11, 19); // HH:MM:SS
+		const nowStr = new Date().toISOString().substring(11, 19);
 		if (this.state.equityCurveLive.length === 0 || this.state.uptime % 10 === 0) {
 			this.state.equityCurveLive.push({ time: nowStr, equity: this.state.currentEquity });
 			if (this.state.equityCurveLive.length > 50) this.state.equityCurveLive.shift();
@@ -859,11 +761,13 @@ export class ExecutionEngine {
 
 function posTotalValue(positions: ActivePosition[]): number {
 	let total = 0;
-	positions.forEach(p => {
+	positions.forEach((p) => {
 		total += p.entryPrice * p.quantity;
 	});
 	return total;
 }
+
+// ─── Paylaşımlı WebSocket Akış Yöneticisi ───────────────────────────────────
 
 class SharedStreamManager {
 	private connections = new Map<string, WebSocket>();
@@ -893,7 +797,7 @@ class SharedStreamManager {
 	private ensureConnection(interval: string, coins: string[]) {
 		if (this.connections.has(interval)) return;
 
-		const streams = coins.map(c => `${c.toLowerCase()}@kline_${interval}`).join('/');
+		const streams = coins.map((c) => `${c.toLowerCase()}@kline_${interval}`).join('/');
 		const wsUrl = `wss://stream.binance.com:9443/ws/${streams}`;
 
 		log(`[SharedStreamManager] Creating single shared WebSocket for interval: ${interval}`);
@@ -911,7 +815,7 @@ class SharedStreamManager {
 					if (set) {
 						for (const engine of set) {
 							if (engine.isEngineRunning()) {
-								engine.handleSharedKlineTick(coin, k).catch(e => {
+								engine.handleSharedKlineTick(coin, k).catch((e) => {
 									logError(`Error handling shared tick in engine: ${e}`);
 								});
 							}
@@ -933,7 +837,6 @@ class SharedStreamManager {
 
 			const set = this.listeners.get(interval);
 			if (set && set.size > 0) {
-				// Collect fresh coins from all registered engines instead of using stale closure
 				const freshCoins = new Set<string>();
 				for (const engine of set) {
 					for (const c of engine.getCoins()) {
@@ -960,7 +863,7 @@ class SharedStreamManager {
 
 export const sharedStreamManager = new SharedStreamManager();
 
-// ─── Global singleton management ─────────────────────────────────────────────
+// ─── Global singleton yönetimi ──────────────────────────────────────────────
 
 export const activeEngines = new Map<string, ExecutionEngine>();
 
@@ -968,23 +871,22 @@ export async function startExecutionEngine(
 	coins: string[],
 	interval: string,
 	strategyPath: string,
-	mlVeto: boolean,
 	cb: (state: EngineState) => void,
-	skipDelay: boolean = false
+	skipDelay: boolean = false,
 ): Promise<ExecutionEngine> {
 	const key = `${strategyPath}_${interval}`;
 	let engine = activeEngines.get(key);
 	if (engine) {
 		engine.stop();
 	}
-	engine = new ExecutionEngine(coins, interval, strategyPath, mlVeto);
+	engine = new ExecutionEngine(coins, interval, strategyPath);
 	engine.registerUpdateCallback(cb);
 	await engine.start(skipDelay);
 	activeEngines.set(key, engine);
 	return engine;
 }
 
-// In-memory state cache to prevent blocking file readFileSync during API polling
+// API polling sırasında disk okumasını engellemek için in-memory state cache
 const stateCache = new Map<string, EngineState>();
 
 export function stopExecutionEngine(strategyPath: string, interval: string): void {
@@ -1004,10 +906,10 @@ export function getExecutionEngineState(strategyPath: string, interval: string):
 	const engine = activeEngines.get(key);
 	if (engine) {
 		const state = engine.getState();
-		stateCache.set(key, state); // keep cache warm
+		stateCache.set(key, state);
 		return state;
 	}
-	
+
 	const cached = stateCache.get(key);
 	if (cached) {
 		return cached;
@@ -1028,21 +930,19 @@ export function getExecutionEngineState(strategyPath: string, interval: string):
 export async function resetExecutionEngineState(strategyPath: string, interval: string): Promise<EngineState> {
 	const key = `${strategyPath}_${interval}`;
 	const wasRunning = activeEngines.has(key);
-	
+
 	if (wasRunning) {
 		stopExecutionEngine(strategyPath, interval);
 	}
 
 	const statePath = join(process.cwd(), 'results', `live_paper_state_${strategyPath}_${interval}.json`);
 	let coins = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT', 'AVAXUSDT', 'LINKUSDT', 'NEARUSDT', 'SUIUSDT'];
-	let mlVeto = false;
 
 	if (existsSync(statePath)) {
 		try {
 			const raw = readFileSync(statePath, 'utf-8');
 			const parsed = JSON.parse(raw) as EngineState;
 			if (parsed.coins && Array.isArray(parsed.coins)) coins = parsed.coins;
-			if (parsed.mlVeto !== undefined) mlVeto = parsed.mlVeto;
 		} catch {}
 	}
 
@@ -1057,17 +957,13 @@ export async function resetExecutionEngineState(strategyPath: string, interval: 
 		activePositions: [],
 		pendingSignals: [],
 		closedTrades: [],
-		equityCurveLive: [
-			{ time: new Date().toLocaleTimeString(), equity: 10000 }
-		],
+		equityCurveLive: [{ time: new Date().toLocaleTimeString(), equity: 10000 }],
 		heartbeat: new Date().toISOString(),
 		lastCandleTime: '',
 		coins,
-		mlVeto,
-		strategyPath
+		strategyPath,
 	} as any;
 
-	const { writeFileSync } = await import('node:fs');
 	writeFileSync(statePath, JSON.stringify(initialState, null, 2), 'utf-8');
 	stateCache.set(key, initialState);
 
@@ -1087,22 +983,17 @@ export interface StrategySummary {
 	activeIntervals: string[];
 }
 
-export function getAllExecutionEnginesSummary(): StrategySummary[] {
-	const registeredStrategies = [
-		{ name: 'consensus', label: 'Consensus Hybrid', interval: '1h' },
-		{ name: 'a2', label: 'A2 Bollinger (Volt)', interval: '15m' },
-		{ name: 'a2-v2', label: 'A2 Bollinger v2', interval: '15m' },
-		{ name: 'vwap-reversion', label: 'VWAP Reversion', interval: '15m' },
-		{ name: 'bollinger-rsi-div', label: 'Bollinger + RSI Div', interval: '15m' },
-		{ name: 'random', label: 'Random Walk Baseline', interval: '15m' },
-		{ name: 'ema-cross', label: 'EMA Crossover', interval: '4h' },
-		{ name: 'supertrend', label: 'Supertrend', interval: '4h' },
-		{ name: 'bollinger-bands', label: 'Bollinger Bands', interval: '15m' },
-		{ name: 'bollinger-bands-v2', label: 'Bollinger Bands v2', interval: '15m' },
-		{ name: 'bollinger-bands-timestamp', label: 'Bollinger Bands Timestamp', interval: '15m' }
-	];
+// Canlı test kadrosu — dashboard bu listeyi gösterir.
+export const LIVE_STRATEGY_ROSTER = [
+	{ name: 'a2-v2', label: 'A2 Bollinger v2 (MR + ADX)', interval: '15m' },
+	{ name: 'vwap-reversion', label: 'VWAP Reversion (MR)', interval: '15m' },
+	{ name: 'donchian-breakout', label: 'Donchian Breakout (Trend)', interval: '4h' },
+	{ name: 'ema-cross', label: 'EMA Crossover (Trend)', interval: '4h' },
+	{ name: 'random', label: 'Random Walk Baseline', interval: '15m' },
+] as const;
 
-	return registeredStrategies.map(strat => {
+export function getAllExecutionEnginesSummary(): StrategySummary[] {
+	return LIVE_STRATEGY_ROSTER.map((strat) => {
 		let isAnyRunning = false;
 		let totalPnLUsdt = 0;
 		let totalCash = 0;
@@ -1126,7 +1017,7 @@ export function getAllExecutionEnginesSummary(): StrategySummary[] {
 				isAnyRunning = true;
 				activeIntervals.push(strat.interval);
 				activePositionsCount += state.activePositions?.length || 0;
-				(state.activePositions || []).forEach(p => {
+				(state.activePositions || []).forEach((p) => {
 					activePositions.push(`${p.coin.replace('USDT', '')} (${strat.interval})`);
 				});
 				maxUptime = Math.max(maxUptime, state.uptime || 0);
@@ -1151,7 +1042,7 @@ export function getAllExecutionEnginesSummary(): StrategySummary[] {
 			pnlPercent: totalPnLPercent,
 			uptime: maxUptime,
 			lastCandleTime: latestCandleTime,
-			activeIntervals
+			activeIntervals,
 		};
 	});
 }

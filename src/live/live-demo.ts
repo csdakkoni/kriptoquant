@@ -39,8 +39,7 @@ async function runLiveDemo() {
 	const engine = await startExecutionEngine(
 		['BTCUSDT', 'ETHUSDT'],
 		'1m',
-		'fast-ema-cross',
-		false,
+		'ema-cross',
 		(state: any) => {
 			// Callback when engine state updates (saves to disk and broadcasts)
 			// Let's log updates to console

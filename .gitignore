@@ -11,8 +11,13 @@ data/processed/
 # Backtest results
 results/
 
-# Secrets
+# Secrets — API anahtarları ASLA commit edilmez
 config/secrets.json
+config/keys.json
+
+# Archive junk
+*.tar.gz
+kriptoquant_all_source_code.txt
 
 # OS
 .DS_Store

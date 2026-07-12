@@ -14,6 +14,7 @@ import {
 	getAllExecutionEnginesSummary,
 	resetExecutionEngineState,
 	EngineState,
+	LIVE_STRATEGY_ROSTER,
 } from '../live/live-engine.js';
 import { ScreenerEngine } from '../decision/screener.js';
 import { PortfolioEngine } from '../decision/portfolio-engine.js';
@@ -29,7 +30,6 @@ import { SlippageModel } from '../execution/slippage-model.js';
 import { ImplementationShortfallAnalyzer } from '../execution/implementation-shortfall.js';
 import { OrderBookSimulator } from '../execution/order-book-simulator.js';
 import { PositionStateMachine } from '../execution/position-state-machine.js';
-import { OnlineLearner } from '../research/online-learning.js';
 import { runBacktest } from '../research/backtester.js';
 import { calculateQuantScore } from '../research/experiments/runner.js';
 import { exportEquityCurve } from '../research/equity-export.js';
@@ -39,14 +39,7 @@ import { createSmaCrossStrategy } from '../research/strategies/sma-cross/index.j
 import { createEmaCrossStrategy } from '../research/strategies/ema-cross/index.js';
 import { createDonchianBreakoutStrategy } from '../research/strategies/donchian-breakout/index.js';
 import { createConsensusStrategy } from '../research/strategies/consensus/index.js';
-import { createA1Strategy } from '../research/strategies/a1/index.js';
 import { createA2Strategy } from '../research/strategies/a2/index.js';
-import { createTrendPullbackStrategy } from '../research/strategies/trend-pullback/index.js';
-import { createFreedomStrategy } from '../research/strategies/freedom/index.js';
-import { createFreedomBStrategy } from '../research/strategies/freedom_b/index.js';
-import { createGemini1Strategy } from '../research/strategies/gemini_1/index.js';
-import { createGemini2Strategy } from '../research/strategies/gemini_2/index.js';
-import { createSupertrendStrategy } from '../research/strategies/supertrend/index.js';
 import { createStrategyFromConfig } from '../research/strategies/factory/index.js';
 import { CSVProvider } from '../data/csv-provider.js';
 
@@ -74,7 +67,6 @@ export function startDashboardServer(port: number = 3000): any {
 	const shortfallAnalyzer = new ImplementationShortfallAnalyzer();
 	const orderBook = new OrderBookSimulator();
 	const positionStateMachine = new PositionStateMachine();
-	const onlineLearner = new OnlineLearner();
 
 	wss.on('connection', (ws) => {
 		connectedClients.add(ws);
@@ -251,8 +243,6 @@ export function startDashboardServer(port: number = 3000): any {
 							strategy = createDonchianBreakoutStrategy(donchianPeriod);
 						} else if (strategyName === 'consensus') {
 							strategy = createConsensusStrategy();
-						} else if (strategyName === 'a1') {
-							strategy = createA1Strategy();
 						} else if (strategyName === 'a2') {
 							strategy = createA2Strategy();
 						} else if (strategyName === 'supertrend') {
@@ -458,7 +448,7 @@ export function startDashboardServer(port: number = 3000): any {
 			// ── 1cc) GET /api/live-paper/details ➔ Detaylı Strateji Durumu ──────
 			if (url.startsWith('/api/live-paper/details') && req.method === 'GET') {
 				const queryParams = new URL(`http://localhost${url}`).searchParams;
-				const strategy = queryParams.get('strategy') || 'consensus';
+				const strategy = queryParams.get('strategy') || 'a2-v2';
 				const interval = queryParams.get('interval') || '15m';
 				const state = getExecutionEngineState(strategy, interval);
 				res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -469,21 +459,8 @@ export function startDashboardServer(port: number = 3000): any {
 			// ── 1ccc) GET /api/live-paper/all-states ➔ Tüm Stratejilerin Durumu ──
 			if (url === '/api/live-paper/all-states' && req.method === 'GET') {
 				const states: any[] = [];
-				const strategyIntervals: Record<string, string[]> = {
-					'bollinger-bands': ['15m'],
-					'bollinger-bands-v2': ['15m'],
-					'bollinger-bands-timestamp': ['15m'],
-					'a2': ['15m'],
-					'a2-v2': ['15m'],
-					'vwap-reversion': ['15m'],
-					'bollinger-rsi-div': ['15m'],
-					'random': ['15m'],
-					'consensus': ['1h'],
-					'supertrend': ['4h'],
-					'ema-cross': ['4h']
-				};
-				for (const [strat, intvs] of Object.entries(strategyIntervals)) {
-					for (const intv of intvs) {
+				for (const { name: strat, interval: intv } of LIVE_STRATEGY_ROSTER) {
+					{
 						const state = getExecutionEngineState(strat, intv);
 						if (state) {
 							states.push({
@@ -506,23 +483,10 @@ export function startDashboardServer(port: number = 3000): any {
 
 			// ── 1cccc) GET /api/live-paper/export-csv ➔ İşlem geçmişini CSV olarak indir ──
 			if (url === '/api/live-paper/export-csv' && req.method === 'GET') {
-				const strategyIntervals: Record<string, string[]> = {
-					'bollinger-bands': ['15m'],
-					'bollinger-bands-v2': ['15m'],
-					'bollinger-bands-timestamp': ['15m'],
-					'a2': ['15m'],
-					'a2-v2': ['15m'],
-					'vwap-reversion': ['15m'],
-					'bollinger-rsi-div': ['15m'],
-					'random': ['15m'],
-					'consensus': ['1h'],
-					'supertrend': ['4h'],
-					'ema-cross': ['4h']
-				};
 				const closedTrades: any[] = [];
 
-				for (const [strat, intvs] of Object.entries(strategyIntervals)) {
-					for (const intv of intvs) {
+				for (const { name: strat, interval: intv } of LIVE_STRATEGY_ROSTER) {
+					{
 						const state = getExecutionEngineState(strat, intv);
 						if (state && state.closedTrades && Array.isArray(state.closedTrades)) {
 							for (const trade of state.closedTrades) {
@@ -593,12 +557,11 @@ export function startDashboardServer(port: number = 3000): any {
 						const strategy = params.strategy || 'ema-cross';
 						const coins = params.coins || ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
 						const interval = params.interval || '15m';
-						const mlVeto = !!params.mlVeto;
 
-						log(`Deploying to Paper: Strategy = ${strategy}, Coins = ${coins.join(', ')}, Interval = ${interval}, ML Veto = ${mlVeto}`);
-						
+						log(`Deploying to Paper: Strategy = ${strategy}, Coins = ${coins.join(', ')}, Interval = ${interval}`);
+
 						// Start live in-process engine instantly (skip startup delay)
-						await startExecutionEngine(coins, interval, strategy, mlVeto, (state) => {
+						await startExecutionEngine(coins, interval, strategy, (state) => {
 							broadcastEngineState(state);
 							broadcastPortfolioState(portfolio.getPortfolioAllocations());
 						}, true);
@@ -936,31 +899,16 @@ export function startDashboardServer(port: number = 3000): any {
 
 		// Check for auto-resume on server startup for all strategies & intervals
 		try {
-			const strategyIntervals: Record<string, string[]> = {
-				'bollinger-bands': ['15m'],
-				'bollinger-bands-v2': ['15m'],
-				'bollinger-bands-timestamp': ['15m'],
-				'a2': ['15m'],
-				'a2-v2': ['15m'],
-				'vwap-reversion': ['15m'],
-				'bollinger-rsi-div': ['15m'],
-				'random': ['15m'],
-				'consensus': ['1h'],
-				'supertrend': ['4h'],
-				'ema-cross': ['4h']
-			};
-			for (const [strat, intvs] of Object.entries(strategyIntervals)) {
-				for (const interval of intvs) {
-					const state = getExecutionEngineState(strat, interval);
-					if (state && state.engineStatus === 'running' && state.coins && state.interval && state.strategyPath) {
-						log(`[Auto-Resume] Resuming previously running ExecutionEngine for ${strat} (${interval}) with ${state.coins.length} coins...`);
-						startExecutionEngine(state.coins, state.interval, state.strategyPath, !!state.mlVeto, (updatedState) => {
-							broadcastEngineState(updatedState);
-							broadcastPortfolioState(portfolio.getPortfolioAllocations());
-						}).catch(e => {
-							logError(`[Auto-Resume] Failed to resume ExecutionEngine for ${strat} (${interval}): ${e}`);
-						});
-					}
+			for (const { name: strat, interval } of LIVE_STRATEGY_ROSTER) {
+				const state = getExecutionEngineState(strat, interval);
+				if (state && state.engineStatus === 'running' && state.coins && state.interval && state.strategyPath) {
+					log(`[Auto-Resume] Resuming previously running ExecutionEngine for ${strat} (${interval}) with ${state.coins.length} coins...`);
+					startExecutionEngine(state.coins, state.interval, state.strategyPath, (updatedState) => {
+						broadcastEngineState(updatedState);
+						broadcastPortfolioState(portfolio.getPortfolioAllocations());
+					}).catch(e => {
+						logError(`[Auto-Resume] Failed to resume ExecutionEngine for ${strat} (${interval}): ${e}`);
+					});
 				}
 			}
 		} catch (e) {

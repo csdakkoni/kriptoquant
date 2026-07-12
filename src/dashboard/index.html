@@ -167,27 +167,12 @@
                     <div class="space-y-2">
                         <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Strateji</label>
                         <select id="autopilot-strategy" class="w-full bg-slate-950 border border-slate-800/80 rounded-xl px-4 py-3 text-slate-200 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 transition duration-300 text-sm font-semibold">
-                            <option value="consensus">Consensus Ensemble (Hibrit Mod - 1H)</option>
-                            <option value="a2">A2 Bollinger (Oynaklık Tabanlı - 15M)</option>
-                            <option value="a2-v2">A2 Bollinger v2 (ATR Trailing Stop - 15M)</option>
+                            <option value="a2-v2">A2 Bollinger v2 (Mean Reversion + ADX - 15M)</option>
                             <option value="vwap-reversion">VWAP Reversion (Z-Score & ADX - 15M)</option>
-                            <option value="bollinger-rsi-div">Bollinger + RSI Divergence (15M)</option>
+                            <option value="donchian-breakout">Donchian Breakout (Trend - 4H)</option>
+                            <option value="ema-cross">EMA Crossover (Trend - 4H)</option>
                             <option value="random">Rastgele İşlem (Random Walk Baseline - 15M)</option>
-                            <option value="ema-cross">EMA Crossover (4H)</option>
-                            <option value="supertrend">Supertrend (4H)</option>
-                            <option value="bollinger-bands">Bollinger Bands (15M)</option>
-                            <option value="bollinger-bands-v2">Bollinger Bands v2 (Middle SMA TP - 15M)</option>
-                            <option value="bollinger-bands-timestamp">Bollinger Bands Timestamp (Saat Filtreli - 15M)</option>
                         </select>
-                    </div>
-
-                    <!-- ML Veto Checkbox -->
-                    <div class="flex items-center space-x-3 bg-slate-950/40 p-3.5 rounded-xl border border-slate-900/60 mt-1">
-                        <input type="checkbox" id="autopilot-ml-veto" checked class="w-4 h-4 rounded border-slate-850 bg-slate-950 text-emerald-500 focus:ring-emerald-500/25 focus:ring-offset-slate-950">
-                        <div class="flex flex-col">
-                            <label for="autopilot-ml-veto" class="text-xs font-bold text-slate-300 cursor-pointer select-none">Makine Öğrenmesi Filtresi (ML Veto)</label>
-                            <span class="text-[9px] text-slate-500">Düşük olasılıklı alım sinyallerini ML modeliyle engelle</span>
-                        </div>
                     </div>
 
                     <!-- Autopilot Start/Stop Control Buttons -->
@@ -318,31 +303,19 @@
         let previousPositionsCount = -1;
 
         const strategyMetadata = {
-            'consensus': { label: 'Consensus Hybrid', icon: '🤖' },
-            'a2': { label: 'A2 Bollinger (Volt)', icon: '🛡️' },
-            'a2-v2': { label: 'A2 Bollinger v2', icon: '🛡️' },
-            'vwap-reversion': { label: 'VWAP Reversion', icon: '🔄' },
-            'bollinger-rsi-div': { label: 'Bollinger + RSI Div', icon: '🔮' },
-            'random': { label: 'Random Walk Baseline', icon: '🎲' },
-            'ema-cross': { label: 'EMA Crossover', icon: '📈' },
-            'supertrend': { label: 'Supertrend', icon: '🦅' },
-            'bollinger-bands': { label: 'Bollinger Bands', icon: '📊' },
-            'bollinger-bands-v2': { label: 'Bollinger Bands v2', icon: '📊' },
-            'bollinger-bands-timestamp': { label: 'Bollinger Bands Timestamp', icon: '⏰' }
+            'a2-v2': { label: 'A2 Bollinger v2 (MR + ADX)', icon: '🛡️' },
+            'vwap-reversion': { label: 'VWAP Reversion (MR)', icon: '🔄' },
+            'donchian-breakout': { label: 'Donchian Breakout (Trend)', icon: '📈' },
+            'ema-cross': { label: 'EMA Crossover (Trend)', icon: '📈' },
+            'random': { label: 'Random Walk Baseline', icon: '🎲' }
         };
 
         const strategyLockedIntervals = {
-            'consensus': '1h',
-            'a2': '15m',
             'a2-v2': '15m',
             'vwap-reversion': '15m',
-            'bollinger-rsi-div': '15m',
-            'random': '15m',
+            'donchian-breakout': '4h',
             'ema-cross': '4h',
-            'supertrend': '4h',
-            'bollinger-bands': '15m',
-            'bollinger-bands-v2': '15m',
-            'bollinger-bands-timestamp': '15m'
+            'random': '15m'
         };
         
         const watchCoins = [
@@ -487,7 +460,7 @@
         // Setup Direct Binance MiniTicker Websocket for Market Watch prices
         // Setup Direct Binance MiniTicker Websocket for Market Watch prices (Disabled)
 
-        let selectedStrategy = 'consensus';
+        let selectedStrategy = 'a2-v2';
         let selectedInterval = strategyLockedIntervals[selectedStrategy] || '15m';
         let latestSummaries = [];
 
@@ -715,14 +688,6 @@
         function renderAutopilotState(state) {
             if (!state) return;
 
-            // Synchronize ML Veto checkbox with backend state (if not currently focused/interacting)
-            if (state.mlVeto !== undefined) {
-                const mlVetoCheckbox = document.getElementById('autopilot-ml-veto');
-                if (mlVetoCheckbox) {
-                    mlVetoCheckbox.checked = state.mlVeto;
-                }
-            }
-            
             // Console logging based on engine status changes
             if (state.engineStatus !== previousStatus) {
                 if (state.engineStatus === 'running') {
@@ -877,13 +842,12 @@
             const checkedCoins = watchCoins;
             const strategy = document.getElementById('autopilot-strategy').value;
             const interval = strategyLockedIntervals[strategy] || '15m';
-            const mlVeto = document.getElementById('autopilot-ml-veto').checked;
-            
+
             try {
                 const res = await fetch('/api/live-paper/start', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ coins: checkedCoins, strategy, interval, mlVeto })
+                    body: JSON.stringify({ coins: checkedCoins, strategy, interval })
                 });
                 const data = await res.json();
                 if (data.success) {
@@ -898,7 +862,7 @@
         }
 
         async function stopAutopilot() {
-            const strategy = selectedStrategy || 'consensus';
+            const strategy = selectedStrategy || 'a2-v2';
             const interval = selectedInterval || '15m';
             try {
                 const res = await fetch('/api/live-paper/stop', {
@@ -917,7 +881,7 @@
         }
 
         async function resetAutopilotState() {
-            const strategy = selectedStrategy || 'consensus';
+            const strategy = selectedStrategy || 'a2-v2';
             const interval = selectedInterval || '15m';
             const confirmMsg = `🚨 DİKKAT!\n\n"${strategy.toUpperCase()}" stratejisinin (${interval}) kasasını sıfırlamak ve tüm işlem geçmişini silmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz!`;
             

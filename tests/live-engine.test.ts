@@ -127,4 +127,71 @@ describe('Live Execution Altyapısı', () => {
 
 		engine.stop();
 	});
+
+	it('SL tetiklendiğinde stop fiyatından değil, gözlenen tik fiyatından kapatmalı (gerçekçi dolum)', async () => {
+		const engine = new ExecutionEngine(['BTCUSDT'], '1m', 'ema-cross');
+		await engine.start(true);
+
+		engine.getState().activePositions.push({
+			coin: 'BTCUSDT',
+			direction: 'LONG',
+			entryTime: new Date().toISOString(),
+			entryPrice: 100,
+			currentPrice: 100,
+			quantity: 10,
+			positionSizeUsdt: 1000,
+			stopLoss: 95,
+			takeProfit: 0,
+			riskPercent: 5,
+			currentPnLPercent: 0,
+			currentPnLUsdt: 0,
+			mae: 0,
+			mfe: 0,
+			strategyName: 'ema-cross',
+		});
+
+		// Fiyat stop seviyesinin (95) çok altına, 90'a gap yapıyor
+		await (engine as any).handleKlineTick('BTCUSDT', {
+			t: 1720000200000,
+			T: 1720000259999,
+			s: 'BTCUSDT',
+			i: '1m',
+			o: '100',
+			c: '90',
+			h: '100',
+			l: '89',
+			v: '100',
+			x: false,
+		});
+
+		expect(engine.getState().activePositions.length).toBe(0);
+		const trade = engine.getState().closedTrades.at(-1)!;
+		expect(trade.exitReason).toBe('SL');
+		// Çıkış fiyatı gözlenen 90 fiyatına (slipaj dahil) yakın olmalı; 95'ten dolum YASAK
+		expect(trade.exitPrice).toBeLessThan(91);
+		expect(trade.exitPrice).toBeGreaterThan(89);
+
+		engine.stop();
+	});
+
+	it('Günlük zarar limiti aşıldığında yeni girişleri kilitlemeli (kill-switch)', async () => {
+		const engine = new ExecutionEngine(['BTCUSDT'], '1m', 'ema-cross');
+		await engine.start(true);
+
+		const state = engine.getState();
+		state.tradingDay = new Date().toISOString().slice(0, 10);
+		state.dayStartEquity = 10000;
+		state.currentEquity = 9600; // -%4, limit -%3
+
+		expect((engine as any).isDailyLossLimitHit()).toBe(true);
+		expect(state.entriesHalted).toBe(true);
+
+		// Zarar limitin altındaysa giriş serbest
+		state.entriesHalted = false;
+		(engine as any).haltLogged = false;
+		state.currentEquity = 9800; // -%2
+		expect((engine as any).isDailyLossLimitHit()).toBe(false);
+
+		engine.stop();
+	});
 });
