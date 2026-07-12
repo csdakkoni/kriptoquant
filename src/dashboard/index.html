@@ -172,6 +172,7 @@
                             <option value="donchian-breakout">Donchian Breakout (Trend - 4H)</option>
                             <option value="ema-cross">EMA Crossover (Trend - 4H)</option>
                             <option value="random">Rastgele İşlem (Random Walk Baseline - 15M)</option>
+                            <option value="momentum-burst">Momentum Burst (Deney Slotu - 15M) 🚀</option>
                         </select>
                     </div>
 
@@ -307,7 +308,8 @@
             'vwap-reversion': { label: 'VWAP Reversion (MR)', icon: '🔄' },
             'donchian-breakout': { label: 'Donchian Breakout (Trend)', icon: '📈' },
             'ema-cross': { label: 'EMA Crossover (Trend)', icon: '📈' },
-            'random': { label: 'Random Walk Baseline', icon: '🎲' }
+            'random': { label: 'Random Walk Baseline', icon: '🎲' },
+            'momentum-burst': { label: 'Momentum Burst (Deney)', icon: '🚀' }
         };
 
         const strategyLockedIntervals = {
@@ -315,7 +317,8 @@
             'vwap-reversion': '15m',
             'donchian-breakout': '4h',
             'ema-cross': '4h',
-            'random': '15m'
+            'random': '15m',
+            'momentum-burst': '15m'
         };
         
         const watchCoins = [

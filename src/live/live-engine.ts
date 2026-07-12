@@ -21,6 +21,7 @@ import { createDonchianBreakoutStrategy } from '../research/strategies/donchian-
 import { createA2V2Strategy } from '../research/strategies/a2-v2/index.js';
 import { createVwapReversionStrategy } from '../research/strategies/vwap-reversion/index.js';
 import { createRandomStrategy } from '../research/strategies/random/index.js';
+import { createMomentumBurstStrategy } from '../research/strategies/momentum-burst/index.js';
 import { atr, sma } from '../core/indicators/index.js';
 import type { Candle, Strategy } from '../core/types.js';
 import { BinanceTrBroker } from '../execution/binance-tr-broker.js';
@@ -559,7 +560,10 @@ export class ExecutionEngine {
 		}
 
 		// ── Risk Kapısı 3: BTC rejim filtresi ──
-		if (this.riskConfig.enableBtcRegimeFilter) {
+		// Muafiyet: momentum-burst ayı rallilerini avlamak için tasarlandı,
+		// rejim kapısından geçmez (deney slotu — fast_lab.ts bulgusu).
+		const regimeExempt = REGIME_EXEMPT_STRATEGIES.has(strategy.name);
+		if (this.riskConfig.enableBtcRegimeFilter && !regimeExempt) {
 			const regime = btcRegimeMonitor.getRegime();
 			this.state.btcRegime = regime;
 			if (regime === 'RISK_OFF') {
@@ -708,16 +712,17 @@ export class ExecutionEngine {
 			return createStrategyFromConfig(configJson, candles).strategy;
 		}
 
-		// Canlı test kadrosu (Temmuz 2026): 2 mean-reversion + 2 trend + 1 baseline
+		// Canlı test kadrosu (Temmuz 2026): 2 mean-reversion + 2 trend + 1 baseline + 1 deney
 		if (strategyPath === 'a2-v2') return createA2V2Strategy();
 		if (strategyPath === 'vwap-reversion') return createVwapReversionStrategy();
 		if (strategyPath === 'donchian-breakout') return createDonchianBreakoutStrategy();
 		if (strategyPath === 'ema-cross') return createEmaCrossStrategy();
 		if (strategyPath === 'random') return createRandomStrategy();
+		if (strategyPath === 'momentum-burst') return createMomentumBurstStrategy();
 
 		throw new Error(
 			`Strategy resolver failed: "${strategyPath}". ` +
-			`Canlı kadro: a2-v2, vwap-reversion, donchian-breakout, ema-cross, random (veya bir factory .json yolu).`,
+			`Canlı kadro: a2-v2, vwap-reversion, donchian-breakout, ema-cross, random, momentum-burst (veya bir factory .json yolu).`,
 		);
 	}
 
@@ -990,7 +995,11 @@ export const LIVE_STRATEGY_ROSTER = [
 	{ name: 'donchian-breakout', label: 'Donchian Breakout (Trend)', interval: '4h' },
 	{ name: 'ema-cross', label: 'EMA Crossover (Trend)', interval: '4h' },
 	{ name: 'random', label: 'Random Walk Baseline', interval: '15m' },
+	{ name: 'momentum-burst', label: 'Momentum Burst (Deney)', interval: '15m' },
 ] as const;
+
+// BTC rejim filtresinden muaf stratejiler (ayı rallisi avcıları / deney slotu)
+const REGIME_EXEMPT_STRATEGIES = new Set<string>(['momentum-burst']);
 
 export function getAllExecutionEnginesSummary(): StrategySummary[] {
 	return LIVE_STRATEGY_ROSTER.map((strat) => {
