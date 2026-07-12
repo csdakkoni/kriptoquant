@@ -38,6 +38,7 @@ import { createRandomStrategy } from './research/strategies/random/index.js';
 import { createBollingerBandsV2Strategy } from './research/strategies/bollinger-bands-v2/index.js';
 import { createA2V2Strategy } from './research/strategies/a2-v2/index.js';
 import { createBollingerBandsTimestampStrategy } from './research/strategies/bollinger-bands-timestamp/index.js';
+import { createSupertrendStrategy } from './research/strategies/supertrend/index.js';
 import { DEFAULT_SWEEP } from './research/experiments/runner.js';
 import { runSweep, printLeaderboard, printMetadata, printStrategyComparison, exportSweepCSV, exportMetadataJSON } from './research/experiments/sweep.js';
 import { runWalkForward, printWalkForwardReport, exportWalkForwardJSON, exportWalkForwardCSV } from './research/walkforward/walkforward.js';
@@ -95,6 +96,7 @@ function resolveStrategy(name: string): Strategy | null {
 		'bollinger-bands-v2': createBollingerBandsV2Strategy(),
 		'a2-v2': createA2V2Strategy(),
 		'bollinger-bands-timestamp': createBollingerBandsTimestampStrategy(),
+		'supertrend': createSupertrendStrategy(),
 	};
 	return strategies[name] ?? null;
 }

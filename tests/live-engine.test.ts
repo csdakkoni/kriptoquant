@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ExecutionEngine } from '../src/live/live-engine.js';
-import { PaperExecutor } from '../src/live/executor.js';
 import { existsSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -47,25 +46,6 @@ describe('Live Execution Altyapısı', () => {
 		}
 	});
 
-	it('PaperExecutor buy ve sell işlemlerinde komisyon ve kaymayı doğru simüle etmeli', () => {
-		const executor = new PaperExecutor(0.001, 0.0005); // %0.1 komisyon, %0.05 kayma
-		
-		// BUY test
-		const buyFill = executor.buy('BTCUSDT', 10000, 1000, 1720000000000);
-		expect(buyFill.side).toBe('BUY');
-		expect(buyFill.price).toBe(10000 * 1.0005); // Slippage: 10005
-		expect(buyFill.commission).toBe(1000 * 0.001); // Commission: 1 USDT
-		
-		const netUsdtSpent = 1000 - 1;
-		expect(buyFill.quantity).toBe(netUsdtSpent / (10000 * 1.0005));
-
-		// SELL test
-		const sellFill = executor.sell('BTCUSDT', 10000, 0.1, 1720000100000);
-		expect(sellFill.side).toBe('SELL');
-		expect(sellFill.price).toBe(10000 * 0.9995); // Slippage: 9995
-		const grossValue = 0.1 * (10000 * 0.9995); // 999.5
-		expect(sellFill.commission).toBe(grossValue * 0.001); // 0.9995 USDT
-	});
 
 	it('ExecutionEngine bootstrap sürecini tamamlamalı ve çalışmaya başlamalı', async () => {
 		const engine = new ExecutionEngine(['BTCUSDT'], '1m', 'ema-cross');

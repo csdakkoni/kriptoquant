@@ -128,9 +128,21 @@ export class ParibuBroker {
 				commission: commissionInUsdt
 			};
 		} catch (e) {
-			logError(`[Paribu Broker] Live Order execution failed: ${e}. Falling back to paper fill.`);
-			// Fail-safe: execute as paper trade rather than crashing the loop
-			return this.buy(timestamp, price, usdtAmount);
+			logError(`[Paribu Broker] Live Order execution failed: ${e}. Falling back to simulated paper fill.`);
+			// Fail-safe: return simulated paper fill instead of recursing (which would infinite-loop)
+			const commissionRate = 0.0015;
+			const slippageRate = 0.0005;
+			const executedPriceInUsdt = price * (1 + slippageRate);
+			const commissionInUsdt = usdtAmount * commissionRate;
+			const netUsdtAmount = usdtAmount - commissionInUsdt;
+			const quantity = netUsdtAmount / executedPriceInUsdt;
+			return {
+				timestamp,
+				side: 'BUY' as const,
+				price: executedPriceInUsdt,
+				quantity,
+				commission: commissionInUsdt
+			};
 		}
 	}
 
@@ -204,8 +216,20 @@ export class ParibuBroker {
 				commission: commissionInUsdt
 			};
 		} catch (e) {
-			logError(`[Paribu Broker] Live Sell Order execution failed: ${e}. Falling back to paper fill.`);
-			return this.sell(timestamp, price, quantity);
+			logError(`[Paribu Broker] Live Sell Order execution failed: ${e}. Falling back to simulated paper fill.`);
+			// Fail-safe: return simulated paper fill instead of recursing (which would infinite-loop)
+			const commissionRate = 0.0015;
+			const slippageRate = 0.0005;
+			const executedPriceInUsdt = price * (1 - slippageRate);
+			const grossUsdt = quantity * executedPriceInUsdt;
+			const commissionInUsdt = grossUsdt * commissionRate;
+			return {
+				timestamp,
+				side: 'SELL' as const,
+				price: executedPriceInUsdt,
+				quantity,
+				commission: commissionInUsdt
+			};
 		}
 	}
 }

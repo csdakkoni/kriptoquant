@@ -105,6 +105,10 @@ export class ExecutionEngine {
 	private statePath: string;
 	private strategyPath: string;
 	private coins: string[];
+
+	public getCoins(): string[] {
+		return this.coins;
+	}
 	private interval: string;
 	private mlVeto: boolean = false;
 	private metaLabeler = new MetaLabeler();
@@ -382,6 +386,7 @@ export class ExecutionEngine {
 								const sellQty = p.quantity / 2;
 								log(`[🤖 BB-V2] [${coin}] Kademeli Kar Al (Middle Band 20 SMA) Tetiklendi. Fiyat: $${price.toFixed(4)} | Orta Band: $${middleBand.toFixed(4)} | Satilan: ${sellQty.toFixed(4)}`);
 
+								p.partialExitTriggered = true;
 								this.broker.sell(coin, timestamp, price, sellQty).then(fill => {
 									const partialPnLPercent = ((price - entryPrice) / entryPrice) * 100;
 									const partialPnLUsdt = (price - entryPrice) * sellQty - fill.commission;
@@ -416,7 +421,6 @@ export class ExecutionEngine {
 									// Move SL to entry price
 									p.stopLoss = entryPrice;
 									p.profitStage = 1;
-									p.partialExitTriggered = true;
 
 									log(`[🤖 BB-V2] [${coin}] Kademeli Kar Al Sonrasi Stop Loss Basabas Cekildi: $${p.stopLoss.toFixed(4)}`);
 									this.saveAndBroadcast();
@@ -466,6 +470,7 @@ export class ExecutionEngine {
 							log(`[🤖 ${p.strategyName.toUpperCase()}] [${coin}] Kademeli Kar Al (+2 ATR) Tetiklendi. Fiyat: $${price.toFixed(4)} | Satilan: ${sellQty.toFixed(4)}`);
 							
 							// Run asynchronously so we don't block the iteration
+							p.partialExitTriggered = true;
 							this.broker.sell(coin, timestamp, price, sellQty).then(fill => {
 								// Record the partial closed trade to history
 								const partialPnLPercent = ((price - entryPrice) / entryPrice) * 100;
@@ -502,7 +507,6 @@ export class ExecutionEngine {
 								// Move SL to Entry + commission + buffer (roundtrip ~0.25% buffer)
 								p.stopLoss = entryPrice * 1.0025;
 								p.profitStage = 1;
-								p.partialExitTriggered = true;
 
 								log(`[🤖 ${p.strategyName.toUpperCase()}] [${coin}] Kademeli Kar Al Sonrasi Stop Loss Basabas (+0.25% Buffer) Cekildi: $${p.stopLoss.toFixed(4)}`);
 								this.saveAndBroadcast();
@@ -929,9 +933,16 @@ class SharedStreamManager {
 
 			const set = this.listeners.get(interval);
 			if (set && set.size > 0) {
-				log(`[SharedStreamManager] Reconnecting interval ${interval} in 5s...`);
+				// Collect fresh coins from all registered engines instead of using stale closure
+				const freshCoins = new Set<string>();
+				for (const engine of set) {
+					for (const c of engine.getCoins()) {
+						freshCoins.add(c);
+					}
+				}
+				log(`[SharedStreamManager] Reconnecting interval ${interval} in 5s with ${freshCoins.size} coins...`);
 				setTimeout(() => {
-					this.ensureConnection(interval, coins);
+					this.ensureConnection(interval, [...freshCoins]);
 				}, 5000);
 			}
 		});

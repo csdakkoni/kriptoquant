@@ -192,6 +192,8 @@ export interface RiskConfig {
 	readonly oiPercentileThreshold?: number; // OI veto eşiği
 	readonly enableCombinedVeto?: boolean; // Combined Funding + OI veto filtresi aktif mi?
 	readonly enableCombinedSizing?: boolean; // Combined Funding + OI pozisyon boyutlandırma aktif mi?
+	readonly stopLossPercent?: number; // Yüzde bazlı stop-loss (ör. 2.0 = %2)
+	readonly takeProfitPercent?: number; // Yüzde bazlı kar al (ör. 6.0 = %6)
 }
 
 /**

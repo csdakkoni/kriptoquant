@@ -33,14 +33,14 @@ export function createFreedomStrategy(): Strategy {
 			let htfMultiplier = 16; // 15m -> 4h (16x)
 			let mtfMultiplier = 4;  // 15m -> 1h (4x)
 
-			if (sampleDiffMs >= 3600000) {
-				// Base is 1H
-				htfMultiplier = 4; // 1h -> 4h
-				mtfMultiplier = 1; // 1h -> 1h
-			} else if (sampleDiffMs >= 14400000) {
+			if (sampleDiffMs >= 14400000) {
 				// Base is 4H
 				htfMultiplier = 1;
 				mtfMultiplier = 1;
+			} else if (sampleDiffMs >= 3600000) {
+				// Base is 1H
+				htfMultiplier = 4; // 1h -> 4h
+				mtfMultiplier = 1; // 1h -> 1h
 			}
 
 			// 4H emulated indicators (Macro Trend)

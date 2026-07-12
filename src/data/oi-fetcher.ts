@@ -156,8 +156,8 @@ export function mergeCandlesWithOI(
 		if (oiValues.length >= 2) {
 			const windowStart = Math.max(0, oiValues.length - rollingWindow);
 			const windowValues = oiValues.slice(windowStart).sort((a, b) => a - b);
-			const rank = windowValues.indexOf(oiVal);
-			oiPercentile = rank / (windowValues.length - 1);
+			const rank = windowValues.filter(v => v <= oiVal).length;
+			oiPercentile = (rank - 1) / (windowValues.length - 1);
 		}
 
 		result.push({

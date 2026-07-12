@@ -4,7 +4,7 @@
 // Fiyat kanallarını standart sapma bazında hesaplar.
 // ============================================================================
 
-import { mean, standardDeviation } from '../utils.js';
+import { mean } from '../utils.js';
 
 export interface BollingerResult {
 	readonly middle: number[];
@@ -17,6 +17,8 @@ export interface BollingerResult {
  * Middle Band = SMA(Close, period)
  * Upper Band = Middle Band + (multiplier * Standard Deviation(Close, period))
  * Lower Band = Middle Band - (multiplier * Standard Deviation(Close, period))
+ * 
+ * Population standard deviation (÷N) kullanılır.
  * 
  * @param closes - Kapanış fiyatları dizisi
  * @param period - Rolling pencere periyodu (varsayılan: 20)
@@ -36,7 +38,9 @@ export function bollingerBands(closes: number[], period: number = 20, multiplier
 
 		const window = closes.slice(i - period + 1, i + 1);
 		const avg = mean(window);
-		const std = standardDeviation(window);
+		// Population standard deviation (÷N) — Bollinger Bands standardı
+		const squaredDiffs = window.map((v) => (v - avg) ** 2);
+		const std = Math.sqrt(squaredDiffs.reduce((sum, v) => sum + v, 0) / window.length);
 
 		middle[i] = avg;
 		upper[i] = avg + multiplier * std;

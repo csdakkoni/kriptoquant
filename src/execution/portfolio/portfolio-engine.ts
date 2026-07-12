@@ -64,7 +64,7 @@ export function runPortfolioExecution(
 
 			// Çıkış emri & fill simülasyonu
 			const exitPrice = stop.price;
-			const fillPrice = exitPrice - slippagePercent;
+			const fillPrice = exitPrice * (1 - slippagePercent / 100);
 			const exitOrder: Order = {
 				timestamp,
 				type: 'MARKET',
@@ -133,7 +133,7 @@ export function runPortfolioExecution(
 
 				if (allocSize > 0 && cash >= allocSize) {
 					// Giriş emri & fill simülasyonu
-					const fillPrice = candle.close + slippagePercent;
+					const fillPrice = candle.close * (1 + slippagePercent / 100);
 					const buyOrder: Order = {
 						timestamp,
 						type: 'MARKET',
@@ -166,7 +166,7 @@ export function runPortfolioExecution(
 				if (positionBook.hasOpen(coin)) {
 					const quantity = positionBook.getQuantity(coin);
 					if (quantity > 0) {
-						const fillPrice = candle.close - slippagePercent;
+						const fillPrice = candle.close * (1 - slippagePercent / 100);
 						const sellOrder: Order = {
 							timestamp,
 							type: 'MARKET',
@@ -212,7 +212,7 @@ export function runPortfolioExecution(
 				const quantity = positionBook.getQuantity(coin);
 				const candle = candleMap.get(coin);
 				const exitPrice = candle ? candle.close : lastStep.timestamp;
-				const fillPrice = exitPrice - slippagePercent;
+				const fillPrice = exitPrice * (1 - slippagePercent / 100);
 
 				const forceOrder: Order = {
 					timestamp,

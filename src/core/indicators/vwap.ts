@@ -61,7 +61,7 @@ export function vwapZScore(candles: Candle[], period: number = 20): number[] {
 		// Close ile VWAP farklarının rolling varyans/standart sapmasını hesapla
 		let sumSquaredDiffs = 0;
 		for (let j = i - period + 1; j <= i; j++) {
-			const diff = candles[j].close - vwapValues[i];
+			const diff = candles[j].close - vwapValues[j];
 			sumSquaredDiffs += diff ** 2;
 		}
 

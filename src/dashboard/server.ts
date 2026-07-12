@@ -53,6 +53,8 @@ import { CSVProvider } from '../data/csv-provider.js';
 /**
  * REST API, WebSockets Event Bus ve HTML Visualizer sunucusunu başlatır.
  */
+const MAX_BODY_SIZE = 1024 * 1024; // 1MB limit for POST request bodies
+
 export function startDashboardServer(port: number = 3000): any {
 	// Create WebSocket Server
 	const wss = new WebSocketServer({ noServer: true });
@@ -202,7 +204,15 @@ export function startDashboardServer(port: number = 3000): any {
 			// ── 1c) POST /api/backtest/run ➔ Run a new backtest from UI ─────────
 			if (url === '/api/backtest/run' && req.method === 'POST') {
 				let body = '';
-				req.on('data', chunk => { body += chunk; });
+				req.on('data', chunk => {
+					body += chunk;
+					if (body.length > MAX_BODY_SIZE) {
+						req.destroy();
+						res.writeHead(413, { 'Content-Type': 'text/plain' });
+						res.end('Request body too large');
+						return;
+					}
+				});
 				req.on('end', async () => {
 					try {
 						const params = JSON.parse(body || '{}');
@@ -568,7 +578,15 @@ export function startDashboardServer(port: number = 3000): any {
 			// ── 1d) POST /api/live-paper/start ➔ Motoru Canlı Başlat ──────────
 			if (url === '/api/live-paper/start' && req.method === 'POST') {
 				let body = '';
-				req.on('data', chunk => { body += chunk; });
+				req.on('data', chunk => {
+					body += chunk;
+					if (body.length > MAX_BODY_SIZE) {
+						req.destroy();
+						res.writeHead(413, { 'Content-Type': 'text/plain' });
+						res.end('Request body too large');
+						return;
+					}
+				});
 				req.on('end', async () => {
 					try {
 						const params = JSON.parse(body || '{}');
@@ -599,7 +617,15 @@ export function startDashboardServer(port: number = 3000): any {
 			// ── 1e) POST /api/live-paper/stop ➔ Motoru Durdur ─────────────────
 			if (url === '/api/live-paper/stop' && req.method === 'POST') {
 				let body = '';
-				req.on('data', chunk => { body += chunk; });
+				req.on('data', chunk => {
+					body += chunk;
+					if (body.length > MAX_BODY_SIZE) {
+						req.destroy();
+						res.writeHead(413, { 'Content-Type': 'text/plain' });
+						res.end('Request body too large');
+						return;
+					}
+				});
 				req.on('end', () => {
 					try {
 						const params = JSON.parse(body || '{}');
@@ -627,7 +653,15 @@ export function startDashboardServer(port: number = 3000): any {
 			// ── 1ee) POST /api/live-paper/reset ➔ Strateji Kasasını Sıfırla ──────────
 			if (url === '/api/live-paper/reset' && req.method === 'POST') {
 				let body = '';
-				req.on('data', chunk => { body += chunk; });
+				req.on('data', chunk => {
+					body += chunk;
+					if (body.length > MAX_BODY_SIZE) {
+						req.destroy();
+						res.writeHead(413, { 'Content-Type': 'text/plain' });
+						res.end('Request body too large');
+						return;
+					}
+				});
 				req.on('end', async () => {
 					try {
 						const params = JSON.parse(body || '{}');
@@ -700,7 +734,15 @@ export function startDashboardServer(port: number = 3000): any {
 			// ── 1k) POST /api/research/models/status ➔ Model Status Güncelleme ────
 			if (url === '/api/research/models/status' && req.method === 'POST') {
 				let body = '';
-				req.on('data', chunk => { body += chunk; });
+				req.on('data', chunk => {
+					body += chunk;
+					if (body.length > MAX_BODY_SIZE) {
+						req.destroy();
+						res.writeHead(413, { 'Content-Type': 'text/plain' });
+						res.end('Request body too large');
+						return;
+					}
+				});
 				req.on('end', () => {
 					try {
 						const { modelId, status } = JSON.parse(body);

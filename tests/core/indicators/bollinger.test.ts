@@ -14,11 +14,11 @@ describe('bollingerBands', () => {
 
 		// index 2 (values: 10, 12, 14):
 		// mean = (10+12+14)/3 = 12
-		// variance = ((10-12)^2 + (12-12)^2 + (14-12)^2) / (3-1) = (4 + 0 + 4) / 2 = 4
-		// stdDev = sqrt(4) = 2
-		// middle = 12, upper = 12 + 2*2 = 16, lower = 12 - 2*2 = 8
+		// population variance = ((10-12)^2 + (12-12)^2 + (14-12)^2) / 3 = (4 + 0 + 4) / 3 = 2.6667
+		// population stdDev = sqrt(2.6667) ≈ 1.6330
+		// middle = 12, upper = 12 + 2*1.6330 ≈ 15.266, lower = 12 - 2*1.6330 ≈ 8.734
 		expect(result.middle[2]).toBeCloseTo(12, 4);
-		expect(result.upper[2]).toBeCloseTo(16, 4);
-		expect(result.lower[2]).toBeCloseTo(8, 4);
+		expect(result.upper[2]).toBeCloseTo(15.266, 2);
+		expect(result.lower[2]).toBeCloseTo(8.734, 2);
 	});
 });

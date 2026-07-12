@@ -1,14 +1,14 @@
-0 verbose cli /usr/local/bin/node /usr/local/bin/npm
+0 verbose cli /usr/local/bin/node /usr/local/lib/node_modules/npm/bin/npm-cli.js
 1 info using npm@11.6.2
 2 info using node@v24.12.0
 3 silly config load:file:/usr/local/lib/node_modules/npm/npmrc
 4 silly config load:file:/Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant/.npmrc
 5 silly config load:file:/Users/erdemaslan/.npmrc
 6 silly config load:file:/usr/local/etc/npmrc
-7 verbose title npm run backtest --strategy bollinger-rsi-div --coin BTC --interval 15m
-8 verbose argv "run" "backtest" "--" "--strategy" "bollinger-rsi-div" "--coin" "BTC" "--interval" "15m"
-9 verbose logfile logs-max:10 dir:/Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant/.npm-cache/_logs/2026-07-11T15_45_26_332Z-
-10 verbose logfile /Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant/.npm-cache/_logs/2026-07-11T15_45_26_332Z-debug-0.log
+7 verbose title npm exec vitest run
+8 verbose argv "exec" "--" "vitest" "run"
+9 verbose logfile logs-max:10 dir:/Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant/.npm-cache/_logs/2026-07-12T17_53_20_007Z-
+10 verbose logfile /Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant/.npm-cache/_logs/2026-07-12T17_53_20_007Z-debug-0.log
 11 silly logfile start cleaning logs, removing 1 files
 12 silly logfile done cleaning log files
 13 verbose cwd /Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant

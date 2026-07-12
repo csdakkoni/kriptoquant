@@ -68,7 +68,7 @@ export class ConsoleTradeLogger implements TradeLogger {
 	}
 
 	onTrade(trade: Trade): void {
-		console.log(`[Trade Closed] PnL: ${trade.pnl}% (${trade.pnlPercent}%) | Reason: ${trade.exitReason}`);
+		console.log(`[Trade Closed] PnL: $${trade.pnl} (${trade.pnlPercent}%) | Reason: ${trade.exitReason}`);
 	}
 
 	flush(): void {}

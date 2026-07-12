@@ -35,7 +35,7 @@ export function createGemini2Strategy(): Strategy {
 			let stopLossPrice = 0;
 			let takeProfitPrice = 0;
 
-			for (let i = 30; i < candles.length; i++) {
+			for (let i = 50; i < candles.length; i++) {
 				const current = candles[i];
 				const vwapVal = vwapValues[i];
 				const hist = macdResult.histogram[i];
