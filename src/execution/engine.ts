@@ -130,12 +130,17 @@ export function runExecution(
 				if (!analyzed || !analyzed.accepted) {
 					portfolio.incrementRejected(); 
 				} else {
-					// Alternatif Veri Filtresi: Funding Rate Percentile Veto
+					// Alternatif Veri Filtresi: Funding Rate & Open Interest Percentile Veto
 					const fundingPercentile = prevCandle.fundingPercentile;
+					const oiPercentile = prevCandle.oiPercentile;
 					const threshold = riskConfig.fundingPercentileThreshold ?? 0.95;
+					
 					const fundingVeto = riskConfig.enableFundingFilter && fundingPercentile !== undefined && fundingPercentile >= threshold;
+					const combinedVeto = riskConfig.enableCombinedVeto &&
+						fundingPercentile !== undefined && fundingPercentile >= 0.90 &&
+						oiPercentile !== undefined && oiPercentile >= 0.90;
 
-					if (fundingVeto) {
+					if (fundingVeto || combinedVeto) {
 						portfolio.incrementRejected();
 					} else {
 						const riskDecision = evaluateRisk(
@@ -144,6 +149,15 @@ export function runExecution(
 
 						if (riskDecision.approved) {
 							let finalPositionSize = riskDecision.positionSize;
+							
+							// Combined Sizing (H002a)
+							if (riskConfig.enableCombinedSizing && fundingPercentile !== undefined && oiPercentile !== undefined) {
+								if (fundingPercentile >= 0.90 && oiPercentile >= 0.90) {
+									finalPositionSize *= 0.30; // Scale down by 70% (size is 30%)
+								}
+							}
+							
+							// Funding Sizing (H001a)
 							if (riskConfig.enableFundingSizing && fundingPercentile !== undefined) {
 								if (fundingPercentile >= 0.98) {
 									finalPositionSize *= 0.35;

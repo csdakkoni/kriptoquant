@@ -18,6 +18,8 @@ export interface Candle {
 	readonly closeTime: number; // Unix timestamp (ms)
 	readonly fundingRate?: number;
 	readonly fundingPercentile?: number;
+	readonly openInterest?: number;
+	readonly oiPercentile?: number;
 }
 
 /**
@@ -186,6 +188,10 @@ export interface RiskConfig {
 	readonly enableFundingFilter?: boolean; // Funding filtresi aktif mi?
 	readonly fundingPercentileThreshold?: number; // Veto eşiği (ör. 0.95 = en yüksek %5)
 	readonly enableFundingSizing?: boolean; // Funding bazlı pozisyon boyutlandırma aktif mi?
+	readonly enableOiFilter?: boolean; // OI filtresi aktif mi?
+	readonly oiPercentileThreshold?: number; // OI veto eşiği
+	readonly enableCombinedVeto?: boolean; // Combined Funding + OI veto filtresi aktif mi?
+	readonly enableCombinedSizing?: boolean; // Combined Funding + OI pozisyon boyutlandırma aktif mi?
 }
 
 /**
