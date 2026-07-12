@@ -185,6 +185,7 @@ export interface RiskConfig {
 	readonly stopLossAtrMultiplier: number; // Stop-loss = Entry Price - (ATR × multiplier)
 	readonly enableFundingFilter?: boolean; // Funding filtresi aktif mi?
 	readonly fundingPercentileThreshold?: number; // Veto eşiği (ör. 0.95 = en yüksek %5)
+	readonly enableFundingSizing?: boolean; // Funding bazlı pozisyon boyutlandırma aktif mi?
 }
 
 /**

@@ -143,7 +143,18 @@ export function runExecution(
 						);
 
 						if (riskDecision.approved) {
-							const fill = broker.buy(candle.openTime, candle.open, riskDecision.positionSize);
+							let finalPositionSize = riskDecision.positionSize;
+							if (riskConfig.enableFundingSizing && fundingPercentile !== undefined) {
+								if (fundingPercentile >= 0.98) {
+									finalPositionSize *= 0.35;
+								} else if (fundingPercentile >= 0.95) {
+									finalPositionSize *= 0.60;
+								} else if (fundingPercentile >= 0.90) {
+									finalPositionSize *= 0.85;
+								}
+							}
+
+							const fill = broker.buy(candle.openTime, candle.open, finalPositionSize);
 							if (logger) logger.onFill(fill);
 
 							const lastClosedAtr = (i - 1 >= 0) && atrValues.length > (i - 1) && !Number.isNaN(atrValues[i - 1]) ? atrValues[i - 1] : 0;
