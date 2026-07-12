@@ -21,18 +21,18 @@ interface LocalMinimum {
 }
 
 /**
- * Fiyat ve RSI serilerindeki yerel dip noktalarını (valleys) tespit eder.
+ * Mumların LOW serisindeki ve RSI serisindeki yerel dip noktalarını (valleys) tespit eder.
  */
-function findLocalMinima(prices: number[], rsiValues: number[], startIdx: number, endIdx: number): LocalMinimum[] {
+function findLocalMinima(lows: number[], rsiValues: number[], startIdx: number, endIdx: number): LocalMinimum[] {
 	const minima: LocalMinimum[] = [];
 	for (let j = startIdx; j <= endIdx; j++) {
-		if (j <= 0 || j >= prices.length - 1) continue;
+		if (j <= 0 || j >= lows.length - 1) continue;
 
-		// Bir noktanın yerel dip olması için sağındaki ve solundaki değerlerden küçük olması gerekir.
-		if (prices[j] < prices[j - 1] && prices[j] < prices[j + 1]) {
+		// Fiyat dip noktası mumların LOW değerine göre belirlenir
+		if (lows[j] < lows[j - 1] && lows[j] < lows[j + 1]) {
 			minima.push({
 				priceIdx: j,
-				price: prices[j],
+				price: lows[j],
 				rsi: rsiValues[j]
 			});
 		}
@@ -57,6 +57,7 @@ export function createBollingerRsiDivStrategy(
 			if (candles.length < warmup) return [];
 
 			const closes = candles.map(c => c.close);
+			const lows = candles.map(c => c.low);
 			const bb = bollingerBands(closes, bbPeriod, bbMultiplier);
 			const rsiValues = rsi(closes, rsiPeriod);
 			const atrValues = atr(candles, atrPeriod);
@@ -73,36 +74,48 @@ export function createBollingerRsiDivStrategy(
 					continue;
 				}
 
-				// Son 40 mum içindeki yerel dipleri ara
+				// Son 40 mum içindeki yerel dipleri ara (Low serisine göre)
 				const startIdx = Math.max(1, i - 40);
 				const endIdx = i - 1; // Cari mum henüz kapanmadığı için dahil edilmez
-				const minima = findLocalMinima(closes, rsiValues, startIdx, endIdx);
+				const minima = findLocalMinima(lows, rsiValues, startIdx, endIdx);
 
 				let hasBullishDivergence = false;
+				let isPriceNearLowerBandAtDip = false;
 				let debugDivergenceInfo = '';
 
 				if (minima.length >= 2) {
-					// En son iki belirgin dip noktasını al
-					const idx1 = minima[minima.length - 1]; // En son dip
-					const idx2 = minima[minima.length - 2]; // Ondan önceki dip
-
-					// İki dip noktası arasında en az 5 mum mesafe olması istenir (gürültüyü engellemek için)
-					const distance = idx1.priceIdx - idx2.priceIdx;
+					// En son dip her zaman tetikleyici dip (idx1) olmalıdır
+					const idx1 = minima[minima.length - 1]; 
 					const isRecentMinima = (i - idx1.priceIdx) <= 3; // En son dip çok eski olmamalı (maks. 3 mum önce)
 
-					if (distance >= 5 && isRecentMinima) {
-						const priceMakesLowerLow = idx1.price < idx2.price;
-						const rsiMakesHigherLow = idx1.rsi > idx2.rsi;
-						const isOversoldContext = idx2.rsi < 40 && idx1.rsi < 45;
+					if (isRecentMinima) {
+						// Ondan önceki dip noktalarını geriye doğru tarayarak geçerli bir eşleşme arayalım (idx2)
+						for (let k = minima.length - 2; k >= 0; k--) {
+							const idx2 = minima[k];
+							const distance = idx1.priceIdx - idx2.priceIdx;
 
-						if (priceMakesLowerLow && rsiMakesHigherLow && isOversoldContext) {
-							hasBullishDivergence = true;
-							debugDivergenceInfo = `Price: ${idx1.price.toFixed(2)} < ${idx2.price.toFixed(2)} | RSI: ${idx1.rsi.toFixed(1)} > ${idx2.rsi.toFixed(1)}`;
+							// İki dip noktası arasında en az 5, en fazla 35 mum mesafe olması istenir
+							if (distance >= 5 && distance <= 35) {
+								const priceMakesLowerLow = idx1.price < idx2.price;
+								const rsiMakesHigherLow = idx1.rsi > idx2.rsi;
+								const isOversoldContext = idx2.rsi < 50 && idx1.rsi < 50;
+
+								if (priceMakesLowerLow && rsiMakesHigherLow && isOversoldContext) {
+									hasBullishDivergence = true;
+									debugDivergenceInfo = `Price: ${idx1.price.toFixed(2)} < ${idx2.price.toFixed(2)} | RSI: ${idx1.rsi.toFixed(1)} > ${idx2.rsi.toFixed(1)} (Dist: ${distance})`;
+									
+									const lowerBandAtDip = bb.lower[idx1.priceIdx];
+									if (idx1.price <= lowerBandAtDip * 1.015) { // 1.5% limit near lower band
+										isPriceNearLowerBandAtDip = true;
+									}
+									break; // Geçerli ilk uyumsuzluğu bulduğumuzda aramayı sonlandıralım
+								}
+							}
 						}
 					}
 				}
 
-				const isBuySetup = current.close <= lowerBand && hasBullishDivergence;
+				const isBuySetup = isPriceNearLowerBandAtDip && hasBullishDivergence;
 				const isSellSetup = current.close >= upperBand;
 
 				if (isBuySetup && lastSignalSide !== 'BUY') {
