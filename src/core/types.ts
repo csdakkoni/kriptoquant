@@ -16,6 +16,8 @@ export interface Candle {
 	readonly close: number;
 	readonly volume: number;
 	readonly closeTime: number; // Unix timestamp (ms)
+	readonly fundingRate?: number;
+	readonly fundingPercentile?: number;
 }
 
 /**
@@ -181,6 +183,8 @@ export interface RiskConfig {
 	readonly maxDailyLossPercent: number; // Günlük maks. kayıp yüzdesi
 	readonly maxOrderValue: number; // Tek emrin maks. değeri (USDT)
 	readonly stopLossAtrMultiplier: number; // Stop-loss = Entry Price - (ATR × multiplier)
+	readonly enableFundingFilter?: boolean; // Funding filtresi aktif mi?
+	readonly fundingPercentileThreshold?: number; // Veto eşiği (ör. 0.95 = en yüksek %5)
 }
 
 /**

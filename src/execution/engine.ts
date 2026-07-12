@@ -130,21 +130,30 @@ export function runExecution(
 				if (!analyzed || !analyzed.accepted) {
 					portfolio.incrementRejected(); 
 				} else {
-					const riskDecision = evaluateRisk(
-						pendingSignal, portfolio.getCapital(), portfolio.getDailyPnl(), riskConfig
-					);
+					// Alternatif Veri Filtresi: Funding Rate Percentile Veto
+					const fundingPercentile = prevCandle.fundingPercentile;
+					const threshold = riskConfig.fundingPercentileThreshold ?? 0.95;
+					const fundingVeto = riskConfig.enableFundingFilter && fundingPercentile !== undefined && fundingPercentile >= threshold;
 
-					if (riskDecision.approved) {
-						const fill = broker.buy(candle.openTime, candle.open, riskDecision.positionSize);
-						if (logger) logger.onFill(fill);
+					if (fundingVeto) {
+						portfolio.incrementRejected();
+					} else {
+						const riskDecision = evaluateRisk(
+							pendingSignal, portfolio.getCapital(), portfolio.getDailyPnl(), riskConfig
+						);
 
-						const lastClosedAtr = (i - 1 >= 0) && atrValues.length > (i - 1) && !Number.isNaN(atrValues[i - 1]) ? atrValues[i - 1] : 0;
-						const stopLoss = (lastClosedAtr > 0 && riskConfig.stopLossAtrMultiplier > 0) ? fill.price - lastClosedAtr * riskConfig.stopLossAtrMultiplier : 0;
+						if (riskDecision.approved) {
+							const fill = broker.buy(candle.openTime, candle.open, riskDecision.positionSize);
+							if (logger) logger.onFill(fill);
 
-						// DÜZELTME: Pozisyon açarken gerçek miktar 'fill.quantity' kullanılır ve bütçe/komisyon hesaba katılır
-						portfolio.positions.open(fill, fill.quantity, lastClosedAtr, stopLoss);
-						const totalCostUsdt = (fill.quantity * fill.price) + fill.commission;
-						portfolio.deductCapital(totalCostUsdt);
+							const lastClosedAtr = (i - 1 >= 0) && atrValues.length > (i - 1) && !Number.isNaN(atrValues[i - 1]) ? atrValues[i - 1] : 0;
+							const stopLoss = (lastClosedAtr > 0 && riskConfig.stopLossAtrMultiplier > 0) ? fill.price - lastClosedAtr * riskConfig.stopLossAtrMultiplier : 0;
+
+							// DÜZELTME: Pozisyon açarken gerçek miktar 'fill.quantity' kullanılır ve bütçe/komisyon hesaba katılır
+							portfolio.positions.open(fill, fill.quantity, lastClosedAtr, stopLoss);
+							const totalCostUsdt = (fill.quantity * fill.price) + fill.commission;
+							portfolio.deductCapital(totalCostUsdt);
+						}
 					}
 				}
 			}

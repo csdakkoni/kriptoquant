@@ -5,15 +5,15 @@
 4 silly config load:file:/Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant/.npmrc
 5 silly config load:file:/Users/erdemaslan/.npmrc
 6 silly config load:file:/usr/local/etc/npmrc
-7 verbose title npm exec tsc --noEmit
-8 verbose argv "exec" "--" "tsc" "--noEmit"
-9 verbose logfile logs-max:10 dir:/Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant/.npm-cache/_logs/2026-07-08T17_32_52_927Z-
-10 verbose logfile /Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant/.npm-cache/_logs/2026-07-08T17_32_52_927Z-debug-0.log
+7 verbose title npm exec tsx src/research/experiments/H001_funding_filter.ts
+8 verbose argv "exec" "--" "tsx" "src/research/experiments/H001_funding_filter.ts"
+9 verbose logfile logs-max:10 dir:/Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant/.npm-cache/_logs/2026-07-12T04_05_47_082Z-
+10 verbose logfile /Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant/.npm-cache/_logs/2026-07-12T04_05_47_082Z-debug-0.log
 11 silly logfile start cleaning logs, removing 1 files
 12 silly logfile done cleaning log files
 13 verbose cwd /Users/erdemaslan/.gemini/antigravity/scratch/kriptoquant
 14 verbose os Darwin 25.5.0
 15 verbose node v24.12.0
 16 verbose npm  v11.6.2
-17 verbose exit 2
-18 verbose code 2
+17 verbose exit 0
+18 info ok
