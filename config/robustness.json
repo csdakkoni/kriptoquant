@@ -1,8 +1,0 @@
-{
-  "weights": {
-    "passRate": 40,
-    "assetSuccess": 30,
-    "sharpe": 30,
-    "drawdownPenalty": 0.5
-  }
-}

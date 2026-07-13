@@ -1,9 +1,0 @@
-{
-	"riskPerTradePercent": 0.5,
-	"maxPositionPercent": 15,
-	"maxDailyLossPercent": 3,
-	"maxOrderValue": 2000,
-	"maxConcurrentPositions": 4,
-	"stopLossAtrMultiplier": 2,
-	"enableBtcRegimeFilter": true
-}
