@@ -1,11 +1,12 @@
 // ============================================================================
 // KRIPTOQUANT — CLI Entry Point
 // ============================================================================
-// Platformun tek giriş noktası.
+// KriptoQuant is an autonomous falsification engine for financial markets.
 // Kullanım:
-//   npx tsx src/cli.ts fetch --coin BTCUSDT --interval 1d
-//   npx tsx src/cli.ts live --coins BTCUSDT,ETHUSDT --interval 15m --strategy a2-v2
-//   npx tsx src/cli.ts dashboard --port 3000
+//   npx tsx src/cli.ts organism       ← Start the Assumption Killer
+//   npx tsx src/cli.ts live           ← Start live trading engine
+//   npx tsx src/cli.ts dashboard      ← Start web dashboard
+//   npx tsx src/cli.ts fetch          ← Fetch data from Binance
 // ============================================================================
 
 import { parseArgs } from 'node:util';
@@ -14,6 +15,7 @@ import { log, logError } from './core/utils.js';
 import { fetchAndStore } from './data/fetcher.js';
 import { startDashboardServer } from './dashboard/server.js';
 import { startExecutionEngine } from './live/live-engine.js';
+import { startAssumptionKiller } from './organism/assumption-killer.js';
 
 // Konfigürasyonları yükle
 import riskConfig from '../config/risk.json' with { type: 'json' };
@@ -32,25 +34,21 @@ async function commandFetch(coin: string, interval: string): Promise<void> {
 function printUsage(): void {
 	console.log(`
 ╔══════════════════════════════════════════════════════════════╗
-║                    KriptoQuant CLI                          ║
+║  KriptoQuant — Autonomous Falsification Engine              ║
+║  "Science progresses by trying to prove itself wrong."      ║
 ╚══════════════════════════════════════════════════════════════╝
 
 Komutlar:
-  fetch         Binance'den veri çek
-  live          Canlı trading motoru başlat
-  dashboard     Web dashboard başlat
+  organism      🔬 Assumption Killer — Varsayım yanlışlama motoru
+  live          ⚡ Canlı trading motoru
+  dashboard     📊 Web dashboard
+  fetch         📥 Binance'den veri çek
 
 Örnekler:
-  npx tsx src/cli.ts fetch --coin BTCUSDT --interval 15m
+  npx tsx src/cli.ts organism
   npx tsx src/cli.ts live --coins BTCUSDT,ETHUSDT --interval 15m --strategy a2-v2
   npx tsx src/cli.ts dashboard --port 3000
-
-Parametreler:
-  --coin        Tek coin (fetch için)
-  --coins       Virgülle ayrılmış coin listesi (live için)
-  --interval    Zaman dilimi (1m, 5m, 15m, 1h, 4h, 1d)
-  --strategy    Strateji adı (a2-v2, ema-cross, donchian-breakout, vwap-reversion, random, momentum-burst, swing-dip, donchian-short)
-  --port        Dashboard portu (varsayılan: 3000)
+  npx tsx src/cli.ts fetch --coin BTCUSDT --interval 15m
 `);
 }
 
@@ -78,6 +76,10 @@ async function main(): Promise<void> {
 
 	try {
 		switch (command) {
+			case 'organism':
+				await startAssumptionKiller();
+				break;
+
 			case 'fetch':
 				await commandFetch(values.coin ?? 'BTCUSDT', values.interval ?? '15m');
 				break;
