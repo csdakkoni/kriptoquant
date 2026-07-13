@@ -92,6 +92,18 @@ export function startDashboardServer(port: number = 3000): any {
 			} catch { return json(res, [], 500); }
 		}
 
+		// Experiments
+		if (url === '/api/organism/experiments') {
+			try {
+				const expFile = join(ORGANISM_DIR, 'experiments.json');
+				if (existsSync(expFile)) {
+					const data = JSON.parse(readFileSync(expFile, 'utf-8'));
+					return json(res, data);
+				}
+				return json(res, []);
+			} catch { return json(res, [], 500); }
+		}
+
 		// ─── HTML Dashboard ──────────────────────────────────────────
 
 		if (url === '/' || url === '/index.html') {

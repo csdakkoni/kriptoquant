@@ -322,10 +322,75 @@ body::before {
   line-height: 1.5;
 }
 
+/* ─── Experiments ─── */
+.exp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+.exp-card {
+  padding: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  transition: all 0.2s;
+}
+.exp-card:hover { transform: translateY(-2px); border-color: var(--accent-purple-dim); }
+.exp-card.positive { border-left: 3px solid var(--accent-green); }
+.exp-card.negative { border-left: 3px solid var(--accent-red); }
+.exp-card.neutral { border-left: 3px solid var(--text-dim); }
+.exp-name {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.exp-hypothesis {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-style: italic;
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+.exp-stats-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.exp-stat {
+  text-align: center;
+  padding: 6px;
+  background: var(--bg-primary);
+  border-radius: 6px;
+}
+.exp-stat-val {
+  font-size: 16px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+}
+.exp-stat-label {
+  font-size: 9px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.exp-pnl {
+  font-size: 18px;
+  font-weight: 800;
+  font-family: 'JetBrains Mono', monospace;
+  text-align: center;
+  padding: 8px;
+  border-radius: 6px;
+  margin-top: 8px;
+}
+.exp-pnl.positive { background: var(--accent-green-dim); color: var(--accent-green); }
+.exp-pnl.negative { background: var(--accent-red-dim); color: var(--accent-red); }
+.exp-pnl.neutral { background: rgba(136,136,160,0.1); color: var(--text-secondary); }
+
 /* ─── Stats ─── */
 .stats-row {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 16px;
   margin-bottom: 20px;
 }
@@ -471,6 +536,10 @@ body::before {
       <div class="stat-value" id="statKnowledge">0</div>
       <div class="stat-label">Bilgi Düğümü</div>
     </div>
+    <div class="stat-card">
+      <div class="stat-value" id="statTrades">0</div>
+      <div class="stat-label">Paper Trade</div>
+    </div>
   </div>
 
   <!-- Active Assumption Hero -->
@@ -541,6 +610,20 @@ body::before {
         <div class="empty">
           <div class="empty-icon">🔭</div>
           <div class="empty-text">Gözlemler bekleniyor... İlk 15m mum kapanışında veriler akmaya başlayacak.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Experiments -->
+    <div class="card grid-full">
+      <div class="card-header">
+        <span class="card-title">Paper Trading Deneyleri</span>
+        <span class="card-icon">🧪</span>
+      </div>
+      <div class="exp-grid" id="experimentGrid">
+        <div class="empty">
+          <div class="empty-icon">⏳</div>
+          <div class="empty-text">Deneyler yükleniyor...</div>
         </div>
       </div>
     </div>
@@ -647,6 +730,45 @@ function renderObservations(observations) {
   }).join('');
 }
 
+// ─── Render Experiments ──────────────────────────────────────────────────────
+
+function renderExperiments(experiments) {
+  if (!experiments || experiments.length === 0) return;
+
+  const totalTrades = experiments.reduce((s, e) => s + e.stats.totalTrades, 0);
+  document.getElementById('statTrades').textContent = totalTrades;
+
+  const grid = document.getElementById('experimentGrid');
+  grid.innerHTML = experiments.map(exp => {
+    const pnl = exp.stats.totalPnlPercent || 0;
+    const pnlClass = pnl > 0 ? 'positive' : pnl < 0 ? 'negative' : 'neutral';
+    const openPositions = (exp.positions || []).filter(p => !p.exitPrice).length;
+    const statusEmoji = exp.status === 'running' ? '▶️' : exp.status === 'completed' ? '✅' : '❌';
+
+    return `
+      <div class="exp-card ${pnlClass}">
+        <div class="exp-name">${statusEmoji} ${exp.name}</div>
+        <div class="exp-hypothesis">${exp.hypothesis}</div>
+        <div class="exp-stats-row">
+          <div class="exp-stat">
+            <div class="exp-stat-val" style="color: var(--text-primary)">${exp.stats.totalTrades}</div>
+            <div class="exp-stat-label">İşlem</div>
+          </div>
+          <div class="exp-stat">
+            <div class="exp-stat-val" style="color: var(--accent-green)">${exp.stats.winRate?.toFixed(0) || 0}%</div>
+            <div class="exp-stat-label">Kazanma</div>
+          </div>
+          <div class="exp-stat">
+            <div class="exp-stat-val" style="color: var(--accent-cyan)">${openPositions}</div>
+            <div class="exp-stat-label">Açık</div>
+          </div>
+        </div>
+        <div class="exp-pnl ${pnlClass}">${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%</div>
+      </div>
+    `;
+  }).join('');
+}
+
 // ─── Render Knowledge Graph ──────────────────────────────────────────────────
 
 function renderKnowledge(data) {
@@ -700,15 +822,17 @@ function renderJournal(entries) {
 // ─── Polling Loop ────────────────────────────────────────────────────────────
 
 async function refresh() {
-  const [assumptions, observations, knowledge, journal] = await Promise.all([
+  const [assumptions, observations, knowledge, journal, experiments] = await Promise.all([
     fetchJSON('/api/organism/assumptions'),
     fetchJSON('/api/organism/observations'),
     fetchJSON('/api/organism/knowledge'),
     fetchJSON('/api/organism/journal'),
+    fetchJSON('/api/organism/experiments'),
   ]);
 
   renderAssumptions(assumptions);
   renderObservations(observations);
+  renderExperiments(experiments);
   renderKnowledge(knowledge);
   renderJournal(journal);
 }

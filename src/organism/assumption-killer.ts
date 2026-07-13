@@ -17,6 +17,7 @@ import { DivergenceObserver, SilenceObserver, HerdObserver, SurpriseObserver } f
 import { createAllTests } from './assumptions.js';
 import { KnowledgeGraph } from './knowledge-graph.js';
 import { ResearchJournal } from './journal.js';
+import { ExperimentRunner } from './experiment-runner.js';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -37,6 +38,7 @@ export class AssumptionKiller {
 	private assumptions: Assumption[] = [];
 	private graph: KnowledgeGraph;
 	private journal: ResearchJournal;
+	private experimentRunner: ExperimentRunner;
 	private tickCount = 0;
 	private observationCount = 0;
 	private running = false;
@@ -44,6 +46,7 @@ export class AssumptionKiller {
 	constructor() {
 		this.graph = new KnowledgeGraph();
 		this.journal = new ResearchJournal(this.graph);
+		this.experimentRunner = new ExperimentRunner(this.graph);
 
 		// Initialize observers
 		this.observers = [
@@ -82,8 +85,10 @@ export class AssumptionKiller {
 		// Schedule daily journal
 		this.scheduleDailyJournal();
 
+		const expCount = this.experimentRunner.getExperiments().filter(e => e.status === 'running').length;
 		log(`[Organism] Watching ${COINS.length} coins on ${INTERVAL}. ${this.observers.length} observers active.`);
-		log(`[Organism] ${this.assumptions.length} assumptions loaded. Let the falsification begin.`);
+		log(`[Organism] ${this.assumptions.length} assumptions loaded. ${expCount} experiments running.`);
+		log(`[Organism] Let the falsification begin.`);
 	}
 
 	stop(): void {
@@ -200,12 +205,19 @@ export class AssumptionKiller {
 			}
 		}
 
-		// Step 3: Periodically save state
+		// Step 3: Run experiments (paper trading)
+		try {
+			this.experimentRunner.processTick(this.candleBuffers, observations);
+		} catch (err) {
+			logError(`[Organism] Experiment runner error: ${err}`);
+		}
+
+		// Step 4: Periodically save state
 		if (this.tickCount % 10 === 0) {
 			this.saveState();
 		}
 
-		// Step 4: Print periodic status
+		// Step 5: Print periodic status
 		if (this.tickCount % 50 === 0) {
 			this.printStatus();
 		}
@@ -369,9 +381,14 @@ export class AssumptionKiller {
 		const testing = this.assumptions.filter(a => a.status === 'testing').length;
 		const queued = this.assumptions.filter(a => a.status === 'queued').length;
 
+		const experiments = this.experimentRunner.getExperiments();
+		const runningExps = experiments.filter(e => e.status === 'running');
+		const completedExps = experiments.filter(e => e.status === 'completed');
+		const totalTrades = experiments.reduce((s, e) => s + e.stats.totalTrades, 0);
+
 		log('');
 		log('┌─ Organism Status ─────────────────────────────────────────┐');
-		log(`│ Ticks: ${this.tickCount}  Observations: ${this.observationCount}  Knowledge Nodes: ${graphStats.nodes}`);
+		log(`│ Ticks: ${this.tickCount}  Observations: ${this.observationCount}  Knowledge: ${graphStats.nodes}`);
 		log(`│ Assumptions: 🟢${alive} alive  💀${killed} killed  🔬${testing} testing  ⏳${queued} queued`);
 
 		const active = this.assumptions.find(a => a.status === 'testing');
@@ -380,17 +397,21 @@ export class AssumptionKiller {
 			const ag = active.evidence.filter(e => !e.supports).length;
 			log(`│ Active test: "${active.statement}" [+${f} / -${ag}]`);
 		}
+
+		log(`│ Experiments: ▶${runningExps.length} running  ✅${completedExps.length} done  📊${totalTrades} trades`);
+		for (const exp of runningExps) {
+			const open = exp.positions.filter(p => !p.exitPrice).length;
+			log(`│   ${exp.name}: ${exp.stats.totalTrades} trades, ${open} open, PnL: ${exp.stats.totalPnlPercent >= 0 ? '+' : ''}${exp.stats.totalPnlPercent.toFixed(2)}%`);
+		}
 		log('└───────────────────────────────────────────────────────────┘');
 		log('');
 	}
 
 	/** Get current state for API/dashboard */
-	getState(): {
-		assumptions: Assumption[];
-		stats: { ticks: number; observations: number; graphNodes: number };
-	} {
+	getState() {
 		return {
 			assumptions: this.assumptions,
+			experiments: this.experimentRunner.getExperiments(),
 			stats: {
 				ticks: this.tickCount,
 				observations: this.observationCount,
