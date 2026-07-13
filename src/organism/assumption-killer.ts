@@ -183,25 +183,25 @@ export class AssumptionKiller {
 			log(`[${obs.type.toUpperCase()}] ${obs.description}`);
 		}
 
-		// Step 2: Feed observations + data to active assumption tests
-		const activeAssumption = this.assumptions.find(a => a.status === 'testing');
-		if (activeAssumption) {
-			const test = this.tests.get(activeAssumption.id);
-			if (test) {
-				try {
-					const evidence = test.evaluate(observations, this.candleBuffers);
-					for (const e of evidence) {
-						(activeAssumption.evidence as Evidence[]).push(e);
-
-						const emoji = e.supports ? '🟢' : '🔴';
-						log(`[EVIDENCE] ${emoji} ${e.description}`);
-					}
-
-					// Check if we have enough evidence to make a verdict
-					this.checkVerdict(activeAssumption);
-				} catch (err) {
-					logError(`[Organism] Test ${activeAssumption.id} error: ${err}`);
+		// Step 2: Feed observations + data to ALL assumption tests (parallel)
+		for (const assumption of this.assumptions) {
+			if (assumption.status !== 'testing') continue;
+			const test = this.tests.get(assumption.id);
+			if (!test) continue;
+			try {
+				const evidence = test.evaluate(observations, this.candleBuffers);
+				for (const e of evidence) {
+					(assumption.evidence as Evidence[]).push(e);
 				}
+				// Log only periodically to avoid spam
+				if (this.tickCount % 10 === 0 && evidence.length > 0) {
+					const f = assumption.evidence.filter(e => e.supports).length;
+					const ag = assumption.evidence.filter(e => !e.supports).length;
+					log(`[EVIDENCE] ${assumption.id}: +${f}/-${ag} (${evidence.length} new)`);
+				}
+				this.checkVerdict(assumption);
+			} catch (err) {
+				logError(`[Organism] Test ${assumption.id} error: ${err}`);
 			}
 		}
 
@@ -250,8 +250,8 @@ export class AssumptionKiller {
 				evidence.slice(-5).map(e => e.observationId).filter((id): id is string => !!id),
 			);
 
-			// Activate next assumption
-			this.activateNext();
+			// Evolution: death creates new life
+			this.evolve(assumption);
 		}
 
 		// If >70% supports after sufficient evidence, assumption survives this round
@@ -265,19 +265,61 @@ export class AssumptionKiller {
 			log(`   ${assumption.verdict}`);
 			log('════════════════════════════════════════════════════════════');
 			log('');
-
-			this.activateNext();
 		}
 	}
 
-	private activateNext(): void {
-		const next = this.assumptions.find(a => a.status === 'queued');
-		if (next) {
-			(next as any).status = 'testing';
-			(next as any).testedWeek = new Date().toISOString().slice(0, 10);
-			log(`[Organism] Now testing: "${next.statement}"`);
-		} else {
-			log('[Organism] All assumptions have been tested. Add new ones to continue research.');
+	private evolve(killedAssumption: Assumption): void {
+		// When an assumption dies, new questions are born
+		const newAssumptions: Assumption[] = [];
+		const base = {
+			status: 'testing' as const,
+			evidence: [],
+			createdAt: Date.now(),
+			testedWeek: new Date().toISOString().slice(0, 10),
+			confidenceToKill: 0.7,
+		};
+
+		switch (killedAssumption.id) {
+			case 'trend-exists':
+				newAssumptions.push({
+					...base, id: `mean-reversion-${Date.now()}`,
+					statement: 'Fiyat ortalamaya döner (mean reversion)',
+					nullHypothesis: 'Fiyat rastgele yürür',
+					testMethod: 'Aşırı sapma sonrası dönüş oranı',
+				});
+				break;
+			case 'coins-are-independent':
+				newAssumptions.push({
+					...base, id: `btc-leads-alts-${Date.now()}`,
+					statement: 'BTC altcoinlerden önce hareket eder',
+					nullHypothesis: 'Lider-takipçi ilişkisi yoktur',
+					testMethod: 'Çapraz korelasyon lag analizi',
+				});
+				break;
+			case 'entry-signal-matters':
+				newAssumptions.push({
+					...base, id: `position-sizing-matters-${Date.now()}`,
+					statement: 'Pozisyon boyutu girişten daha önemlidir',
+					nullHypothesis: 'Sabit vs değişken pozisyon boyutu aynı sonucu verir',
+					testMethod: 'Volatiliteye göre boyut vs sabit boyut karşılaştırması',
+				});
+				break;
+		}
+
+		// Always generate a random mutation
+		const mutations = [
+			{ id: `weekend-different-${Date.now()}`, statement: 'Hafta sonu piyasa tamamen farklı davranır', nullHypothesis: 'Hafta içi ve sonu arasında fark yoktur', testMethod: 'Hafta sonu vs hafta içi return dağılımı karşılaştırması' },
+			{ id: `night-moves-${Date.now()}`, statement: 'Gece saatlerinde fiyat daha öngörülebilirdir', nullHypothesis: 'Saat dilimi getiriyi etkilemez', testMethod: 'UTC 0-8 vs 8-16 vs 16-24 return karşılaştırması' },
+			{ id: `volatility-clusters-${Date.now()}`, statement: 'Volatilite kümelenir (yüksek vol daha yüksek vol getirir)', nullHypothesis: 'Volatilite rastgeledir', testMethod: 'Volatilite otokorelasyonu' },
+			{ id: `big-move-reversal-${Date.now()}`, statement: 'Büyük hareketler ertesi gün tersine döner', nullHypothesis: 'Büyük hareket sonrası yön rastgeledir', testMethod: '>2σ hareket sonrası forward return analizi' },
+			{ id: `volume-predicts-${Date.now()}`, statement: 'Hacim fiyattan önce hareket eder', nullHypothesis: 'Hacim ve fiyat eş zamanlıdır', testMethod: 'Hacim-fiyat çapraz korelasyon lag testi' },
+		];
+		const mutation = mutations[Math.floor(Math.random() * mutations.length)];
+		newAssumptions.push({ ...base, ...mutation });
+
+		for (const a of newAssumptions) {
+			this.assumptions.push(a);
+			log(`[EVOLUTION] 🧬 New assumption born: "${a.statement}"`);
 		}
 
 		this.saveState();
@@ -293,7 +335,7 @@ export class AssumptionKiller {
 			} catch {}
 		}
 
-		// Default assumptions
+		// Default assumptions — ALL start as 'testing' (parallel)
 		this.assumptions = [
 			{
 				id: 'trend-exists',
@@ -311,9 +353,10 @@ export class AssumptionKiller {
 				statement: 'Coinler birbirinden bağımsız hareket eder',
 				nullHypothesis: 'Coinler arasında korelasyon yoktur',
 				testMethod: 'Canlı Pearson korelasyon matrisi',
-				status: 'queued',
+				status: 'testing',
 				evidence: [],
 				createdAt: Date.now(),
+				testedWeek: new Date().toISOString().slice(0, 10),
 				confidenceToKill: 0.7,
 			},
 			{
@@ -321,9 +364,10 @@ export class AssumptionKiller {
 				statement: 'Giriş sinyali işlem sonucunu etkiler',
 				nullHypothesis: 'Rastgele giriş, stratejik girişle aynı sonucu verir',
 				testMethod: 'Rastgele giriş forward return analizi',
-				status: 'queued',
+				status: 'testing',
 				evidence: [],
 				createdAt: Date.now(),
+				testedWeek: new Date().toISOString().slice(0, 10),
 				confidenceToKill: 0.7,
 			},
 			{
@@ -331,9 +375,10 @@ export class AssumptionKiller {
 				statement: '15 dakikalık zaman dilimi anlamlıdır',
 				nullHypothesis: 'Davranış tüm zaman dilimlerinde aynıdır',
 				testMethod: 'Farklı ölçeklerde otokorelasyon karşılaştırması',
-				status: 'queued',
+				status: 'testing',
 				evidence: [],
 				createdAt: Date.now(),
+				testedWeek: new Date().toISOString().slice(0, 10),
 				confidenceToKill: 0.7,
 			},
 			{
@@ -341,9 +386,66 @@ export class AssumptionKiller {
 				statement: 'Çıkış zamanlaması girişten daha önemlidir',
 				nullHypothesis: 'Farklı çıkış kuralları aynı sonucu verir',
 				testMethod: 'Sabit giriş ile farklı çıkış kurallarının karşılaştırması',
-				status: 'queued',
+				status: 'testing',
 				evidence: [],
 				createdAt: Date.now(),
+				testedWeek: new Date().toISOString().slice(0, 10),
+				confidenceToKill: 0.7,
+			},
+			// ─── Wild assumptions ─────────────────────────────────────
+			{
+				id: 'monday-effect',
+				statement: 'Pazartesi günleri farklı davranır',
+				nullHypothesis: 'Haftanın günü getiriyi etkilemez',
+				testMethod: 'Günlere göre return dağılımı karşılaştırması',
+				status: 'testing',
+				evidence: [],
+				createdAt: Date.now(),
+				testedWeek: new Date().toISOString().slice(0, 10),
+				confidenceToKill: 0.7,
+			},
+			{
+				id: 'silence-before-storm',
+				statement: 'Sessizlik büyük hareketin habercisidir',
+				nullHypothesis: 'Düşük volatilite sonrası yön rastgeledir',
+				testMethod: 'Volatilite sıkışması sonrası hareket büyüklüğü analizi',
+				status: 'testing',
+				evidence: [],
+				createdAt: Date.now(),
+				testedWeek: new Date().toISOString().slice(0, 10),
+				confidenceToKill: 0.7,
+			},
+			{
+				id: 'round-numbers-matter',
+				statement: 'Yuvarlak sayılar destek/direnç olarak çalışır',
+				nullHypothesis: 'Yuvarlak sayıların etkisi yoktur',
+				testMethod: 'Fiyatın yuvarlak sayılara yakınlığı ve tepki analizi',
+				status: 'testing',
+				evidence: [],
+				createdAt: Date.now(),
+				testedWeek: new Date().toISOString().slice(0, 10),
+				confidenceToKill: 0.7,
+			},
+			{
+				id: 'volume-spike-predictive',
+				statement: 'Hacim patlaması gelecek fiyatı tahmin eder',
+				nullHypothesis: 'Hacim ve gelecek fiyat ilişkisizdir',
+				testMethod: 'Hacim spike sonrası forward return analizi',
+				status: 'testing',
+				evidence: [],
+				createdAt: Date.now(),
+				testedWeek: new Date().toISOString().slice(0, 10),
+				confidenceToKill: 0.7,
+			},
+			{
+				id: 'whipsaw-cycle',
+				statement: 'Piyasa düzenli olarak tuzak hareketi yapar',
+				nullHypothesis: 'Ani tersine dönüşler rastgeledir',
+				testMethod: 'Breakout sonrası geri dönüş oranı analizi',
+				status: 'testing',
+				evidence: [],
+				createdAt: Date.now(),
+				testedWeek: new Date().toISOString().slice(0, 10),
 				confidenceToKill: 0.7,
 			},
 		];
