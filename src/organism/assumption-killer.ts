@@ -18,6 +18,7 @@ import { createAllTests } from './assumptions.js';
 import { KnowledgeGraph } from './knowledge-graph.js';
 import { ResearchJournal } from './journal.js';
 import { ExperimentRunner } from './experiment-runner.js';
+import { Evolver } from './evolver.js';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -39,6 +40,7 @@ export class AssumptionKiller {
 	private graph: KnowledgeGraph;
 	private journal: ResearchJournal;
 	private experimentRunner: ExperimentRunner;
+	private evolver: Evolver;
 	private tickCount = 0;
 	private observationCount = 0;
 	private running = false;
@@ -47,6 +49,7 @@ export class AssumptionKiller {
 		this.graph = new KnowledgeGraph();
 		this.journal = new ResearchJournal(this.graph);
 		this.experimentRunner = new ExperimentRunner(this.graph);
+		this.evolver = new Evolver(this.graph, this.experimentRunner);
 
 		// Initialize observers
 		this.observers = [
@@ -212,12 +215,21 @@ export class AssumptionKiller {
 			logError(`[Organism] Experiment runner error: ${err}`);
 		}
 
-		// Step 4: Periodically save state
+		// Step 4: Evolve — synthesize new experiments from knowledge
+		if (this.tickCount % 20 === 0) {
+			try {
+				this.evolver.evolve(this.assumptions);
+			} catch (err) {
+				logError(`[Organism] Evolver error: ${err}`);
+			}
+		}
+
+		// Step 5: Periodically save state
 		if (this.tickCount % 10 === 0) {
 			this.saveState();
 		}
 
-		// Step 5: Print periodic status
+		// Step 6: Print periodic status
 		if (this.tickCount % 50 === 0) {
 			this.printStatus();
 		}
