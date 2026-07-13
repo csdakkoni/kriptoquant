@@ -33,6 +33,8 @@ import { createBollingerBandsV2Strategy } from './research/strategies/bollinger-
 import { createA2V2Strategy } from './research/strategies/a2-v2/index.js';
 import { createSupertrendStrategy } from './research/strategies/supertrend/index.js';
 import { createMomentumBurstStrategy } from './research/strategies/momentum-burst/index.js';
+import { createSwingDipStrategy } from './research/strategies/swing-dip/index.js';
+import { createDonchianShortStrategy } from './research/strategies/donchian-short/index.js';
 import { DEFAULT_SWEEP } from './research/experiments/runner.js';
 import { runSweep, printLeaderboard, printMetadata, printStrategyComparison, exportSweepCSV, exportMetadataJSON } from './research/experiments/sweep.js';
 import { runWalkForward, printWalkForwardReport, exportWalkForwardJSON, exportWalkForwardCSV } from './research/walkforward/walkforward.js';
@@ -85,6 +87,8 @@ function resolveStrategy(name: string): Strategy | null {
 		'a2-v2': createA2V2Strategy(),
 		'supertrend': createSupertrendStrategy(),
 		'momentum-burst': createMomentumBurstStrategy(),
+		'swing-dip': createSwingDipStrategy(),
+		'donchian-short': createDonchianShortStrategy(),
 	};
 	return strategies[name] ?? null;
 }

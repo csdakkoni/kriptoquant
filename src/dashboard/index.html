@@ -173,6 +173,8 @@
                             <option value="ema-cross">EMA Crossover (Trend - 4H)</option>
                             <option value="random">Rastgele İşlem (Random Walk Baseline - 15M)</option>
                             <option value="momentum-burst">Momentum Burst (Deney Slotu - 15M) 🚀</option>
+                            <option value="swing-dip">Swing Dip (Erdem Special - 1H) 🌊</option>
+                            <option value="donchian-short">Donchian Short (Ayı Kanadı - 4H) 🐻</option>
                         </select>
                     </div>
 
@@ -309,7 +311,9 @@
             'donchian-breakout': { label: 'Donchian Breakout (Trend)', icon: '📈' },
             'ema-cross': { label: 'EMA Crossover (Trend)', icon: '📈' },
             'random': { label: 'Random Walk Baseline', icon: '🎲' },
-            'momentum-burst': { label: 'Momentum Burst (Deney)', icon: '🚀' }
+            'momentum-burst': { label: 'Momentum Burst (Deney)', icon: '🚀' },
+            'swing-dip': { label: 'Swing Dip (Erdem Special)', icon: '🌊' },
+            'donchian-short': { label: 'Donchian Short (Ayı Kanadı)', icon: '🐻' }
         };
 
         const strategyLockedIntervals = {
@@ -318,7 +322,9 @@
             'donchian-breakout': '4h',
             'ema-cross': '4h',
             'random': '15m',
-            'momentum-burst': '15m'
+            'momentum-burst': '15m',
+            'swing-dip': '1h',
+            'donchian-short': '4h'
         };
         
         const watchCoins = [

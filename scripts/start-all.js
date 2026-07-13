@@ -17,6 +17,8 @@ const roster = [
 	{ name: 'ema-cross', interval: '4h' },
 	{ name: 'random', interval: '15m' },
 	{ name: 'momentum-burst', interval: '15m' },
+	{ name: 'swing-dip', interval: '1h' },
+	{ name: 'donchian-short', interval: '4h' },
 ];
 
 const coins = [

@@ -22,6 +22,8 @@ import { createA2V2Strategy } from '../research/strategies/a2-v2/index.js';
 import { createVwapReversionStrategy } from '../research/strategies/vwap-reversion/index.js';
 import { createRandomStrategy } from '../research/strategies/random/index.js';
 import { createMomentumBurstStrategy } from '../research/strategies/momentum-burst/index.js';
+import { createSwingDipStrategy } from '../research/strategies/swing-dip/index.js';
+import { createDonchianShortStrategy } from '../research/strategies/donchian-short/index.js';
 import { atr, sma } from '../core/indicators/index.js';
 import type { Candle, Strategy } from '../core/types.js';
 import { BinanceTrBroker } from '../execution/binance-tr-broker.js';
@@ -120,7 +122,7 @@ export const btcRegimeMonitor = new BtcRegimeMonitor();
 
 export interface ActivePosition {
 	coin: string;
-	direction: 'LONG';
+	direction: 'LONG' | 'SHORT';
 	entryTime: string;
 	entryPrice: number;
 	currentPrice: number;
@@ -140,7 +142,7 @@ export interface ActivePosition {
 
 export interface ClosedTrade {
 	coin: string;
-	direction: 'LONG';
+	direction: 'LONG' | 'SHORT';
 	entryTime: string;
 	entryPrice: number;
 	exitTime: string;
@@ -373,14 +375,15 @@ export class ExecutionEngine {
 		}));
 	}
 
-	/** Motor kapalıyken SL altına düşmüş pozisyonları mevcut fiyattan tasfiye eder. */
+	/** Motor kapalıyken SL seviyesi delinmiş pozisyonları mevcut fiyattan tasfiye eder. */
 	private async closeGappedPositions(): Promise<void> {
 		const toClose: { pos: ActivePosition; price: number }[] = [];
 		for (const pos of this.state.activePositions) {
 			const candles = this.candlesMap.get(pos.coin);
 			if (!candles || candles.length === 0) continue;
 			const lastClose = candles[candles.length - 1].close;
-			if (lastClose <= pos.stopLoss) {
+			const slBreached = pos.direction === 'SHORT' ? lastClose >= pos.stopLoss : lastClose <= pos.stopLoss;
+			if (slBreached) {
 				toClose.push({ pos, price: lastClose });
 			}
 		}
@@ -434,8 +437,9 @@ export class ExecutionEngine {
 		this.state.activePositions.forEach((p) => {
 			if (p.coin === coin) {
 				p.currentPrice = price;
-				p.currentPnLUsdt = (p.currentPrice - p.entryPrice) * p.quantity;
-				p.currentPnLPercent = ((p.currentPrice - p.entryPrice) / p.entryPrice) * 100;
+				const sign = p.direction === 'SHORT' ? -1 : 1;
+				p.currentPnLUsdt = sign * (p.currentPrice - p.entryPrice) * p.quantity;
+				p.currentPnLPercent = (sign * (p.currentPrice - p.entryPrice) / p.entryPrice) * 100;
 
 				if (price > (p.highestPrice ?? p.entryPrice)) {
 					p.highestPrice = price;
@@ -478,15 +482,24 @@ export class ExecutionEngine {
 
 	/**
 	 * SL/TP denetimi — TÜM stratejiler için tek ve aynı kural seti:
-	 * - price <= stopLoss  → gözlenen fiyattan kapat (slipajı broker ekler)
-	 * - takeProfit > 0 && price >= takeProfit → gözlenen fiyattan kapat
-	 * Backtest motorundaki SL/TP yapısının tik bazlı karşılığıdır.
+	 * LONG : price <= SL → kes | price >= TP → kâr al
+	 * SHORT: price >= SL → kes | price <= TP → kâr al
+	 * Dolum her zaman gözlenen tik fiyatından (slipajı dolum katmanı ekler).
 	 */
 	private async checkRiskExits(coin: string, price: number, timestamp: number): Promise<void> {
 		const positionsToClose: { idx: number; reason: string; exitPrice: number }[] = [];
 
 		this.state.activePositions.forEach((p, idx) => {
 			if (p.coin !== coin) return;
+
+			if (p.direction === 'SHORT') {
+				if (price >= p.stopLoss) {
+					positionsToClose.push({ idx, reason: 'SL', exitPrice: price });
+				} else if (p.takeProfit > 0 && price <= p.takeProfit) {
+					positionsToClose.push({ idx, reason: 'TP', exitPrice: price });
+				}
+				return;
+			}
 
 			if (price <= p.stopLoss) {
 				// Gerçekçi dolum: stop fiyatı değil, stop'un delindiği anda gözlenen fiyat
@@ -525,9 +538,12 @@ export class ExecutionEngine {
 			if (this.state.pendingSignals.length > 15) this.state.pendingSignals.shift();
 
 			const hasPosition = this.state.activePositions.some((p) => p.coin === coin);
+			// Short stratejilerde sinyal semantiği ters çevrilir:
+			// BUY = short AÇ, SELL = short KAPAT (cover).
+			const direction: 'LONG' | 'SHORT' = SHORT_STRATEGIES.has(strategy.name) ? 'SHORT' : 'LONG';
 
 			if (activeSignal.side === 'BUY' && !hasPosition) {
-				await this.tryOpenPosition(coin, candles, lastCandle, activeSignal, strategy);
+				await this.tryOpenPosition(coin, candles, lastCandle, activeSignal, strategy, direction);
 			} else if (activeSignal.side === 'SELL' && hasPosition) {
 				const idx = this.state.activePositions.findIndex((p) => p.coin === coin);
 				if (idx !== -1) {
@@ -549,6 +565,7 @@ export class ExecutionEngine {
 		lastCandle: Candle,
 		activeSignal: { price: number; stopLoss?: number; takeProfit?: number; metadata?: any },
 		strategy: Strategy,
+		direction: 'LONG' | 'SHORT',
 	): Promise<void> {
 		// ── Risk Kapısı 1: Günlük zarar kill-switch ──
 		if (this.isDailyLossLimitHit()) return;
@@ -559,11 +576,11 @@ export class ExecutionEngine {
 			return;
 		}
 
-		// ── Risk Kapısı 3: BTC rejim filtresi ──
-		// Muafiyet: momentum-burst ayı rallilerini avlamak için tasarlandı,
-		// rejim kapısından geçmez (deney slotu — fast_lab.ts bulgusu).
+		// ── Risk Kapısı 3: BTC rejim filtresi (yalnızca LONG'lara uygulanır) ──
+		// Muafiyet: momentum-burst ve swing-dip ayı rallilerini/derin dipleri
+		// avlamak için tasarlandı, rejim kapısından geçmez (lab bulguları).
 		const regimeExempt = REGIME_EXEMPT_STRATEGIES.has(strategy.name);
-		if (this.riskConfig.enableBtcRegimeFilter && !regimeExempt) {
+		if (direction === 'LONG' && this.riskConfig.enableBtcRegimeFilter && !regimeExempt) {
 			const regime = btcRegimeMonitor.getRegime();
 			this.state.btcRegime = regime;
 			if (regime === 'RISK_OFF') {
@@ -576,19 +593,27 @@ export class ExecutionEngine {
 			this.regimeBlockLogged = false;
 		}
 
+		// Short yalnızca paper modda desteklenir (Binance TR spot short veremez)
+		if (direction === 'SHORT' && !this.broker.isPaper()) {
+			logError(`[${coin}] SHORT sinyali atlandı: gerçek para modunda short desteklenmiyor (spot hesap).`);
+			return;
+		}
+
 		const entryPrice = lastCandle.close;
+		const dirSign = direction === 'SHORT' ? -1 : 1;
 
 		// SL: önce strateji metadata'sı; yoksa backtest ile aynı ATR kuralı
+		// (short'ta SL girişin ÜSTÜNDEDİR)
 		let stopLossPrice = activeSignal.stopLoss ?? activeSignal.metadata?.sl;
 		let initialAtr: number | undefined = activeSignal.metadata?.atr;
 		if (stopLossPrice === undefined || stopLossPrice <= 0) {
 			const atrValues = candles.length >= 15 ? atr(candles, 14) : [];
 			const lastAtr = atrValues.length > 0 ? atrValues[atrValues.length - 1] : Number.NaN;
 			if (Number.isFinite(lastAtr) && !Number.isNaN(lastAtr) && lastAtr > 0) {
-				stopLossPrice = entryPrice - lastAtr * this.riskConfig.stopLossAtrMultiplier;
+				stopLossPrice = entryPrice - dirSign * lastAtr * this.riskConfig.stopLossAtrMultiplier;
 				initialAtr = lastAtr;
 			} else {
-				stopLossPrice = entryPrice * 0.97; // ATR hesaplanamazsa muhafazakâr %3 stop
+				stopLossPrice = entryPrice * (1 - dirSign * 0.03); // ATR yoksa muhafazakâr %3 stop
 			}
 		}
 
@@ -596,8 +621,6 @@ export class ExecutionEngine {
 		const takeProfitPrice = activeSignal.takeProfit ?? activeSignal.metadata?.tp ?? 0;
 
 		// ── Pozisyon boyutlandırma ──
-		// Hedef: sermayenin riskPerTradePercent'i kadar risk; tavanlar:
-		// maxPositionPercent, maxOrderValue ve eldeki nakit.
 		const totalEquity = this.state.currentEquity || this.state.cash;
 		const riskAmount = totalEquity * (this.riskConfig.riskPerTradePercent / 100);
 		const stopDistance = Math.abs(entryPrice - stopLossPrice) / entryPrice;
@@ -614,11 +637,16 @@ export class ExecutionEngine {
 		if (budget < 10) return;
 
 		let fill;
-		try {
-			fill = await this.broker.buy(coin, lastCandle.closeTime, lastCandle.close, budget);
-		} catch (e) {
-			logError(`[${coin}] ALIM emri başarısız, pozisyon açılmadı: ${e}`);
-			return;
+		if (direction === 'SHORT') {
+			// Paper short dolumu (futures simülasyonu): satış tarafı slipaj/komisyon
+			fill = this.paperShortFill('OPEN', lastCandle.close, budget, lastCandle.closeTime);
+		} else {
+			try {
+				fill = await this.broker.buy(coin, lastCandle.closeTime, lastCandle.close, budget);
+			} catch (e) {
+				logError(`[${coin}] ALIM emri başarısız, pozisyon açılmadı: ${e}`);
+				return;
+			}
 		}
 		this.state.cash -= budget;
 
@@ -627,7 +655,7 @@ export class ExecutionEngine {
 
 		this.state.activePositions.push({
 			coin,
-			direction: 'LONG',
+			direction,
 			entryTime: new Date(fill.timestamp).toISOString(),
 			entryPrice: fill.price,
 			currentPrice: fill.price,
@@ -645,10 +673,35 @@ export class ExecutionEngine {
 		});
 
 		log(
-			`[🤖 ${strategy.name.toUpperCase()}] [${coin}] Pozisyon AÇILDI. Miktar: ${fill.quantity.toFixed(4)} | ` +
+			`[🤖 ${strategy.name.toUpperCase()}] [${coin}] ${direction} Pozisyon AÇILDI. Miktar: ${fill.quantity.toFixed(4)} | ` +
 			`Giriş: $${fill.price.toFixed(4)} | Bütçe: $${budget.toFixed(2)} (${((budget / totalEquity) * 100).toFixed(1)}% sermaye) | ` +
 			`SL: $${stopLossPrice.toFixed(4)} | Gerçek risk: $${actualRiskUsdt.toFixed(2)} (sermayenin %${((actualRiskUsdt / totalEquity) * 100).toFixed(2)}'i)`,
 		);
+	}
+
+	/**
+	 * Paper short dolumu — BinanceTrBroker spot olduğundan short'lar motor içinde,
+	 * broker ile birebir aynı maliyet modeliyle (%0.05 slipaj + %0.10 komisyon)
+	 * simüle edilir. OPEN: short satışı (fiyatın altında dolum), CLOSE: geri alım
+	 * (fiyatın üstünde dolum).
+	 */
+	private paperShortFill(
+		side: 'OPEN' | 'CLOSE',
+		price: number,
+		amountOrQty: number,
+		timestamp: number,
+	): { timestamp: number; price: number; quantity: number; commission: number } {
+		const commissionRate = 0.001;
+		const slippageRate = 0.0005;
+		if (side === 'OPEN') {
+			const executedPrice = price * (1 - slippageRate);
+			const commission = amountOrQty * commissionRate;
+			const quantity = (amountOrQty - commission) / executedPrice;
+			return { timestamp, price: executedPrice, quantity, commission };
+		}
+		const executedPrice = price * (1 + slippageRate);
+		const commission = amountOrQty * executedPrice * commissionRate;
+		return { timestamp, price: executedPrice, quantity: amountOrQty, commission };
 	}
 
 	/**
@@ -657,30 +710,38 @@ export class ExecutionEngine {
 	 */
 	private async closePosition(pos: ActivePosition, exitPrice: number, reason: string, timestamp: number): Promise<boolean> {
 		let fill;
-		try {
-			fill = await this.broker.sell(pos.coin, timestamp, exitPrice, pos.quantity);
-		} catch (e) {
-			logError(`[${pos.coin}] SATIM emri başarısız (${reason}), pozisyon korunuyor, tekrar denenecek: ${e}`);
-			return false;
+		let proceeds: number;
+		if (pos.direction === 'SHORT') {
+			// Cover: geri alım dolumu (paper) — fiyatın üstünde dolar, komisyon öder
+			fill = this.paperShortFill('CLOSE', exitPrice, pos.quantity, timestamp);
+			// Geri dönen tutar = pozisyonun maliyet değeri + short PnL - kapama komisyonu
+			proceeds = pos.entryPrice * pos.quantity + (pos.entryPrice - fill.price) * pos.quantity - fill.commission;
+			this.state.cash += proceeds;
+		} else {
+			try {
+				fill = await this.broker.sell(pos.coin, timestamp, exitPrice, pos.quantity);
+			} catch (e) {
+				logError(`[${pos.coin}] SATIM emri başarısız (${reason}), pozisyon korunuyor, tekrar denenecek: ${e}`);
+				return false;
+			}
+			proceeds = pos.quantity * fill.price - fill.commission;
+			this.state.cash += proceeds;
 		}
 
-		const grossReturn = pos.quantity * fill.price;
-		const proceeds = grossReturn - fill.commission;
-		this.state.cash += proceeds;
-
+		const dirSign = pos.direction === 'SHORT' ? -1 : 1;
 		const realizedPnLUsdt = proceeds - pos.positionSizeUsdt;
-		const realizedPnLPercent = ((fill.price - pos.entryPrice) / pos.entryPrice) * 100;
+		const realizedPnLPercent = (dirSign * (fill.price - pos.entryPrice) / pos.entryPrice) * 100;
 		this.state.realizedPnL += realizedPnLUsdt;
 
 		const entryTimeMs = new Date(pos.entryTime).getTime();
 		const durationSeconds = Math.max(1, Math.round((timestamp - entryTimeMs) / 1000));
 
-		const stopDistance = pos.entryPrice - pos.stopLoss;
-		const rMultiple = stopDistance > 0 ? (fill.price - pos.entryPrice) / stopDistance : 0;
+		const stopDistance = dirSign * (pos.entryPrice - pos.stopLoss);
+		const rMultiple = stopDistance > 0 ? (dirSign * (fill.price - pos.entryPrice)) / stopDistance : 0;
 
 		const closedTrade: ClosedTrade = {
 			coin: pos.coin,
-			direction: 'LONG',
+			direction: pos.direction,
 			entryTime: pos.entryTime,
 			entryPrice: pos.entryPrice,
 			exitTime: new Date(fill.timestamp).toISOString(),
@@ -719,10 +780,12 @@ export class ExecutionEngine {
 		if (strategyPath === 'ema-cross') return createEmaCrossStrategy();
 		if (strategyPath === 'random') return createRandomStrategy();
 		if (strategyPath === 'momentum-burst') return createMomentumBurstStrategy();
+		if (strategyPath === 'swing-dip') return createSwingDipStrategy();
+		if (strategyPath === 'donchian-short') return createDonchianShortStrategy();
 
 		throw new Error(
 			`Strategy resolver failed: "${strategyPath}". ` +
-			`Canlı kadro: a2-v2, vwap-reversion, donchian-breakout, ema-cross, random, momentum-burst (veya bir factory .json yolu).`,
+			`Canlı kadro: a2-v2, vwap-reversion, donchian-breakout, ema-cross, random, momentum-burst, swing-dip, donchian-short (veya bir factory .json yolu).`,
 		);
 	}
 
@@ -989,6 +1052,10 @@ export interface StrategySummary {
 }
 
 // Canlı test kadrosu — dashboard bu listeyi gösterir.
+// Sistem mimarisi: her piyasa koşuluna bir kanat —
+//   Boğa/yatay: a2-v2, vwap-reversion (MR) + donchian-breakout, ema-cross (trend)
+//   Ayı       : donchian-short (short kanat) + swing-dip, momentum-burst (dip/ralli avcıları)
+//   Kontrol   : random (bilimsel baseline)
 export const LIVE_STRATEGY_ROSTER = [
 	{ name: 'a2-v2', label: 'A2 Bollinger v2 (MR + ADX)', interval: '15m' },
 	{ name: 'vwap-reversion', label: 'VWAP Reversion (MR)', interval: '15m' },
@@ -996,10 +1063,16 @@ export const LIVE_STRATEGY_ROSTER = [
 	{ name: 'ema-cross', label: 'EMA Crossover (Trend)', interval: '4h' },
 	{ name: 'random', label: 'Random Walk Baseline', interval: '15m' },
 	{ name: 'momentum-burst', label: 'Momentum Burst (Deney)', interval: '15m' },
+	{ name: 'swing-dip', label: 'Swing Dip (Erdem Special)', interval: '1h' },
+	{ name: 'donchian-short', label: 'Donchian Short (Ayı Kanadı)', interval: '4h' },
 ] as const;
 
-// BTC rejim filtresinden muaf stratejiler (ayı rallisi avcıları / deney slotu)
-const REGIME_EXEMPT_STRATEGIES = new Set<string>(['momentum-burst']);
+// BTC rejim filtresinden muaf stratejiler: derin dip / ayı rallisi avcıları.
+// (Short stratejilere rejim filtresi zaten uygulanmaz — filtre yalnızca long girişleri kısar.)
+const REGIME_EXEMPT_STRATEGIES = new Set<string>(['momentum-burst', 'swing-dip']);
+
+// Sinyal semantiği ters çevrilen short stratejiler: BUY = short aç, SELL = cover.
+const SHORT_STRATEGIES = new Set<string>(['donchian-short']);
 
 export function getAllExecutionEnginesSummary(): StrategySummary[] {
 	return LIVE_STRATEGY_ROSTER.map((strat) => {

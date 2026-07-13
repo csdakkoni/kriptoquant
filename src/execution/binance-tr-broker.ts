@@ -14,6 +14,10 @@ export class BinanceTrBroker {
 	private baseUrl = 'https://api.binance.tr';
 	private isPaperMode = true;
 
+	public isPaper(): boolean {
+		return this.isPaperMode;
+	}
+
 	constructor() {
 		this.loadKeys();
 	}

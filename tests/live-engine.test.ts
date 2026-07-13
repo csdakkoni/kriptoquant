@@ -174,6 +174,56 @@ describe('Live Execution Altyapısı', () => {
 		engine.stop();
 	});
 
+	it('SHORT pozisyonda PnL ters yönde hesaplanmalı ve SL yukarıda tetiklenmeli', async () => {
+		const engine = new ExecutionEngine(['BTCUSDT'], '1m', 'donchian-short');
+		await engine.start(true);
+
+		engine.getState().activePositions.push({
+			coin: 'BTCUSDT',
+			direction: 'SHORT',
+			entryTime: new Date().toISOString(),
+			entryPrice: 100,
+			currentPrice: 100,
+			quantity: 10,
+			positionSizeUsdt: 1000,
+			stopLoss: 106, // short: SL girişin ÜSTÜNDE
+			takeProfit: 0,
+			riskPercent: 6,
+			currentPnLPercent: 0,
+			currentPnLUsdt: 0,
+			mae: 0,
+			mfe: 0,
+			strategyName: 'donchian-short',
+		});
+
+		// Fiyat 95'e düşüyor → short +%5 karda olmalı
+		await (engine as any).handleKlineTick('BTCUSDT', {
+			t: 1720000200000, T: 1720000259999, s: 'BTCUSDT', i: '1m',
+			o: '100', c: '95', h: '100', l: '94', v: '100', x: false,
+		});
+
+		const pos = engine.getState().activePositions[0];
+		expect(pos.currentPnLPercent).toBe(5); // short kazançta
+		expect(pos.currentPnLUsdt).toBe(50); // (100-95)*10
+
+		// Fiyat 107'ye fırlıyor → SL (106) delinmeli, gözlenen fiyattan kapanmalı
+		await (engine as any).handleKlineTick('BTCUSDT', {
+			t: 1720000260000, T: 1720000319999, s: 'BTCUSDT', i: '1m',
+			o: '95', c: '107', h: '108', l: '95', v: '100', x: false,
+		});
+
+		expect(engine.getState().activePositions.length).toBe(0);
+		const trade = engine.getState().closedTrades.at(-1)!;
+		expect(trade.direction).toBe('SHORT');
+		expect(trade.exitReason).toBe('SL');
+		// Cover dolumu gözlenen 107 civarında (slipaj dahil), 106'dan hayali dolum YOK
+		expect(trade.exitPrice).toBeGreaterThan(106.9);
+		// Short zararda: (100-107)/100 ≈ -%7
+		expect(trade.realizedPnLPercent).toBeLessThan(-6.5);
+
+		engine.stop();
+	});
+
 	it('Günlük zarar limiti aşıldığında yeni girişleri kilitlemeli (kill-switch)', async () => {
 		const engine = new ExecutionEngine(['BTCUSDT'], '1m', 'ema-cross');
 		await engine.start(true);
