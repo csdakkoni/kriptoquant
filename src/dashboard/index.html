@@ -787,9 +787,10 @@ function renderAssumptions(assumptions) {
     const forCount = a.evidence.filter(e => e.supports).length;
     const againstCount = a.evidence.filter(e => !e.supports).length;
     const emoji = { killed: '💀', alive: '🟢', testing: '🔬', queued: '⏳', uncertain: '❓' }[a.status] || '❓';
+    const statusTr = { killed: 'ÖLDÜ', alive: 'HAYATTA', testing: 'TEST EDİLİYOR', queued: 'SIRADA', uncertain: 'BELİRSİZ' }[a.status] || a.status;
     return `
       <div class="assumption-item ${a.status}">
-        <div class="assumption-status ${a.status}">${emoji} ${a.status}</div>
+        <div class="assumption-status ${a.status}">${emoji} ${statusTr}</div>
         <div class="assumption-text">${a.statement}</div>
         <div class="assumption-evidence">+${forCount} / -${againstCount} kanıt</div>
         ${a.verdict ? `<div style="font-size:11px; color: var(--text-dim); margin-top:6px;">${a.verdict}</div>` : ''}
