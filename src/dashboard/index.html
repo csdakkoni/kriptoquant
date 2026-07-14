@@ -489,6 +489,60 @@ body::before {
   border-top: 1px solid var(--border);
 }
 
+/* ─── Trade Log ─── */
+.trade-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.trade-table th {
+  text-align: left;
+  padding: 8px 10px;
+  color: var(--text-dim);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+}
+.trade-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(42,42,58,0.3);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+}
+.trade-table tr { transition: background 0.2s; }
+.trade-table tr:hover { background: var(--bg-card-hover); }
+.trade-coin {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.trade-open { color: var(--accent-cyan); }
+.trade-closed { color: var(--text-dim); }
+.pnl-positive { color: var(--accent-green); font-weight: 600; }
+.pnl-negative { color: var(--accent-red); font-weight: 600; }
+.trade-tag {
+  font-size: 9px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Inter', sans-serif;
+  font-weight: 500;
+}
+.trade-tag.open { background: var(--accent-cyan-dim); color: var(--accent-cyan); }
+.trade-tag.tp { background: var(--accent-green-dim); color: var(--accent-green); }
+.trade-tag.sl { background: var(--accent-red-dim); color: var(--accent-red); }
+.trade-tag.ts { background: var(--accent-amber-dim); color: var(--accent-amber); }
+.trade-tag.fixed { background: var(--accent-purple-dim); color: var(--accent-purple); }
+.trade-exp {
+  font-size: 10px;
+  font-family: 'Inter', sans-serif;
+  color: var(--text-dim);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ─── Responsive ─── */
 @media (max-width: 768px) {
   .header { padding: 16px; }
@@ -624,6 +678,20 @@ body::before {
         <div class="empty">
           <div class="empty-icon">⏳</div>
           <div class="empty-text">Deneyler yükleniyor...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Trade Log -->
+    <div class="card grid-full">
+      <div class="card-header">
+        <span class="card-title">Son İşlemler</span>
+        <span class="card-icon">💹</span>
+      </div>
+      <div style="max-height: 400px; overflow-y: auto;" id="tradeLogContainer">
+        <div class="empty">
+          <div class="empty-icon">⏳</div>
+          <div class="empty-text">İşlemler yükleniyor...</div>
         </div>
       </div>
     </div>
@@ -769,6 +837,91 @@ function renderExperiments(experiments) {
   }).join('');
 }
 
+// ─── Render Trade Log ──────────────────────────────────────────────────────
+
+function renderTradeLog(experiments) {
+  if (!experiments || experiments.length === 0) return;
+  const container = document.getElementById('tradeLogContainer');
+
+  // Collect all trades (open + closed)
+  const allTrades = [];
+
+  for (const exp of experiments) {
+    // Open positions
+    for (const pos of (exp.positions || [])) {
+      if (!pos.exitPrice) {
+        allTrades.push({ ...pos, experimentName: exp.name, isOpen: true });
+      }
+    }
+    // Closed positions
+    for (const pos of (exp.closedPositions || [])) {
+      allTrades.push({ ...pos, experimentName: exp.name, isOpen: false });
+    }
+  }
+
+  if (allTrades.length === 0) {
+    container.innerHTML = '<div class="empty"><div class="empty-icon">📊</div><div class="empty-text">Henüz işlem yok</div></div>';
+    return;
+  }
+
+  // Sort: open first, then by time descending
+  allTrades.sort((a, b) => {
+    if (a.isOpen && !b.isOpen) return -1;
+    if (!a.isOpen && b.isOpen) return 1;
+    return (b.entryTime || 0) - (a.entryTime || 0);
+  });
+
+  function formatTime(ts) {
+    if (!ts) return '-';
+    return new Date(ts).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  }
+
+  function reasonTag(reason, isOpen) {
+    if (isOpen) return '<span class="trade-tag open">AÇIK</span>';
+    const map = {
+      'take_profit': '<span class="trade-tag tp">TP ✅</span>',
+      'stop_loss': '<span class="trade-tag sl">SL ❌</span>',
+      'trailing_stop': '<span class="trade-tag ts">TS ↘️</span>',
+      'fixed_exit': '<span class="trade-tag fixed">SÜRE</span>',
+    };
+    return map[reason] || `<span class="trade-tag">${reason || '?'}</span>`;
+  }
+
+  container.innerHTML = `
+    <table class="trade-table">
+      <thead>
+        <tr>
+          <th>Durum</th>
+          <th>Coin</th>
+          <th>Giriş</th>
+          <th>Çıkış</th>
+          <th>PnL</th>
+          <th>Süre</th>
+          <th>Deney</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${allTrades.slice(0, 50).map(t => {
+          const pnl = t.pnlPercent;
+          const pnlStr = pnl != null ? `${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%` : '-';
+          const pnlClass = pnl != null ? (pnl >= 0 ? 'pnl-positive' : 'pnl-negative') : '';
+          return `
+            <tr>
+              <td>${reasonTag(t.exitReason, t.isOpen)}</td>
+              <td class="trade-coin">${(t.coin || '').replace('USDT', '')}</td>
+              <td>${t.entryPrice?.toFixed(2) || '-'}<br><span style="color:var(--text-dim);font-size:10px">${formatTime(t.entryTime)}</span></td>
+              <td>${t.exitPrice?.toFixed(2) || '-'}<br><span style="color:var(--text-dim);font-size:10px">${t.exitTime ? formatTime(t.exitTime) : ''}</span></td>
+              <td class="${pnlClass}">${pnlStr}</td>
+              <td>${t.candlesSinceEntry || 0} mum</td>
+              <td class="trade-exp">${t.experimentName || '-'}</td>
+            </tr>
+          `;
+        }).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
 // ─── Render Knowledge Graph ──────────────────────────────────────────────────
 
 function renderKnowledge(data) {
@@ -833,6 +986,7 @@ async function refresh() {
   renderAssumptions(assumptions);
   renderObservations(observations);
   renderExperiments(experiments);
+  renderTradeLog(experiments);
   renderKnowledge(knowledge);
   renderJournal(journal);
 }
