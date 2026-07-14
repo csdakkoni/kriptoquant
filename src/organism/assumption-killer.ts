@@ -187,24 +187,30 @@ export class AssumptionKiller {
 		}
 
 		// Step 2: Feed observations + data to ALL assumption tests (parallel)
-		for (const assumption of this.assumptions) {
-			if (assumption.status !== 'testing') continue;
-			const test = this.tests.get(assumption.id);
-			if (!test) continue;
-			try {
-				const evidence = test.evaluate(observations, this.candleBuffers);
-				for (const e of evidence) {
-					(assumption.evidence as Evidence[]).push(e);
+		// İSTATİSTİK NOTU: Testler her mumda çalışırsa aynı 200 mumluk pencere
+		// tekrar tekrar ölçülür — 30 "kanıt" aslında ~1 bağımsız ölçümün kopyası
+		// olur ve verdiktler sahte örneklem büyüklüğüyle verilir (pseudo-replication).
+		// Bu yüzden testler ~4 saatte bir çalışır (10 coin × 16 mum ≈ 160 tick).
+		const EVIDENCE_SAMPLING_TICKS = 160;
+		if (this.tickCount % EVIDENCE_SAMPLING_TICKS === 0) {
+			for (const assumption of this.assumptions) {
+				if (assumption.status !== 'testing') continue;
+				const test = this.tests.get(assumption.id);
+				if (!test) continue;
+				try {
+					const evidence = test.evaluate(observations, this.candleBuffers);
+					for (const e of evidence) {
+						(assumption.evidence as Evidence[]).push(e);
+					}
+					if (evidence.length > 0) {
+						const f = assumption.evidence.filter(e => e.supports).length;
+						const ag = assumption.evidence.filter(e => !e.supports).length;
+						log(`[EVIDENCE] ${assumption.id}: +${f}/-${ag} (${evidence.length} new)`);
+					}
+					this.checkVerdict(assumption);
+				} catch (err) {
+					logError(`[Organism] Test ${assumption.id} error: ${err}`);
 				}
-				// Log only periodically to avoid spam
-				if (this.tickCount % 10 === 0 && evidence.length > 0) {
-					const f = assumption.evidence.filter(e => e.supports).length;
-					const ag = assumption.evidence.filter(e => !e.supports).length;
-					log(`[EVIDENCE] ${assumption.id}: +${f}/-${ag} (${evidence.length} new)`);
-				}
-				this.checkVerdict(assumption);
-			} catch (err) {
-				logError(`[Organism] Test ${assumption.id} error: ${err}`);
 			}
 		}
 

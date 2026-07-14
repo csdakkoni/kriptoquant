@@ -21,6 +21,12 @@ import { randomUUID } from 'node:crypto';
 const STATE_DIR = join(process.cwd(), 'organism-data');
 const EXPERIMENTS_FILE = join(STATE_DIR, 'experiments.json');
 
+// Gerçekçi işlem maliyeti: %0.10 komisyon + %0.05 slipaj her yönde ≈ %0.3 tur.
+// KRİTİK: Bu olmadan organizma "ücret illüzyonu" bilgiler üretir — 100+
+// konfigürasyonluk lab arşivi (legacy-two-wing branch) bunu kanıtladı:
+// maliyetsiz simülasyonda pozitif görünen her hızlı strateji gerçekte eksiydi.
+const ROUND_TRIP_COST_PCT = 0.3;
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type ExperimentStatus = 'running' | 'completed' | 'failed';
@@ -29,7 +35,8 @@ export type EntryRule =
 	| { type: 'random'; probability: number }        // Enter randomly with given probability per candle
 	| { type: 'every_n'; n: number }                  // Enter every N candles
 	| { type: 'on_observation'; observationType: string } // Enter when observer fires
-	| { type: 'price_cross_sma'; period: number }     // Enter on SMA cross
+	| { type: 'price_cross_sma'; period: number }     // Enter on SMA cross (upward)
+	| { type: 'price_cross_sma_down'; period: number } // Enter on SMA cross (downward — short girişleri için)
 	| { type: 'always_long' };                         // Always be in position
 
 export type ExitRule =
@@ -62,6 +69,7 @@ export interface Experiment {
 	sourceAssumption?: string;  // Which assumption spawned this
 	entryRule: EntryRule;
 	exitRule: ExitRule;
+	side?: 'long' | 'short';    // Pozisyon yönü (varsayılan: long). İki kanat dersi: ayıda long-only deney seti kör kalır.
 	coins: string[];
 	status: ExperimentStatus;
 	startedAt: number;
@@ -146,6 +154,47 @@ export function createDefaultExperiments(): Experiment[] {
 			sourceAssumption: 'trend-exists',
 			entryRule: { type: 'on_observation', observationType: 'divergence' },
 			exitRule: { type: 'stop_and_target', stopPercent: 1.5, targetPercent: 3 },
+			coins,
+		},
+		...createShortExperiments(),
+	];
+}
+
+/**
+ * Short deneyler — iki kanat dersi (legacy-two-wing): 365 günlük ayı verisinde
+ * pozitif çıkan TEK strateji ailesi short trend takibiydi (Donchian short
+ * PF 1.288). Deney seti long-only kalırsa organizma ayıda kör kalır.
+ */
+export function createShortExperiments(): Experiment[] {
+	const coins = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT'];
+	const base = {
+		status: 'running' as ExperimentStatus,
+		startedAt: Date.now(),
+		maxDurationHours: 168,
+		positions: [],
+		closedPositions: [],
+		stats: emptyStats(),
+	};
+
+	return [
+		{
+			...base,
+			id: randomUUID(),
+			name: 'SMA20 Aşağı Kırılım SHORT + Trailing',
+			hypothesis: 'Düşüş kırılımını short\'lamak ayı piyasasında pozitif olmalı (Donchian short bulgusunun canlı testi)',
+			entryRule: { type: 'price_cross_sma_down', period: 20 },
+			exitRule: { type: 'trailing_stop', percent: 1.5 },
+			side: 'short' as const,
+			coins,
+		},
+		{
+			...base,
+			id: randomUUID(),
+			name: 'Random SHORT + Stop/Target (1%/2%)',
+			hypothesis: 'Kontrol grubu: rastgele short, ayı driftinde bile maliyet sonrası başabaş kalmalı',
+			entryRule: { type: 'random', probability: 0.05 },
+			exitRule: { type: 'stop_and_target', stopPercent: 1, targetPercent: 2 },
+			side: 'short' as const,
 			coins,
 		},
 	];
@@ -236,6 +285,14 @@ export class ExperimentRunner {
 				return prev < sma && curr >= sma;
 			}
 
+			case 'price_cross_sma_down': {
+				if (candles.length < rule.period + 1) return false;
+				const sma = candles.slice(-rule.period).reduce((s, c) => s + c.close, 0) / rule.period;
+				const prev = candles[candles.length - 2].close;
+				const curr = candles[candles.length - 1].close;
+				return prev > sma && curr <= sma;
+			}
+
 			case 'always_long':
 				return true;
 
@@ -247,11 +304,12 @@ export class ExperimentRunner {
 	// ─── Position Management ──────────────────────────────────────────
 
 	private openPosition(exp: Experiment, coin: string, tick: MarketTick): void {
+		const side = exp.side ?? 'long';
 		const pos: PaperPosition = {
 			id: randomUUID(),
 			experimentId: exp.id,
 			coin,
-			side: 'long',
+			side,
 			entryPrice: tick.close,
 			entryTime: tick.timestamp,
 			candlesSinceEntry: 0,
@@ -260,7 +318,7 @@ export class ExperimentRunner {
 		};
 		exp.positions.push(pos);
 
-		log(`[EXPERIMENT] 📈 ${exp.name} | ${coin} LONG @ ${tick.close.toFixed(2)}`);
+		log(`[EXPERIMENT] ${side === 'short' ? '📉' : '📈'} ${exp.name} | ${coin} ${side.toUpperCase()} @ ${tick.close.toFixed(2)}`);
 	}
 
 	private updatePositions(exp: Experiment, coin: string, tick: MarketTick): void {
@@ -279,7 +337,9 @@ export class ExperimentRunner {
 	}
 
 	private checkExit(rule: ExitRule, pos: PaperPosition, tick: MarketTick): string | null {
-		const currentPnl = ((tick.close - pos.entryPrice) / pos.entryPrice) * 100;
+		// Yön farkındalığı: short pozisyonda kâr, fiyat DÜŞÜNCE oluşur.
+		const sign = pos.side === 'short' ? -1 : 1;
+		const currentPnl = sign * ((tick.close - pos.entryPrice) / pos.entryPrice) * 100;
 
 		switch (rule.type) {
 			case 'fixed_candles':
@@ -295,8 +355,11 @@ export class ExperimentRunner {
 				return null;
 
 			case 'trailing_stop': {
-				const fromHigh = ((tick.close - pos.highSinceEntry) / pos.highSinceEntry) * 100;
-				if (fromHigh <= -rule.percent) return 'trailing_stop';
+				// Long: zirveden geri çekilme | Short: dipten geri yükselme
+				const drawback = pos.side === 'short'
+					? ((tick.close - pos.lowSinceEntry) / pos.lowSinceEntry) * 100
+					: ((pos.highSinceEntry - tick.close) / pos.highSinceEntry) * 100;
+				if (drawback >= rule.percent) return 'trailing_stop';
 				return null;
 			}
 
@@ -311,10 +374,12 @@ export class ExperimentRunner {
 	}
 
 	private closePosition(exp: Experiment, pos: PaperPosition, tick: MarketTick, reason: string): void {
+		const sign = pos.side === 'short' ? -1 : 1;
 		(pos as any).exitPrice = tick.close;
 		(pos as any).exitTime = tick.timestamp;
 		(pos as any).exitReason = reason;
-		(pos as any).pnlPercent = ((tick.close - pos.entryPrice) / pos.entryPrice) * 100;
+		// Net PnL = yönlü brüt getiri - gidiş/dönüş işlem maliyeti
+		(pos as any).pnlPercent = sign * ((tick.close - pos.entryPrice) / pos.entryPrice) * 100 - ROUND_TRIP_COST_PCT;
 
 		const pnl = pos.pnlPercent!;
 		const emoji = pnl >= 0 ? '🟢' : '🔴';
@@ -395,12 +460,27 @@ export class ExperimentRunner {
 		if (existsSync(EXPERIMENTS_FILE)) {
 			try {
 				this.experiments = JSON.parse(readFileSync(EXPERIMENTS_FILE, 'utf-8'));
+				this.migrate();
 				return;
 			} catch {}
 		}
 		// Create defaults
 		this.experiments = createDefaultExperiments();
 		this.save();
+	}
+
+	/** Eski state dosyalarına yeni zorunlu deneyleri (short kanat) ekler. */
+	private migrate(): void {
+		let changed = false;
+		for (const shortExp of createShortExperiments()) {
+			const exists = this.experiments.some((e) => e.name === shortExp.name);
+			if (!exists) {
+				this.experiments.push(shortExp);
+				log(`[EXPERIMENT] 🧬 Migration: yeni deney eklendi — "${shortExp.name}"`);
+				changed = true;
+			}
+		}
+		if (changed) this.save();
 	}
 
 	private save(): void {

@@ -31,3 +31,6 @@ Thumbs.db
 
 # npm cache
 .npm-cache/
+
+# Organism runtime state (sunucu kendi state'ini yazar, git'e girmez)
+organism-data/

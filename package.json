@@ -1,28 +1,25 @@
 {
-  "name": "kriptoquant",
-  "version": "0.1.0",
-  "description": "Crypto Quant Research & Execution Platform",
-  "type": "module",
-  "scripts": {
-    "start": "tsx src/cli.ts",
-    "backtest": "tsx src/cli.ts backtest",
-    "fetch": "tsx src/cli.ts fetch",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "lint": "biome check .",
-    "format": "biome format --write ."
-  },
-  "devDependencies": {
-    "@biomejs/biome": "^1.9.0",
-    "@types/ws": "^8.18.1",
-    "tsx": "^4.19.0",
-    "typescript": "^5.7.0",
-    "vitest": "^3.1.0"
-  },
-  "engines": {
-    "node": ">=22.0.0"
-  },
-  "dependencies": {
-    "ws": "^8.21.0"
-  }
+	"name": "kriptoquant",
+	"version": "0.1.0",
+	"description": "Autonomous falsification engine for financial markets",
+	"type": "module",
+	"scripts": {
+		"start": "tsx src/cli.ts",
+		"organism": "tsx src/cli.ts organism",
+		"dashboard": "tsx src/cli.ts dashboard --port 3008",
+		"lint": "biome check .",
+		"format": "biome format --write ."
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^1.9.0",
+		"@types/ws": "^8.18.1",
+		"tsx": "^4.19.0",
+		"typescript": "^5.7.0"
+	},
+	"engines": {
+		"node": ">=22.0.0"
+	},
+	"dependencies": {
+		"ws": "^8.21.0"
+	}
 }

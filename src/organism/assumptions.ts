@@ -147,9 +147,8 @@ export class EntrySignalMattersTest implements AssumptionTest {
 	evaluate(_observations: Observation[], ticks: Map<string, MarketTick[]>): Evidence[] {
 		const evidence: Evidence[] = [];
 		this.tickCount++;
-
-		// Every 10th tick, simulate random entries and measure forward returns
-		if (this.tickCount % 10 !== 0) return evidence;
+		// Not: Örnekleme frekansı artık AssumptionKiller tarafında yönetiliyor
+		// (~4 saatte bir çağrılır), burada ek seyreltme gerekmez.
 
 		for (const [coin, candles] of ticks) {
 			if (candles.length < 20) continue;
