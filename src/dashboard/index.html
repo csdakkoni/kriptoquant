@@ -533,6 +533,31 @@ body::before {
 .trade-tag.sl { background: var(--accent-red-dim); color: var(--accent-red); }
 .trade-tag.ts { background: var(--accent-amber-dim); color: var(--accent-amber); }
 .trade-tag.fixed { background: var(--accent-purple-dim); color: var(--accent-purple); }
+.trade-tag.long { background: var(--accent-green-dim); color: var(--accent-green); }
+.trade-tag.short { background: var(--accent-red-dim); color: var(--accent-red); }
+/* Özet şeridi */
+.trade-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.trade-summary-item {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  text-align: center;
+}
+.trade-summary-val { font-size: 18px; font-weight: 700; }
+.trade-summary-label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+.trade-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+.live-pnl { font-size: 9px; color: var(--accent-cyan); display: block; }
 .trade-exp {
   font-size: 10px;
   font-family: 'Inter', sans-serif;
@@ -688,6 +713,7 @@ body::before {
         <span class="card-title">Son İşlemler</span>
         <span class="card-icon">💹</span>
       </div>
+      <div id="tradeSummaryContainer"></div>
       <div style="max-height: 400px; overflow-y: auto;" id="tradeLogContainer">
         <div class="empty">
           <div class="empty-icon">⏳</div>
@@ -811,11 +837,15 @@ function renderExperiments(experiments) {
     const pnl = exp.stats.totalPnlPercent || 0;
     const pnlClass = pnl > 0 ? 'positive' : pnl < 0 ? 'negative' : 'neutral';
     const openPositions = (exp.positions || []).filter(p => !p.exitPrice).length;
-    const statusEmoji = exp.status === 'running' ? '▶️' : exp.status === 'completed' ? '✅' : '❌';
+    const statusEmoji = exp.status === 'running' ? '▶️' : exp.status === 'completed' ? '✅' : '💀';
+    const sideBadge = (exp.side || 'long') === 'short'
+      ? '<span class="trade-tag short" style="margin-left:6px">🔻 SHORT</span>'
+      : '<span class="trade-tag long" style="margin-left:6px">🔺 LONG</span>';
+    const promotedBadge = exp.promoted ? '<span class="trade-tag tp" style="margin-left:6px">⭐ ADAY</span>' : '';
 
     return `
       <div class="exp-card ${pnlClass}">
-        <div class="exp-name">${statusEmoji} ${exp.name}</div>
+        <div class="exp-name">${statusEmoji} ${exp.name} ${sideBadge}${promotedBadge}</div>
         <div class="exp-hypothesis">${exp.hypothesis}</div>
         <div class="exp-stats-row">
           <div class="exp-stat">
@@ -839,7 +869,27 @@ function renderExperiments(experiments) {
 
 // ─── Render Trade Log ──────────────────────────────────────────────────────
 
-function renderTradeLog(experiments) {
+const ROUND_TRIP_COST_PCT = 0.3; // Motordakiyle aynı gidiş-dönüş maliyeti
+
+// Fiyata göre uygun ondalık: BTC 62.412,50 | XRP 0,4213 | PEPE 0,00000812
+function fmtPrice(p) {
+  if (p == null) return '-';
+  if (p >= 100) return p.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (p >= 1) return p.toLocaleString('tr-TR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  return p.toLocaleString('tr-TR', { minimumFractionDigits: 4, maximumFractionDigits: 6 });
+}
+
+// 15m mum sayısını insan diline çevir: 3 mum → "45 dk", 20 mum → "5 sa", 100 mum → "1g 1sa"
+function fmtDuration(candles) {
+  const mins = (candles || 0) * 15;
+  if (mins < 60) return `${mins} dk`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return mins % 60 ? `${hours}sa ${mins % 60}dk` : `${hours} sa`;
+  const days = Math.floor(hours / 24);
+  return hours % 24 ? `${days}g ${hours % 24}sa` : `${days} gün`;
+}
+
+function renderTradeLog(experiments, prices) {
   if (!experiments || experiments.length === 0) return;
   const container = document.getElementById('tradeLogContainer');
 
@@ -847,73 +897,135 @@ function renderTradeLog(experiments) {
   const allTrades = [];
 
   for (const exp of experiments) {
-    // Open positions
+    const side = exp.side || 'long';
     for (const pos of (exp.positions || [])) {
       if (!pos.exitPrice) {
-        allTrades.push({ ...pos, experimentName: exp.name, isOpen: true });
+        allTrades.push({ ...pos, side: pos.side || side, experimentName: exp.name, isOpen: true });
       }
     }
-    // Closed positions
     for (const pos of (exp.closedPositions || [])) {
-      allTrades.push({ ...pos, experimentName: exp.name, isOpen: false });
+      allTrades.push({ ...pos, side: pos.side || side, experimentName: exp.name, isOpen: false });
     }
   }
 
+  const summaryContainer = document.getElementById('tradeSummaryContainer');
+
   if (allTrades.length === 0) {
-    container.innerHTML = '<div class="empty"><div class="empty-icon">📊</div><div class="empty-text">Henüz işlem yok</div></div>';
+    summaryContainer.innerHTML = '';
+    container.innerHTML = '<div class="empty"><div class="empty-icon">📊</div><div class="empty-text">Henüz işlem yok — ilk 15 dakikalık mum kapanışlarıyla deneyler pozisyon açmaya başlayacak.</div></div>';
     return;
+  }
+
+  // Açık pozisyonların canlı PnL'ini hesapla (kapansaydı net: maliyet düşülmüş)
+  for (const t of allTrades) {
+    if (t.isOpen && prices && prices[t.coin]) {
+      const sign = t.side === 'short' ? -1 : 1;
+      t.livePnl = sign * ((prices[t.coin] - t.entryPrice) / t.entryPrice) * 100 - ROUND_TRIP_COST_PCT;
+      t.livePrice = prices[t.coin];
+    }
   }
 
   // Sort: open first, then by time descending
   allTrades.sort((a, b) => {
     if (a.isOpen && !b.isOpen) return -1;
     if (!a.isOpen && b.isOpen) return 1;
-    return (b.entryTime || 0) - (a.entryTime || 0);
+    return (b.isOpen ? (b.entryTime || 0) : (b.exitTime || 0)) - (a.isOpen ? (a.entryTime || 0) : (a.exitTime || 0));
   });
+
+  // ── Özet şeridi ──
+  const open = allTrades.filter(t => t.isOpen);
+  const closed = allTrades.filter(t => !t.isOpen);
+  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+  const closedToday = closed.filter(t => (t.exitTime || 0) >= todayStart.getTime());
+  const todayPnl = closedToday.reduce((s, t) => s + (t.pnlPercent || 0), 0);
+  const wins = closed.filter(t => (t.pnlPercent || 0) > 0).length;
+  const winRate = closed.length > 0 ? (wins / closed.length) * 100 : 0;
+  const openLivePnl = open.reduce((s, t) => s + (t.livePnl || 0), 0);
+
+  const pnlColor = (v) => v > 0 ? 'var(--accent-green)' : v < 0 ? 'var(--accent-red)' : 'var(--text-dim)';
+  const summaryHtml = `
+    <div class="trade-summary">
+      <div class="trade-summary-item">
+        <div class="trade-summary-val" style="color:var(--accent-cyan)">${open.length}</div>
+        <div class="trade-summary-label">Açık Pozisyon</div>
+      </div>
+      <div class="trade-summary-item">
+        <div class="trade-summary-val" style="color:${pnlColor(openLivePnl)}">${openLivePnl >= 0 ? '+' : ''}${openLivePnl.toFixed(2)}%</div>
+        <div class="trade-summary-label">Açıkların Anlık PnL</div>
+      </div>
+      <div class="trade-summary-item">
+        <div class="trade-summary-val">${closedToday.length}</div>
+        <div class="trade-summary-label">Bugün Kapanan</div>
+      </div>
+      <div class="trade-summary-item">
+        <div class="trade-summary-val" style="color:${pnlColor(todayPnl)}">${todayPnl >= 0 ? '+' : ''}${todayPnl.toFixed(2)}%</div>
+        <div class="trade-summary-label">Bugünkü Net PnL</div>
+      </div>
+      <div class="trade-summary-item">
+        <div class="trade-summary-val">${winRate.toFixed(0)}%</div>
+        <div class="trade-summary-label">Kazanma Oranı (${closed.length} işlem)</div>
+      </div>
+    </div>
+    <div class="trade-hint">
+      💡 Her satır bir deneyin <b>sanal (paper)</b> işlemi — gerçek para kullanılmaz. PnL değerleri %0.3 işlem maliyeti düşülmüş <b>net</b> değerlerdir.
+      🔺 LONG = yükseliş beklentisiyle alım · 🔻 SHORT = düşüş beklentisiyle satış.
+    </div>`;
 
   function formatTime(ts) {
     if (!ts) return '-';
     return new Date(ts).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
   }
 
+  function sideTag(side) {
+    return side === 'short'
+      ? '<span class="trade-tag short">🔻 SHORT</span>'
+      : '<span class="trade-tag long">🔺 LONG</span>';
+  }
+
   function reasonTag(reason, isOpen) {
-    if (isOpen) return '<span class="trade-tag open">AÇIK</span>';
+    if (isOpen) return '<span class="trade-tag open">⏳ AÇIK</span>';
     const map = {
-      'take_profit': '<span class="trade-tag tp">TP ✅</span>',
-      'stop_loss': '<span class="trade-tag sl">SL ❌</span>',
-      'trailing_stop': '<span class="trade-tag ts">TS ↘️</span>',
-      'fixed_exit': '<span class="trade-tag fixed">SÜRE</span>',
+      'take_profit': '<span class="trade-tag tp">✅ Kâr Al</span>',
+      'stop_loss': '<span class="trade-tag sl">❌ Zarar Kes</span>',
+      'trailing_stop': '<span class="trade-tag ts">↘ İz Süren Stop</span>',
+      'fixed_exit': '<span class="trade-tag fixed">⏱ Süre Doldu</span>',
     };
     return map[reason] || `<span class="trade-tag">${reason || '?'}</span>`;
   }
 
+  summaryContainer.innerHTML = summaryHtml;
   container.innerHTML = `
     <table class="trade-table">
       <thead>
         <tr>
-          <th>Durum</th>
+          <th>Yön</th>
+          <th>Sonuç</th>
           <th>Coin</th>
           <th>Giriş</th>
-          <th>Çıkış</th>
-          <th>PnL</th>
+          <th>Çıkış / Şimdi</th>
+          <th>Net PnL</th>
           <th>Süre</th>
           <th>Deney</th>
         </tr>
       </thead>
       <tbody>
         ${allTrades.slice(0, 50).map(t => {
-          const pnl = t.pnlPercent;
+          const pnl = t.isOpen ? t.livePnl : t.pnlPercent;
           const pnlStr = pnl != null ? `${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%` : '-';
           const pnlClass = pnl != null ? (pnl >= 0 ? 'pnl-positive' : 'pnl-negative') : '';
+          const exitCell = t.isOpen
+            ? (t.livePrice != null ? `${fmtPrice(t.livePrice)}<span class="live-pnl">● canlı fiyat</span>` : '—')
+            : `${fmtPrice(t.exitPrice)}<br><span style="color:var(--text-dim);font-size:10px">${t.exitTime ? formatTime(t.exitTime) : ''}</span>`;
           return `
             <tr>
+              <td>${sideTag(t.side)}</td>
               <td>${reasonTag(t.exitReason, t.isOpen)}</td>
               <td class="trade-coin">${(t.coin || '').replace('USDT', '')}</td>
-              <td>${t.entryPrice?.toFixed(2) || '-'}<br><span style="color:var(--text-dim);font-size:10px">${formatTime(t.entryTime)}</span></td>
-              <td>${t.exitPrice?.toFixed(2) || '-'}<br><span style="color:var(--text-dim);font-size:10px">${t.exitTime ? formatTime(t.exitTime) : ''}</span></td>
-              <td class="${pnlClass}">${pnlStr}</td>
-              <td>${t.candlesSinceEntry || 0} mum</td>
-              <td class="trade-exp">${t.experimentName || '-'}</td>
+              <td>${fmtPrice(t.entryPrice)}<br><span style="color:var(--text-dim);font-size:10px">${formatTime(t.entryTime)}</span></td>
+              <td>${exitCell}</td>
+              <td class="${pnlClass}">${pnlStr}${t.isOpen && pnl != null ? '<span class="live-pnl">şu an kapansa</span>' : ''}</td>
+              <td>${fmtDuration(t.candlesSinceEntry)}</td>
+              <td class="trade-exp" title="${t.experimentName || ''}">${t.experimentName || '-'}</td>
             </tr>
           `;
         }).join('')}
@@ -975,18 +1087,19 @@ function renderJournal(entries) {
 // ─── Polling Loop ────────────────────────────────────────────────────────────
 
 async function refresh() {
-  const [assumptions, observations, knowledge, journal, experiments] = await Promise.all([
+  const [assumptions, observations, knowledge, journal, experiments, prices] = await Promise.all([
     fetchJSON('/api/organism/assumptions'),
     fetchJSON('/api/organism/observations'),
     fetchJSON('/api/organism/knowledge'),
     fetchJSON('/api/organism/journal'),
     fetchJSON('/api/organism/experiments'),
+    fetchJSON('/api/organism/prices'),
   ]);
 
   renderAssumptions(assumptions);
   renderObservations(observations);
   renderExperiments(experiments);
-  renderTradeLog(experiments);
+  renderTradeLog(experiments, prices || {});
   renderKnowledge(knowledge);
   renderJournal(journal);
 }

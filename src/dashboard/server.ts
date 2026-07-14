@@ -21,6 +21,29 @@ function json(res: ServerResponse, data: unknown, status = 200): void {
 	res.end(JSON.stringify(data));
 }
 
+// Canlı fiyat önbelleği — açık pozisyonların anlık PnL'i için (15 sn'de bir tazelenir)
+let priceCache: { data: Record<string, number>; fetchedAt: number } = { data: {}, fetchedAt: 0 };
+
+async function getPrices(): Promise<Record<string, number>> {
+	const now = Date.now();
+	if (now - priceCache.fetchedAt < 15_000 && Object.keys(priceCache.data).length > 0) {
+		return priceCache.data;
+	}
+	try {
+		const res = await fetch('https://api.binance.com/api/v3/ticker/price');
+		if (!res.ok) throw new Error(`HTTP ${res.status}`);
+		const list = (await res.json()) as { symbol: string; price: string }[];
+		const map: Record<string, number> = {};
+		for (const t of list) {
+			if (t.symbol.endsWith('USDT')) map[t.symbol] = parseFloat(t.price);
+		}
+		priceCache = { data: map, fetchedAt: now };
+	} catch (e) {
+		logError(`[Dashboard] Fiyat çekilemedi (önbellek kullanılıyor): ${e}`);
+	}
+	return priceCache.data;
+}
+
 export function startDashboardServer(port: number = 3000): any {
 	const wss = new WebSocketServer({ noServer: true });
 	const connectedClients = new Set<WebSocket>();
@@ -90,6 +113,14 @@ export function startDashboardServer(port: number = 3000): any {
 				}
 				return json(res, []);
 			} catch { return json(res, [], 500); }
+		}
+
+		// Canlı fiyatlar (açık pozisyon PnL'i için)
+		if (url === '/api/organism/prices') {
+			getPrices()
+				.then((prices) => json(res, prices))
+				.catch(() => json(res, {}, 500));
+			return;
 		}
 
 		// Experiments
