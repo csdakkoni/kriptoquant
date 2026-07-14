@@ -62,6 +62,7 @@ export interface PaperPosition {
 	candlesSinceEntry: number;
 	highSinceEntry: number;
 	lowSinceEntry: number;
+	lastTickTs?: number; // Son işlenen mumun zaman damgası — çift sayımı önler
 }
 
 export interface Experiment {
@@ -241,6 +242,11 @@ export class ExperimentRunner {
 	private experiments: Experiment[] = [];
 	private graph: KnowledgeGraph;
 	private tickCount = 0;
+	// Deney+coin başına son giriş değerlendirmesi yapılan mumun zaman damgası.
+	// KRİTİK: processTick, HERHANGİ bir coinin mum kapanışında çağrılır (10 coin
+	// = her 15dk'da ~10 çağrı). Bu kapı olmadan giriş zarı mum başına ~10 kez
+	// atılır (%5 ihtimal fiilen ~%40 olur) ve sayaçlar 10x şişer.
+	private lastEntryCandle = new Map<string, number>();
 
 	constructor(graph: KnowledgeGraph) {
 		this.graph = graph;
@@ -271,10 +277,14 @@ export class ExperimentRunner {
 
 				const latest = candles[candles.length - 1];
 
-				// Update open positions
+				// Update open positions (çıkış kontrolü idempotent — her çağrıda güvenli)
 				this.updatePositions(exp, coin, latest);
 
-				// Check entry
+				// Giriş değerlendirmesi: coin başına YENİ mumda yalnızca BİR kez
+				const entryKey = `${exp.id}:${coin}`;
+				if (this.lastEntryCandle.get(entryKey) === latest.timestamp) continue;
+				this.lastEntryCandle.set(entryKey, latest.timestamp);
+
 				if (!exp.positions.find(p => p.coin === coin && !p.exitPrice)) {
 					if (this.shouldEnter(exp, coin, candles, observations)) {
 						this.openPosition(exp, coin, latest);
@@ -296,8 +306,12 @@ export class ExperimentRunner {
 			case 'random':
 				return Math.random() < rule.probability;
 
-			case 'every_n':
-				return this.tickCount % rule.n === 0;
+			case 'every_n': {
+				// Global tickCount 10 coinin kapanışlarıyla şiştiği için kullanılmaz;
+				// mumun kendi 15dk periyot indeksi deterministik ve şişmez.
+				const latestTs = candles[candles.length - 1].timestamp;
+				return Math.floor(latestTs / 900_000) % rule.n === 0;
+			}
 
 			case 'on_observation':
 				return observations.some(o =>
@@ -364,6 +378,7 @@ export class ExperimentRunner {
 			candlesSinceEntry: 0,
 			highSinceEntry: tick.close,
 			lowSinceEntry: tick.close,
+			lastTickTs: tick.timestamp, // giriş mumu sayaca dahil edilmez
 		};
 		exp.positions.push(pos);
 
@@ -374,9 +389,15 @@ export class ExperimentRunner {
 		const openPos = exp.positions.filter(p => p.coin === coin && !p.exitPrice);
 
 		for (const pos of openPos) {
-			pos.candlesSinceEntry++;
-			if (tick.high > pos.highSinceEntry) (pos as any).highSinceEntry = tick.high;
-			if (tick.low < pos.lowSinceEntry) (pos as any).lowSinceEntry = tick.low;
+			// Mum sayacı ve high/low takibi yalnızca YENİ mumda ilerler —
+			// aynı mumun tekrar işlenmesi (diğer coinlerin kapanış tetiklemeleri)
+			// sayaçları şişirmez.
+			if (pos.lastTickTs !== tick.timestamp) {
+				(pos as any).lastTickTs = tick.timestamp;
+				pos.candlesSinceEntry++;
+				if (tick.high > pos.highSinceEntry) (pos as any).highSinceEntry = tick.high;
+				if (tick.low < pos.lowSinceEntry) (pos as any).lowSinceEntry = tick.low;
+			}
 
 			const shouldExit = this.checkExit(exp.exitRule, pos, tick);
 			if (shouldExit) {
