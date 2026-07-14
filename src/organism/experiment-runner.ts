@@ -70,6 +70,7 @@ export interface Experiment {
 	entryRule: EntryRule;
 	exitRule: ExitRule;
 	side?: 'long' | 'short';    // Pozisyon yönü (varsayılan: long). İki kanat dersi: ayıda long-only deney seti kör kalır.
+	promoted?: boolean;         // Evolver terfi kararı — kalıcı (restart'ta unutulmaz)
 	coins: string[];
 	status: ExperimentStatus;
 	startedAt: number;
@@ -450,7 +451,19 @@ export class ExperimentRunner {
 	}
 
 	addExperiment(exp: Experiment): void {
+		// İsim bazlı tekilleştirme: Evolver'ın restart sonrası aynı sentez/çaprazlama
+		// deneyini yeniden doğurmasını engeller.
+		const exists = this.experiments.some((e) => e.name === exp.name);
+		if (exists) {
+			log(`[EXPERIMENT] ⏭️  Atlandı (zaten mevcut): "${exp.name}"`);
+			return;
+		}
 		this.experiments.push(exp);
+		this.save();
+	}
+
+	/** Evolver kararlarını kalıcılaştırmak için dışarıdan çağrılabilir. */
+	persist(): void {
 		this.save();
 	}
 
@@ -469,9 +482,26 @@ export class ExperimentRunner {
 		this.save();
 	}
 
-	/** Eski state dosyalarına yeni zorunlu deneyleri (short kanat) ekler. */
+	/** Eski state dosyalarına yeni zorunlu deneyleri (short kanat) ekler ve
+	 *  restart kaynaklı mükerrer deneyleri temizler (fazla işlemlisi kalır). */
 	private migrate(): void {
 		let changed = false;
+
+		// Mükerrer isim temizliği
+		const byName = new Map<string, Experiment>();
+		for (const e of this.experiments) {
+			const prev = byName.get(e.name);
+			if (!prev) {
+				byName.set(e.name, e);
+			} else {
+				const keep = e.stats.totalTrades >= prev.stats.totalTrades ? e : prev;
+				byName.set(e.name, keep);
+				log(`[EXPERIMENT] 🧹 Mükerrer deney temizlendi: "${e.name}"`);
+				changed = true;
+			}
+		}
+		if (changed) this.experiments = [...byName.values()];
+
 		for (const shortExp of createShortExperiments()) {
 			const exists = this.experiments.some((e) => e.name === shortExp.name);
 			if (!exists) {

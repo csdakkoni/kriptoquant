@@ -134,7 +134,19 @@ export class Evolver {
 	constructor(
 		private graph: KnowledgeGraph,
 		private experimentRunner: ExperimentRunner,
-	) {}
+	) {
+		// Kalıcı alanlardan hafızayı geri yükle — restart sonrası aynı deneyi
+		// yeniden terfi ettirme/öldürme/sentezleme döngüsünü engeller.
+		for (const exp of experimentRunner.getExperiments()) {
+			if (exp.promoted) this.promotedExperiments.add(exp.id);
+			if (exp.status === 'failed') this.killedExperiments.add(exp.id);
+			if (exp.name.startsWith('[SYNTH]') || exp.name.startsWith('[CROSS]')) {
+				// İsim bazlı dedupe zaten addExperiment'te; burada kural anahtarını
+				// yeniden türetmek yerine sentezin varlığını isimle işaretliyoruz.
+				this.synthesizedRules.add(`name:${exp.name}`);
+			}
+		}
+	}
 
 	/**
 	 * Called periodically by the Assumption Killer.
@@ -221,6 +233,8 @@ export class Evolver {
 				stats.totalPnlPercent >= PROMOTE_THRESHOLD.minPnl
 			) {
 				this.promotedExperiments.add(exp.id);
+				(exp as any).promoted = true; // kalıcılaştır
+				this.experimentRunner.persist();
 
 				log('');
 				log('════════════════════════════════════════════════════════════');
@@ -242,6 +256,11 @@ export class Evolver {
 				stats.maxDrawdownPercent >= KILL_THRESHOLD.maxDrawdown
 			) {
 				this.killedExperiments.add(exp.id);
+				// Öldürülen deney gerçekten DURMALI — eski kod sadece not alıyordu,
+				// deney koşmaya devam ediyordu.
+				(exp as any).status = 'failed';
+				(exp as any).endedAt = Date.now();
+				this.experimentRunner.persist();
 
 				log('');
 				log(`💀 EXPERIMENT KILLED: "${exp.name}" — PnL: ${stats.totalPnlPercent.toFixed(2)}%, DD: ${stats.maxDrawdownPercent.toFixed(2)}%`);
