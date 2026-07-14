@@ -115,6 +115,17 @@ export function startDashboardServer(port: number = 3000): any {
 			} catch { return json(res, [], 500); }
 		}
 
+		// Gözlem Karnesi — gözlem tiplerinin sinyal kalitesi
+		if (url === '/api/organism/scoreboard') {
+			try {
+				const sbFile = join(ORGANISM_DIR, 'observation-scoreboard.json');
+				if (existsSync(sbFile)) {
+					return json(res, JSON.parse(readFileSync(sbFile, 'utf-8')));
+				}
+				return json(res, { pending: [], scores: {} });
+			} catch { return json(res, { pending: [], scores: {} }, 500); }
+		}
+
 		// Canlı fiyatlar (açık pozisyon PnL'i için)
 		if (url === '/api/organism/prices') {
 			getPrices()

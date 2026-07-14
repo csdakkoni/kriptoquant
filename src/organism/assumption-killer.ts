@@ -19,6 +19,7 @@ import { KnowledgeGraph } from './knowledge-graph.js';
 import { ResearchJournal } from './journal.js';
 import { ExperimentRunner } from './experiment-runner.js';
 import { Evolver } from './evolver.js';
+import { ObservationScoreboard } from './observation-scoreboard.js';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -41,6 +42,7 @@ export class AssumptionKiller {
 	private journal: ResearchJournal;
 	private experimentRunner: ExperimentRunner;
 	private evolver: Evolver;
+	private scoreboard: ObservationScoreboard;
 	private tickCount = 0;
 	private observationCount = 0;
 	private running = false;
@@ -50,6 +52,7 @@ export class AssumptionKiller {
 		this.journal = new ResearchJournal(this.graph);
 		this.experimentRunner = new ExperimentRunner(this.graph);
 		this.evolver = new Evolver(this.graph, this.experimentRunner);
+		this.scoreboard = new ObservationScoreboard();
 
 		// Initialize observers
 		this.observers = [
@@ -184,6 +187,14 @@ export class AssumptionKiller {
 			this.observationCount++;
 			this.graph.addObservation(obs);
 			log(`[${obs.type.toUpperCase()}] ${obs.description}`);
+		}
+
+		// Gözlem Karnesi: yeni gözlemleri kuyruğa al, olgunlaşan ufukları ölç
+		try {
+			if (observations.length > 0) this.scoreboard.record(observations, this.candleBuffers);
+			this.scoreboard.update(this.candleBuffers);
+		} catch (err) {
+			logError(`[Organism] Scoreboard error: ${err}`);
 		}
 
 		// Step 2: Feed observations + data to ALL assumption tests (parallel)

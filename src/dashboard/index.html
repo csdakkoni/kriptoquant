@@ -693,6 +693,24 @@ body::before {
       </div>
     </div>
 
+    <!-- Observation Scoreboard -->
+    <div class="card grid-full">
+      <div class="card-header">
+        <span class="card-title">Gözlem Karnesi — hangi gözlemci para eden sinyal üretiyor?</span>
+        <span class="card-icon">📊</span>
+      </div>
+      <div class="trade-hint">
+        💡 Her gözlem tipinin ardından fiyatın 1 saat / 4 saat / 24 saat sonra ne yaptığı otomatik ölçülür.
+        Ortalaması belirgin pozitif olan tip <b>sinyal adayı</b>, belirgin negatif olan <b>ters sinyal adayı</b>, sıfıra yakın olan <b>gürültüdür</b>.
+      </div>
+      <div id="scoreboardContainer">
+        <div class="empty">
+          <div class="empty-icon">🧮</div>
+          <div class="empty-text">Karne verisi birikiyor — ilk skorlar gözlemlerden 1 saat sonra düşer.</div>
+        </div>
+      </div>
+    </div>
+
     <!-- Experiments -->
     <div class="card grid-full">
       <div class="card-header">
@@ -1085,16 +1103,89 @@ function renderJournal(entries) {
   `).join('');
 }
 
+// ─── Render Observation Scoreboard ──────────────────────────────────────────
+
+const OBS_TYPE_META = {
+  'divergence':  { label: 'Divergence',  desc: 'Hacim-fiyat uyumsuzluğu' },
+  'silence':     { label: 'Silence',     desc: 'Volatilite sıkışması' },
+  'herd':        { label: 'Herd',        desc: 'Sürü hareketi (yüksek korelasyon)' },
+  'isolation':   { label: 'Isolation',   desc: 'Sürüden kopan coin' },
+  'surprise':    { label: 'Surprise',    desc: 'Ani >3σ hareket' },
+  'eruption':    { label: 'Eruption',    desc: 'Sessizlik sonrası patlama' },
+  'convergence': { label: 'Convergence', desc: 'Beklenmedik birlikte hareket' },
+  'echo':        { label: 'Echo',        desc: 'Geçmiş desenin tekrarı' },
+  'anomaly':     { label: 'Anomaly',     desc: 'Sınıflandırılamayan' },
+};
+const HORIZON_LABELS = { '4': '1 saat', '16': '4 saat', '96': '24 saat' };
+
+function scoreVerdict(avg, n) {
+  if (n < 20) return `<span style="color:var(--text-dim)">⏳ veri birikiyor (${n})</span>`;
+  if (avg >= 0.15) return '<span style="color:var(--accent-green)">✅ sinyal adayı</span>';
+  if (avg <= -0.15) return '<span style="color:var(--accent-amber)">🔄 ters sinyal adayı</span>';
+  return '<span style="color:var(--text-dim)">❌ gürültü</span>';
+}
+
+function renderScoreboard(sb) {
+  const container = document.getElementById('scoreboardContainer');
+  if (!sb || !sb.scores || Object.keys(sb.scores).length === 0) return;
+
+  const types = Object.keys(sb.scores);
+  const horizons = ['4', '16', '96'];
+
+  const rows = types.map(type => {
+    const meta = OBS_TYPE_META[type] || { label: type, desc: '' };
+    const cells = horizons.map(h => {
+      const c = sb.scores[type][h];
+      if (!c || c.n === 0) return '<td style="color:var(--text-dim)">—</td>';
+      const avg = c.sumRet / c.n;
+      const posPct = (c.pos / c.n) * 100;
+      const color = avg > 0.05 ? 'var(--accent-green)' : avg < -0.05 ? 'var(--accent-red)' : 'var(--text-dim)';
+      return `<td>
+        <span style="color:${color};font-weight:600">${avg >= 0 ? '+' : ''}${avg.toFixed(2)}%</span>
+        <span style="color:var(--text-dim);font-size:10px"><br>%${posPct.toFixed(0)} pozitif · ${c.n} ölçüm</span>
+      </td>`;
+    }).join('');
+
+    // Verdikt: 1 saatlik ufka göre (en likit sinyal penceresi)
+    const c1h = sb.scores[type]['4'];
+    const verdict = c1h && c1h.n > 0 ? scoreVerdict(c1h.sumRet / c1h.n, c1h.n) : '<span style="color:var(--text-dim)">—</span>';
+
+    return `<tr>
+      <td><span class="trade-coin">${meta.label}</span><br><span style="color:var(--text-dim);font-size:10px">${meta.desc}</span></td>
+      ${cells}
+      <td>${verdict}</td>
+    </tr>`;
+  }).join('');
+
+  container.innerHTML = `
+    <table class="trade-table">
+      <thead>
+        <tr>
+          <th>Gözlem Tipi</th>
+          <th>${HORIZON_LABELS['4']} sonra</th>
+          <th>${HORIZON_LABELS['16']} sonra</th>
+          <th>${HORIZON_LABELS['96']} sonra</th>
+          <th>Verdikt (1s)</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="trade-hint" style="margin-top:10px">
+      ⏳ Ölçüm bekleyen gözlem: <b>${(sb.pending || []).length}</b> · Verdikt için en az 20 ölçüm gerekir · Referans: %0.3 işlem maliyetini aşmayan ortalama, tek başına işlem sinyali olamaz.
+    </div>`;
+}
+
 // ─── Polling Loop ────────────────────────────────────────────────────────────
 
 async function refresh() {
-  const [assumptions, observations, knowledge, journal, experiments, prices] = await Promise.all([
+  const [assumptions, observations, knowledge, journal, experiments, prices, scoreboard] = await Promise.all([
     fetchJSON('/api/organism/assumptions'),
     fetchJSON('/api/organism/observations'),
     fetchJSON('/api/organism/knowledge'),
     fetchJSON('/api/organism/journal'),
     fetchJSON('/api/organism/experiments'),
     fetchJSON('/api/organism/prices'),
+    fetchJSON('/api/organism/scoreboard'),
   ]);
 
   renderAssumptions(assumptions);
@@ -1103,6 +1194,7 @@ async function refresh() {
   renderTradeLog(experiments, prices || {});
   renderKnowledge(knowledge);
   renderJournal(journal);
+  renderScoreboard(scoreboard);
 }
 
 // Initial load
