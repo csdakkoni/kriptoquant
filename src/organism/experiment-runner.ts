@@ -37,6 +37,8 @@ export type EntryRule =
 	| { type: 'on_observation'; observationType: string } // Enter when observer fires
 	| { type: 'price_cross_sma'; period: number }     // Enter on SMA cross (upward)
 	| { type: 'price_cross_sma_down'; period: number } // Enter on SMA cross (downward — short girişleri için)
+	| { type: 'dip_from_high'; lookback: number; dipPercent: number }   // Tepeden %X düşüş ANINDA gir (kesişim — swing dip)
+	| { type: 'rally_from_low'; lookback: number; rallyPercent: number } // Dipten %X yükseliş ANINDA gir (kesişim — rally fade short)
 	| { type: 'always_long' };                         // Always be in position
 
 export type ExitRule =
@@ -198,6 +200,30 @@ export function createShortExperiments(): Experiment[] {
 			side: 'short' as const,
 			coins,
 		},
+		// ── Swing ölçeği: büyük hedefler, maliyetin önemsizleştiği bölge ──
+		// Mikro deneylerde (%1-2 hedef) %0.3 maliyet kârın üçte birini yer;
+		// %5-6 hedefte %5'ini. Lab bulgusu: rally fade %5 short PF 1.109 (POZİTİF).
+		{
+			...base,
+			id: randomUUID(),
+			name: 'Swing Dip %5 → Hedef +%6 (Erdem ölçeği)',
+			hypothesis: '48s tepesinden %5 düşeni almak, büyük hedefle maliyeti önemsizleştirir',
+			entryRule: { type: 'dip_from_high', lookback: 192, dipPercent: 5 },
+			exitRule: { type: 'stop_and_target', stopPercent: 6, targetPercent: 6 },
+			coins,
+			maxDurationHours: 336, // swing işlemler günlerce sürer — 2 hafta pencere
+		},
+		{
+			...base,
+			id: randomUUID(),
+			name: 'Rally Fade %5 → SHORT Hedef -%5',
+			hypothesis: 'Ayıda dipten %5 sıçrayanı short\'lamak pozitif (lab: PF 1.109)',
+			entryRule: { type: 'rally_from_low', lookback: 192, rallyPercent: 5 },
+			exitRule: { type: 'stop_and_target', stopPercent: 5, targetPercent: 5 },
+			side: 'short' as const,
+			coins,
+			maxDurationHours: 336,
+		},
 	];
 }
 
@@ -235,7 +261,7 @@ export class ExperimentRunner {
 
 			// Check duration limit
 			if (Date.now() - exp.startedAt > exp.maxDurationHours * 60 * 60 * 1000) {
-				this.closeExperiment(exp);
+				this.closeExperiment(exp, ticks);
 				continue;
 			}
 
@@ -292,6 +318,28 @@ export class ExperimentRunner {
 				const prev = candles[candles.length - 2].close;
 				const curr = candles[candles.length - 1].close;
 				return prev > sma && curr <= sma;
+			}
+
+			case 'dip_from_high': {
+				// Kesişim semantiği: önceki mum çizginin ÜSTÜNDE, şimdiki ALTINDA olmalı.
+				// Böylece uzun düşüşte her mumda yeniden giriş yapılmaz (doğal re-arm).
+				if (candles.length < rule.lookback + 2) return false;
+				const window = candles.slice(-(rule.lookback + 1), -1);
+				const rollHigh = Math.max(...window.map(c => c.high));
+				const dipLine = rollHigh * (1 - rule.dipPercent / 100);
+				const prev = candles[candles.length - 2].close;
+				const curr = candles[candles.length - 1].close;
+				return prev > dipLine && curr <= dipLine;
+			}
+
+			case 'rally_from_low': {
+				if (candles.length < rule.lookback + 2) return false;
+				const window = candles.slice(-(rule.lookback + 1), -1);
+				const rollLow = Math.min(...window.map(c => c.low));
+				const rallyLine = rollLow * (1 + rule.rallyPercent / 100);
+				const prev = candles[candles.length - 2].close;
+				const curr = candles[candles.length - 1].close;
+				return prev < rallyLine && curr >= rallyLine;
 			}
 
 			case 'always_long':
@@ -428,8 +476,18 @@ export class ExperimentRunner {
 
 	// ─── Experiment Lifecycle ─────────────────────────────────────────
 
-	private closeExperiment(exp: Experiment): void {
-		// Close all open positions at market
+	private closeExperiment(exp: Experiment, ticks?: Map<string, MarketTick[]>): void {
+		// Süre dolduğunda açık pozisyonlar son bilinen fiyattan kapatılır —
+		// aksi halde istatistikler eksik kalır ve pozisyonlar zombiye döner.
+		if (ticks) {
+			for (const pos of [...exp.positions]) {
+				if (pos.exitPrice) continue;
+				const candles = ticks.get(pos.coin);
+				if (candles && candles.length > 0) {
+					this.closePosition(exp, pos, candles[candles.length - 1], 'experiment_end');
+				}
+			}
+		}
 		(exp as any).status = 'completed';
 		(exp as any).endedAt = Date.now();
 

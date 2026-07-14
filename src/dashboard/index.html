@@ -989,6 +989,7 @@ function renderTradeLog(experiments, prices) {
       'stop_loss': '<span class="trade-tag sl">❌ Zarar Kes</span>',
       'trailing_stop': '<span class="trade-tag ts">↘ İz Süren Stop</span>',
       'fixed_exit': '<span class="trade-tag fixed">⏱ Süre Doldu</span>',
+      'experiment_end': '<span class="trade-tag fixed">🏁 Deney Bitti</span>',
     };
     return map[reason] || `<span class="trade-tag">${reason || '?'}</span>`;
   }
