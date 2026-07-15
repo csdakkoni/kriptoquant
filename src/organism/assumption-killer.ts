@@ -46,6 +46,12 @@ export class AssumptionKiller {
 	private tickCount = 0;
 	private observationCount = 0;
 	private running = false;
+	// Gözlemciler 15dk'lık period başına BİR kez çalışır (10 coinin her kapanışında değil)
+	private lastObservationPeriod = 0;
+	// Aynı gözlemin (tip+coin seti) 2 saat içinde tekrar yayınlanmasını engeller
+	private obsCooldown = new Map<string, number>();
+	// Kanıt örneklemesi zaman bazlı — restart'a dayanıklı (süreç sayacı değil)
+	private lastEvidenceRunTs = 0;
 
 	constructor() {
 		this.graph = new KnowledgeGraph();
@@ -165,21 +171,39 @@ export class AssumptionKiller {
 		this.tickCount++;
 
 		// Run analysis on every candle close
-		this.runObservationCycle();
+		this.runObservationCycle(tick.timestamp);
 	}
 
 	// ─── Core Cycle ───────────────────────────────────────────────────────
 
-	private runObservationCycle(): void {
-		// Step 1: Observers produce observations
-		const observations: Observation[] = [];
-		for (const observer of this.observers) {
-			try {
-				const obs = observer.observe(this.candleBuffers);
-				observations.push(...obs);
-			} catch (err) {
-				logError(`[Organism] Observer ${observer.name} error: ${err}`);
+	private runObservationCycle(candleTs: number): void {
+		// Step 1: Observers produce observations — period başına BİR kez.
+		// (handleKline 10 coinin her kapanışında tetiklenir; gözlemciler durum
+		// bazlı olduğundan her çağrıda aynı gözlemi yeniden üretip akışı
+		// spamlıyordu.)
+		let observations: Observation[] = [];
+		const period = Math.floor(candleTs / 900_000); // 15dk period indeksi
+		if (period !== this.lastObservationPeriod) {
+			this.lastObservationPeriod = period;
+
+			for (const observer of this.observers) {
+				try {
+					const obs = observer.observe(this.candleBuffers);
+					observations.push(...obs);
+				} catch (err) {
+					logError(`[Organism] Observer ${observer.name} error: ${err}`);
+				}
 			}
+
+			// Tekrar filtresi: aynı tip+coin seti gözlem 8 period (2 saat) içinde
+			// yeniden yayınlanmaz — koşul sürüyor diye akış dolmasın.
+			observations = observations.filter((obs) => {
+				const key = `${obs.type}:${[...(obs.coins || [])].sort().slice(0, 3).join(',')}`;
+				const lastPeriod = this.obsCooldown.get(key) ?? -Infinity;
+				if (period - lastPeriod < 8) return false;
+				this.obsCooldown.set(key, period);
+				return true;
+			});
 		}
 
 		// Log observations
@@ -201,9 +225,12 @@ export class AssumptionKiller {
 		// İSTATİSTİK NOTU: Testler her mumda çalışırsa aynı 200 mumluk pencere
 		// tekrar tekrar ölçülür — 30 "kanıt" aslında ~1 bağımsız ölçümün kopyası
 		// olur ve verdiktler sahte örneklem büyüklüğüyle verilir (pseudo-replication).
-		// Bu yüzden testler ~4 saatte bir çalışır (10 coin × 16 mum ≈ 160 tick).
-		const EVIDENCE_SAMPLING_TICKS = 160;
-		if (this.tickCount % EVIDENCE_SAMPLING_TICKS === 0) {
+		// Bu yüzden testler ~4 saatte bir çalışır. Zaman bazlı ölçülür ki pm2
+		// restart'ları sayacı sıfırlayıp örneklemeyi susturamasın; ilk parti
+		// açılıştan hemen sonra toplanır (pano anında canlanır).
+		const EVIDENCE_INTERVAL_MS = 4 * 60 * 60 * 1000;
+		if (Date.now() - this.lastEvidenceRunTs >= EVIDENCE_INTERVAL_MS) {
+			this.lastEvidenceRunTs = Date.now();
 			for (const assumption of this.assumptions) {
 				if (assumption.status !== 'testing') continue;
 				const test = this.tests.get(assumption.id);
