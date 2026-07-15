@@ -91,6 +91,11 @@ export class AssumptionKiller {
 
 		this.printStatus();
 
+		// KRİTİK: Geçmiş mumları REST'ten yükle. Bu olmadan her restart sonrası
+		// tamponlar boş başlar ve organizma saatlerce kör kalır (gözlemciler
+		// 10-30, varsayım testleri 50, swing girişleri 192 mum ister).
+		await this.bootstrapHistory();
+
 		// Connect to Binance WebSocket for live data
 		this.connectWebSocket();
 
@@ -111,6 +116,38 @@ export class AssumptionKiller {
 		}
 		this.saveState();
 		log('[Organism] Assumption Killer stopped. State saved.');
+	}
+
+	// ─── History Bootstrap ────────────────────────────────────────────────
+
+	private async bootstrapHistory(): Promise<void> {
+		log(`[Organism] Geçmiş mumlar yükleniyor (${COINS.length} coin × 200 mum)...`);
+		for (const coin of COINS) {
+			try {
+				const res = await fetch(
+					`https://api.binance.com/api/v3/klines?symbol=${coin}&interval=${INTERVAL}&limit=201`,
+				);
+				if (!res.ok) throw new Error(`HTTP ${res.status}`);
+				const data = (await res.json()) as any[];
+				// Son eleman hâlâ AÇIK olan mumdur — atılır, yalnızca kapananlar alınır
+				const ticks: MarketTick[] = data.slice(0, -1).map((d) => ({
+					coin,
+					timestamp: Number(d[0]),
+					open: parseFloat(d[1]),
+					high: parseFloat(d[2]),
+					low: parseFloat(d[3]),
+					close: parseFloat(d[4]),
+					volume: parseFloat(d[5]),
+					interval: INTERVAL,
+				}));
+				this.candleBuffers.set(coin, ticks);
+				await new Promise((r) => setTimeout(r, 120)); // rate limit nezaketi
+			} catch (err) {
+				logError(`[Organism] ${coin} geçmişi yüklenemedi (canlı akıştan dolacak): ${err}`);
+			}
+		}
+		const loaded = [...this.candleBuffers.values()].filter((b) => b.length >= 50).length;
+		log(`[Organism] ✓ Bootstrap tamam: ${loaded}/${COINS.length} coin hazır. Gözlemciler ve testler ANINDA aktif.`);
 	}
 
 	// ─── WebSocket ────────────────────────────────────────────────────────
@@ -160,10 +197,15 @@ export class AssumptionKiller {
 			interval: INTERVAL,
 		};
 
-		// Add to buffer
+		// Add to buffer — bootstrap'la çakışan aynı mum güncellenir, eklenmez
 		if (!this.candleBuffers.has(coin)) this.candleBuffers.set(coin, []);
 		const buffer = this.candleBuffers.get(coin)!;
-		buffer.push(tick);
+		const last = buffer[buffer.length - 1];
+		if (last && last.timestamp === tick.timestamp) {
+			buffer[buffer.length - 1] = tick;
+		} else {
+			buffer.push(tick);
+		}
 
 		// Keep last 200 candles per coin
 		if (buffer.length > 200) buffer.splice(0, buffer.length - 200);
