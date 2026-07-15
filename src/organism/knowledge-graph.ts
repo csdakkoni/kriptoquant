@@ -19,12 +19,55 @@ interface GraphData {
 	edges: KnowledgeEdge[];
 }
 
+const MAX_OBSERVATION_NODES = 2000; // grafik sınırsız büyümesin
+const DEDUP_WINDOW_MS = 2 * 60 * 60 * 1000; // aynı içerik 2 saat içinde tek sayılır
+
 export class KnowledgeGraph {
 	private nodes: Map<string, KnowledgeNode> = new Map();
 	private edges: KnowledgeEdge[] = [];
+	private saveTimer: NodeJS.Timeout | null = null;
 
 	constructor() {
 		this.load();
+		this.cleanupOnLoad();
+	}
+
+	/**
+	 * Açılışta bir kez: eski gözlemci-spam döneminden kalan mükerrer gözlemleri
+	 * temizler (aynı içerik, 2 saatlik pencerede → ilki kalır) ve gözlem sayısını
+	 * tavanla sınırlar. İç görüler ve sorular asla silinmez.
+	 */
+	private cleanupOnLoad(): void {
+		const observations = [...this.nodes.values()]
+			.filter((n) => n.type === 'observation')
+			.sort((a, b) => a.timestamp - b.timestamp);
+
+		const toDelete = new Set<string>();
+		const lastSeen = new Map<string, number>();
+
+		for (const n of observations) {
+			const kept = lastSeen.get(n.content);
+			if (kept !== undefined && n.timestamp - kept < DEDUP_WINDOW_MS) {
+				toDelete.add(n.id);
+			} else {
+				lastSeen.set(n.content, n.timestamp);
+			}
+		}
+
+		// Tavan: dedup sonrası hâlâ fazlaysa en eskiler düşer
+		const surviving = observations.filter((n) => !toDelete.has(n.id));
+		if (surviving.length > MAX_OBSERVATION_NODES) {
+			for (const n of surviving.slice(0, surviving.length - MAX_OBSERVATION_NODES)) {
+				toDelete.add(n.id);
+			}
+		}
+
+		if (toDelete.size === 0) return;
+
+		for (const id of toDelete) this.nodes.delete(id);
+		this.edges = this.edges.filter((e) => !toDelete.has(e.from) && !toDelete.has(e.to));
+		this.flush();
+		console.log(`[KnowledgeGraph] 🧹 ${toDelete.size} mükerrer/eski gözlem düğümü temizlendi.`);
 	}
 
 	// ─── Add ──────────────────────────────────────────────────────────────
@@ -165,7 +208,20 @@ export class KnowledgeGraph {
 		}
 	}
 
+	/**
+	 * Yazmayı 5 sn'lik pencereyle toparlar — her gözlemde tüm grafiği senkron
+	 * yazmak, dosya büyüdükçe event loop'u boğar.
+	 */
 	private save(): void {
+		if (this.saveTimer) return;
+		this.saveTimer = setTimeout(() => {
+			this.saveTimer = null;
+			this.flush();
+		}, 5000);
+		if (typeof this.saveTimer.unref === 'function') this.saveTimer.unref();
+	}
+
+	private flush(): void {
 		if (!existsSync(GRAPH_DIR)) mkdirSync(GRAPH_DIR, { recursive: true });
 		const data: GraphData = {
 			nodes: [...this.nodes.values()],
