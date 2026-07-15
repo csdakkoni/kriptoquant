@@ -1363,9 +1363,17 @@ ${sbRows ? `<h2>📊 Gözlem Karnesi (4 Saat Sonrası)</h2>
 <scr` + `ipt>window.onload = () => setTimeout(() => window.print(), 500);<\/scr` + `ipt>
 </body></html>`;
 
-    const w = window.open('', '_blank');
-    w.document.write(html);
-    w.document.close();
+    // Direct download as HTML file
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const dateStr = new Date().toISOString().slice(0,10);
+    a.href = url;
+    a.download = `kriptoquant-rapor-${dateStr}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
 
   } catch (err) {
     alert('Rapor oluşturulamadı: ' + err.message);
