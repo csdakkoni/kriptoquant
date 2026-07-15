@@ -519,6 +519,17 @@ body::before {
   font-weight: 600;
   color: var(--text-primary);
 }
+.coin-link {
+  color: var(--accent-purple);
+  text-decoration: none;
+  font-weight: 600;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+.coin-link:hover {
+  color: var(--accent-blue);
+  text-decoration: underline;
+}
 .trade-open { color: var(--accent-cyan); }
 .trade-closed { color: var(--text-dim); }
 .pnl-positive { color: var(--accent-green); font-weight: 600; }
@@ -1047,7 +1058,7 @@ function renderTradeLog(experiments, prices) {
             <tr>
               <td>${sideTag(t.side)}</td>
               <td>${reasonTag(t.exitReason, t.isOpen)}</td>
-              <td class="trade-coin">${(t.coin || '').replace('USDT', '')}</td>
+              <td><a class="coin-link" href="https://www.binance.com/tr/trade/${(t.coin || '').replace('USDT', '')}_USDT" target="_blank">${(t.coin || '').replace('USDT', '')}</a></td>
               <td>${fmtPrice(t.entryPrice)}<br><span style="color:var(--text-dim);font-size:10px">${formatTime(t.entryTime)}</span></td>
               <td>${exitCell}</td>
               <td class="${pnlClass}">${pnlStr}${t.isOpen && pnl != null ? '<span class="live-pnl">şu an kapansa</span>' : ''}</td>
