@@ -601,6 +601,7 @@ body::before {
   box-shadow: 0 4px 16px rgba(99,102,241,0.4);
 }
 .report-btn:active { transform: scale(0.97); }
+a.report-btn { text-decoration: none; }
 .header-right { display: flex; align-items: center; gap: 14px; }
 </style>
 </head>
@@ -615,7 +616,7 @@ body::before {
     </div>
   </div>
   <div class="header-right">
-    <button class="report-btn" onclick="generateReport()">📄 Rapor İndir</button>
+    <a href="/rapor" target="_blank" class="report-btn">📄 Rapor İndir</a>
     <div class="status-badge" id="statusBadge">
       <div class="status-dot"></div>
       <span>Organism Active</span>
