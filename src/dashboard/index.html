@@ -1058,7 +1058,7 @@ function renderTradeLog(experiments, prices) {
             <tr>
               <td>${sideTag(t.side)}</td>
               <td>${reasonTag(t.exitReason, t.isOpen)}</td>
-              <td><a class="coin-link" href="https://www.binance.com/tr/trade/${(t.coin || '').replace('USDT', '')}_USDT" target="_blank">${(t.coin || '').replace('USDT', '')}</a></td>
+              <td><a class="coin-link" href="https://www.binance.com/en/trade/${(t.coin || '').replace('USDT', '')}_USDT" target="_blank">${(t.coin || '').replace('USDT', '')}</a></td>
               <td>${fmtPrice(t.entryPrice)}<br><span style="color:var(--text-dim);font-size:10px">${formatTime(t.entryTime)}</span></td>
               <td>${exitCell}</td>
               <td class="${pnlClass}">${pnlStr}${t.isOpen && pnl != null ? '<span class="live-pnl">şu an kapansa</span>' : ''}</td>
