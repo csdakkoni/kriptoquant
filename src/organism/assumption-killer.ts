@@ -285,7 +285,7 @@ export class AssumptionKiller {
 			this.lastEvidenceRunTs = Date.now();
 			for (const assumption of this.assumptions) {
 				if (assumption.status !== 'testing') continue;
-				const test = this.tests.get(assumption.id);
+				const test = this.findTest(assumption.id);
 				if (!test) continue;
 				try {
 					const evidence = test.evaluate(observations, this.candleBuffers);
@@ -329,6 +329,20 @@ export class AssumptionKiller {
 		if (this.tickCount % 50 === 0) {
 			this.printStatus();
 		}
+	}
+
+	/**
+	 * Varsayım kimliğine test eşler. Evrimle doğan varsayımların kimliklerinde
+	 * zaman damgası eki vardır (ör. "btc-leads-alts-1752...") — önek eşleşmesi
+	 * olmadan bu varsayımlar test edilemeden +0/-0'da zombi kalır.
+	 */
+	private findTest(assumptionId: string): AssumptionTest | undefined {
+		const direct = this.tests.get(assumptionId);
+		if (direct) return direct;
+		for (const [id, test] of this.tests) {
+			if (assumptionId.startsWith(`${id}-`) || assumptionId.startsWith(id)) return test;
+		}
+		return undefined;
 	}
 
 	private checkVerdict(assumption: Assumption): void {
@@ -426,6 +440,9 @@ export class AssumptionKiller {
 		newAssumptions.push({ ...base, ...mutation });
 
 		for (const a of newAssumptions) {
+			// Aynı İFADEYLE bir varsayım zaten varsa yeniden doğurma (mükerrer önlemi)
+			const exists = this.assumptions.some((x) => x.statement === a.statement);
+			if (exists) continue;
 			this.assumptions.push(a);
 			log(`[EVOLUTION] 🧬 New assumption born: "${a.statement}"`);
 		}
@@ -439,6 +456,23 @@ export class AssumptionKiller {
 		if (existsSync(STATE_FILE)) {
 			try {
 				this.assumptions = JSON.parse(readFileSync(STATE_FILE, 'utf-8'));
+				// Tek seferlik temizlik: aynı ifadeli mükerrer varsayımlardan
+				// kanıtı çok olanı tut (eski evolve() dedupe'suz dönemin kalıntısı)
+				const byStatement = new Map<string, Assumption>();
+				let removed = 0;
+				for (const a of this.assumptions) {
+					const prev = byStatement.get(a.statement);
+					if (!prev) byStatement.set(a.statement, a);
+					else {
+						byStatement.set(a.statement, (a.evidence?.length || 0) >= (prev.evidence?.length || 0) ? a : prev);
+						removed++;
+					}
+				}
+				if (removed > 0) {
+					this.assumptions = [...byStatement.values()];
+					log(`[Organism] 🧹 ${removed} mükerrer varsayım temizlendi.`);
+					this.saveState();
+				}
 				return;
 			} catch {}
 		}

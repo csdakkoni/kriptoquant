@@ -289,6 +289,395 @@ export class ExitBeatsEntryTest implements AssumptionTest {
 	}
 }
 
+// ─── Ek yardımcılar ─────────────────────────────────────────────────────────
+
+function stddev(arr: number[]): number {
+	if (arr.length < 2) return 0;
+	const m = mean(arr);
+	return Math.sqrt(arr.reduce((s, v) => s + (v - m) ** 2, 0) / arr.length);
+}
+
+function absReturns(candles: MarketTick[]): number[] {
+	return returns(candles).map(Math.abs);
+}
+
+// ─── Mean Reversion ("trend yoktur"un vârisi) ───────────────────────────────
+// Null: fiyat rastgele yürür. Negatif lag-1 otokorelasyon = ortalamaya dönüş.
+
+export class MeanReversionTest implements AssumptionTest {
+	readonly assumptionId = 'mean-reversion';
+
+	evaluate(_o: Observation[], ticks: Map<string, MarketTick[]>): Evidence[] {
+		const evidence: Evidence[] = [];
+		for (const [coin, candles] of ticks) {
+			if (candles.length < 60) continue;
+			const ac1 = autocorrelation(returns(candles), 1);
+			if (isNaN(ac1)) continue;
+			evidence.push({
+				timestamp: Date.now(),
+				supports: ac1 < -0.05,
+				strength: Math.min(Math.abs(ac1) * 5, 1),
+				description: `${coin}: lag-1 otokorelasyon ${ac1.toFixed(3)} — ${ac1 < -0.05 ? 'ortalamaya dönüş izi var' : 'dönüş izi yok'}`,
+				data: { coin, ac1 },
+			});
+		}
+		return evidence;
+	}
+}
+
+// ─── Volatilite Kümelenmesi ─────────────────────────────────────────────────
+// Null: volatilite rastgeledir. |getiri| serisinin otokorelasyonu kümelenmenin imzasıdır.
+
+export class VolatilityClustersTest implements AssumptionTest {
+	readonly assumptionId = 'volatility-clusters';
+
+	evaluate(_o: Observation[], ticks: Map<string, MarketTick[]>): Evidence[] {
+		const evidence: Evidence[] = [];
+		for (const [coin, candles] of ticks) {
+			if (candles.length < 60) continue;
+			const acAbs = autocorrelation(absReturns(candles), 1);
+			if (isNaN(acAbs)) continue;
+			evidence.push({
+				timestamp: Date.now(),
+				supports: acAbs > 0.15,
+				strength: Math.min(Math.abs(acAbs) * 3, 1),
+				description: `${coin}: |getiri| otokorelasyonu ${acAbs.toFixed(3)} — ${acAbs > 0.15 ? 'volatilite kümeleniyor' : 'kümelenme zayıf'}`,
+				data: { coin, acAbs },
+			});
+		}
+		return evidence;
+	}
+}
+
+// ─── Büyük Hareket Tersine Döner mi? ────────────────────────────────────────
+// Null: 2σ üzeri hareket sonrası yön rastgeledir.
+
+export class BigMoveReversalTest implements AssumptionTest {
+	readonly assumptionId = 'big-move-reversal';
+
+	evaluate(_o: Observation[], ticks: Map<string, MarketTick[]>): Evidence[] {
+		const evidence: Evidence[] = [];
+		for (const [coin, candles] of ticks) {
+			if (candles.length < 80) continue;
+			const r = returns(candles);
+			const sigma = stddev(r);
+			if (sigma === 0) continue;
+
+			let events = 0, reversals = 0;
+			for (let i = 20; i < r.length - 4; i++) {
+				if (Math.abs(r[i]) > 2 * sigma) {
+					events++;
+					const fwd = (candles[i + 1 + 4].close - candles[i + 1].close) / candles[i + 1].close;
+					if (Math.sign(fwd) === -Math.sign(r[i])) reversals++;
+				}
+			}
+			if (events < 5) continue;
+			const ratio = reversals / events;
+			evidence.push({
+				timestamp: Date.now(),
+				supports: ratio > 0.55,
+				strength: Math.min(Math.abs(ratio - 0.5) * 4, 1),
+				description: `${coin}: ${events} büyük hareketin %${(ratio * 100).toFixed(0)}'i 1 saat içinde tersine döndü`,
+				data: { coin, events, reversalRatio: ratio },
+			});
+		}
+		return evidence;
+	}
+}
+
+// ─── Hacim Fiyatı Önceden Haber Verir mi? ──────────────────────────────────
+// Null: hacim ve gelecek hareket ilişkisizdir. Test: corr(hacim_t, |getiri_{t+1}|).
+
+export class VolumePredictsTest implements AssumptionTest {
+	constructor(readonly assumptionId: string = 'volume-predicts') {}
+
+	evaluate(_o: Observation[], ticks: Map<string, MarketTick[]>): Evidence[] {
+		const evidence: Evidence[] = [];
+		for (const [coin, candles] of ticks) {
+			if (candles.length < 60) continue;
+			const vols = candles.map((c) => c.volume);
+			const r = returns(candles); // r[i] = candles[i]→[i+1]
+			const x: number[] = [], y: number[] = [];
+			for (let i = 1; i < r.length; i++) {
+				x.push(vols[i]);
+				y.push(Math.abs(r[i])); // hacim_i → |getiri sonrası|
+			}
+			const corr = pearson(x, y);
+			if (isNaN(corr)) continue;
+			evidence.push({
+				timestamp: Date.now(),
+				supports: corr > 0.1,
+				strength: Math.min(Math.abs(corr) * 3, 1),
+				description: `${coin}: hacim→sonraki |getiri| korelasyonu ${corr.toFixed(3)} — ${corr > 0.1 ? 'hacim habercilik ediyor' : 'öngörü zayıf'}`,
+				data: { coin, corr },
+			});
+		}
+		return evidence;
+	}
+}
+
+// ─── Gece Saatleri Daha Öngörülebilir mi? ──────────────────────────────────
+// Null: saat dilimi öngörülebilirliği etkilemez. Ölçü: |lag-1 otokorelasyon|
+// gece (UTC 0-8) vs gündüz.
+
+export class NightMovesTest implements AssumptionTest {
+	readonly assumptionId = 'night-moves';
+
+	evaluate(_o: Observation[], ticks: Map<string, MarketTick[]>): Evidence[] {
+		const evidence: Evidence[] = [];
+		for (const [coin, candles] of ticks) {
+			if (candles.length < 120) continue;
+			const night: number[] = [], day: number[] = [];
+			for (let i = 1; i < candles.length; i++) {
+				const ret = (candles[i].close - candles[i - 1].close) / candles[i - 1].close;
+				const h = new Date(candles[i].timestamp).getUTCHours();
+				(h < 8 ? night : day).push(ret);
+			}
+			if (night.length < 30 || day.length < 30) continue;
+			const acN = Math.abs(autocorrelation(night, 1));
+			const acD = Math.abs(autocorrelation(day, 1));
+			if (isNaN(acN) || isNaN(acD)) continue;
+			const supports = acN > acD * 1.3 && acN > 0.08;
+			evidence.push({
+				timestamp: Date.now(),
+				supports,
+				strength: Math.min(Math.abs(acN - acD) * 5, 1),
+				description: `${coin}: öngörülebilirlik gece ${acN.toFixed(3)} vs gündüz ${acD.toFixed(3)} — ${supports ? 'gece daha yapısal' : 'fark yok'}`,
+				data: { coin, nightAc: acN, dayAc: acD },
+			});
+		}
+		return evidence;
+	}
+}
+
+// ─── Haftanın Günü Etkisi (Pazartesi / Hafta sonu) ─────────────────────────
+// Null: gün, getiri davranışını etkilemez. Parametrik: hedef gün kümesi vs kalanlar.
+// 50 saatlik tamponda hedef gün her zaman yoktur — kanıt sadece veri varken üretilir
+// (haftalar içinde birikir).
+
+export class DayOfWeekTest implements AssumptionTest {
+	constructor(
+		readonly assumptionId: string,
+		private targetDays: number[], // UTC: 0=Pazar ... 6=Cumartesi
+		private label: string,
+	) {}
+
+	evaluate(_o: Observation[], ticks: Map<string, MarketTick[]>): Evidence[] {
+		// Coin bazında değil havuzda ölç — günlük etki piyasa genelidir
+		const target: number[] = [], rest: number[] = [];
+		for (const [, candles] of ticks) {
+			for (let i = 1; i < candles.length; i++) {
+				const ret = (candles[i].close - candles[i - 1].close) / candles[i - 1].close;
+				const d = new Date(candles[i].timestamp).getUTCDay();
+				(this.targetDays.includes(d) ? target : rest).push(ret);
+			}
+		}
+		if (target.length < 50 || rest.length < 100) return [];
+		const tAbs = mean(target.map(Math.abs));
+		const rAbs = mean(rest.map(Math.abs));
+		const ratio = rAbs > 0 ? tAbs / rAbs : 1;
+		const supports = Math.abs(ratio - 1) > 0.25;
+		return [{
+			timestamp: Date.now(),
+			supports,
+			strength: Math.min(Math.abs(ratio - 1) * 2, 1),
+			description: `${this.label}: ort. |getiri| oranı ${ratio.toFixed(2)}x (hedef ${target.length}, diğer ${rest.length} mum) — ${supports ? 'davranış farklı' : 'fark yok'}`,
+			data: { ratio, targetN: target.length, restN: rest.length },
+		}];
+	}
+}
+
+// ─── Yuvarlak Sayılar Destek/Direnç mi? ────────────────────────────────────
+// Null: yuvarlak seviyelerin etkisi yoktur. Test: yuvarlak seviyeye yakın
+// kapanışlardan sonra hareket, uzak olanlara göre daha mı küçük (fiyat yapışıyor)?
+
+export class RoundNumbersTest implements AssumptionTest {
+	readonly assumptionId = 'round-numbers-matter';
+
+	evaluate(_o: Observation[], ticks: Map<string, MarketTick[]>): Evidence[] {
+		const evidence: Evidence[] = [];
+		for (const [coin, candles] of ticks) {
+			if (candles.length < 80) continue;
+			const near: number[] = [], far: number[] = [];
+			for (let i = 0; i < candles.length - 1; i++) {
+				const p = candles[i].close;
+				if (p <= 0) continue;
+				// 2 anlamlı basamağa yuvarlanmış en yakın seviye (ör. 64000, 1.10, 0.075)
+				const mag = 10 ** (Math.floor(Math.log10(p)) - 1);
+				const level = Math.round(p / mag) * mag;
+				const distPct = Math.abs(p - level) / p;
+				const nextAbs = Math.abs((candles[i + 1].close - p) / p);
+				(distPct < 0.0015 ? near : far).push(nextAbs);
+			}
+			if (near.length < 15 || far.length < 30) continue;
+			const ratio = mean(far) > 0 ? mean(near) / mean(far) : 1;
+			const supports = ratio < 0.8; // yuvarlak seviyede hareket sönüyor = etki var
+			evidence.push({
+				timestamp: Date.now(),
+				supports,
+				strength: Math.min(Math.abs(1 - ratio) * 2, 1),
+				description: `${coin}: yuvarlak seviye yakınında sonraki hareket ${ratio.toFixed(2)}x — ${supports ? 'fiyat yapışıyor (destek/direnç izi)' : 'etki yok'}`,
+				data: { coin, ratio, nearN: near.length },
+			});
+		}
+		return evidence;
+	}
+}
+
+// ─── Piyasa Tuzak Kurar mı? (Whipsaw) ──────────────────────────────────────
+// Null: kırılımlar rastgele başarılıdır. Test: 20-mum tepe kırılımlarının
+// kaçı 8 mum içinde kırılım seviyesinin altına geri döner (boğa tuzağı)?
+
+export class WhipsawCycleTest implements AssumptionTest {
+	readonly assumptionId = 'whipsaw-cycle';
+
+	evaluate(_o: Observation[], ticks: Map<string, MarketTick[]>): Evidence[] {
+		const evidence: Evidence[] = [];
+		for (const [coin, candles] of ticks) {
+			if (candles.length < 80) continue;
+			let breakouts = 0, traps = 0;
+			for (let i = 20; i < candles.length - 8; i++) {
+				const priorHigh = Math.max(...candles.slice(i - 20, i).map((c) => c.high));
+				if (candles[i].close > priorHigh) {
+					breakouts++;
+					const trapped = candles.slice(i + 1, i + 9).some((c) => c.close < priorHigh);
+					if (trapped) traps++;
+					i += 8; // aynı kırılımı tekrar sayma
+				}
+			}
+			if (breakouts < 4) continue;
+			const ratio = traps / breakouts;
+			evidence.push({
+				timestamp: Date.now(),
+				supports: ratio > 0.6,
+				strength: Math.min(Math.abs(ratio - 0.5) * 3, 1),
+				description: `${coin}: ${breakouts} kırılımın %${(ratio * 100).toFixed(0)}'i tuzak çıktı (8 mumda geri döndü)`,
+				data: { coin, breakouts, trapRatio: ratio },
+			});
+		}
+		return evidence;
+	}
+}
+
+// ─── BTC Altları Yönlendirir mi? ───────────────────────────────────────────
+// Null: lider-takipçi ilişkisi yoktur. Test: corr(btc_t, alt_{t+1}) vs corr(alt_t, btc_{t+1}).
+
+export class BtcLeadsAltsTest implements AssumptionTest {
+	readonly assumptionId = 'btc-leads-alts';
+
+	evaluate(_o: Observation[], ticks: Map<string, MarketTick[]>): Evidence[] {
+		const evidence: Evidence[] = [];
+		const btc = ticks.get('BTCUSDT');
+		if (!btc || btc.length < 60) return evidence;
+		const btcR = returns(btc);
+
+		for (const [coin, candles] of ticks) {
+			if (coin === 'BTCUSDT' || candles.length < 60) continue;
+			const altR = returns(candles);
+			const n = Math.min(btcR.length, altR.length);
+			if (n < 40) continue;
+			const b = btcR.slice(-n), a = altR.slice(-n);
+			const lead = pearson(b.slice(0, -1), a.slice(1)); // BTC bugün → alt yarın
+			const lag = pearson(a.slice(0, -1), b.slice(1)); // alt bugün → BTC yarın
+			if (isNaN(lead) || isNaN(lag)) continue;
+			const supports = lead > lag + 0.05 && lead > 0.1;
+			evidence.push({
+				timestamp: Date.now(),
+				supports,
+				strength: Math.min(Math.abs(lead - lag) * 4, 1),
+				description: `BTC→${coin.replace('USDT', '')} öncülük ${lead.toFixed(3)} vs ters yön ${lag.toFixed(3)} — ${supports ? 'BTC yönlendiriyor' : 'öncülük zayıf'}`,
+				data: { coin, lead, lag },
+			});
+		}
+		return evidence;
+	}
+}
+
+// ─── Sessizlik Fırtına Habercisi mi? ───────────────────────────────────────
+// Null: düşük volatilite sonrası hareket normaldir. Test: sıkışma anlarını bul,
+// sonraki 8 mumluk |hareket| baseline'ın üstünde mi?
+
+export class SilenceStormTest implements AssumptionTest {
+	readonly assumptionId = 'silence-before-storm';
+
+	evaluate(_o: Observation[], ticks: Map<string, MarketTick[]>): Evidence[] {
+		const evidence: Evidence[] = [];
+		for (const [coin, candles] of ticks) {
+			if (candles.length < 100) continue;
+			const r = returns(candles);
+
+			// Baseline: rastgele 8-mumluk |kümülatif hareket|
+			const baseMoves: number[] = [];
+			for (let i = 30; i < r.length - 8; i += 4) {
+				baseMoves.push(Math.abs((candles[i + 9].close - candles[i + 1].close) / candles[i + 1].close));
+			}
+			const baseline = mean(baseMoves);
+			if (baseline === 0) continue;
+
+			let events = 0, sumRatio = 0;
+			for (let i = 30; i < r.length - 8; i++) {
+				const recentVol = stddev(r.slice(i - 10, i));
+				const histVol = stddev(r.slice(i - 30, i - 10));
+				if (histVol > 0 && recentVol < 0.4 * histVol) {
+					events++;
+					const move = Math.abs((candles[i + 9].close - candles[i + 1].close) / candles[i + 1].close);
+					sumRatio += move / baseline;
+					i += 8;
+				}
+			}
+			if (events < 3) continue;
+			const avgRatio = sumRatio / events;
+			evidence.push({
+				timestamp: Date.now(),
+				supports: avgRatio > 1.25,
+				strength: Math.min(Math.abs(avgRatio - 1), 1),
+				description: `${coin}: ${events} sessizlik sonrası hareket baseline'ın ${avgRatio.toFixed(2)}x'i — ${avgRatio > 1.25 ? 'fırtına izi var' : 'haberci değil'}`,
+				data: { coin, events, avgRatio },
+			});
+		}
+		return evidence;
+	}
+}
+
+// ─── Pozisyon Boyutu Önemli mi? ────────────────────────────────────────────
+// Null: sabit ve volatiliteye göre ölçeklenmiş boyut aynı sonucu verir.
+// Test: aynı girişlerle iki boyutlama simüle edilir; vol-hedefleme dalgalanmayı
+// belirgin düşürüyorsa boyut önemlidir.
+
+export class PositionSizingTest implements AssumptionTest {
+	readonly assumptionId = 'position-sizing-matters';
+
+	evaluate(_o: Observation[], ticks: Map<string, MarketTick[]>): Evidence[] {
+		const evidence: Evidence[] = [];
+		for (const [coin, candles] of ticks) {
+			if (candles.length < 100) continue;
+			const r = returns(candles);
+			const fixed: number[] = [], scaled: number[] = [];
+			for (let i = 30; i < r.length - 5; i += 10) {
+				const tradeRet = (candles[i + 6].close - candles[i + 1].close) / candles[i + 1].close;
+				const recentVol = stddev(r.slice(i - 20, i));
+				const targetVol = 0.004; // 15m için ~%0.4 hedef volatilite
+				const size = recentVol > 0 ? Math.min(Math.max(targetVol / recentVol, 0.5), 2) : 1;
+				fixed.push(tradeRet);
+				scaled.push(tradeRet * size);
+			}
+			if (fixed.length < 6) continue;
+			const sF = stddev(fixed), sS = stddev(scaled);
+			if (sF === 0) continue;
+			const ratio = sS / sF;
+			const supports = ratio < 0.85; // vol-hedefleme dalgalanmayı düşürüyor
+			evidence.push({
+				timestamp: Date.now(),
+				supports,
+				strength: Math.min(Math.abs(1 - ratio) * 2, 1),
+				description: `${coin}: vol-hedefli boyutla dalgalanma ${ratio.toFixed(2)}x — ${supports ? 'boyutlama fark yaratıyor' : 'fark zayıf'}`,
+				data: { coin, ratio },
+			});
+		}
+		return evidence;
+	}
+}
+
 /** All available assumption tests */
 export function createAllTests(): AssumptionTest[] {
 	return [
@@ -297,5 +686,19 @@ export function createAllTests(): AssumptionTest[] {
 		new EntrySignalMattersTest(),
 		new TimeframeMattersTest(),
 		new ExitBeatsEntryTest(),
+		// Zombi aşısı: evrimle doğan/paralel varsayımların testleri
+		new MeanReversionTest(),
+		new VolatilityClustersTest(),
+		new BigMoveReversalTest(),
+		new VolumePredictsTest('volume-predicts'), // mutasyon kimliği
+		new VolumePredictsTest('volume-spike-predictive'), // varsayılan kimlik
+		new NightMovesTest(),
+		new DayOfWeekTest('monday-effect', [1], 'Pazartesi vs diğer günler'),
+		new DayOfWeekTest('weekend-different', [0, 6], 'Hafta sonu vs hafta içi'),
+		new RoundNumbersTest(),
+		new WhipsawCycleTest(),
+		new BtcLeadsAltsTest(),
+		new SilenceStormTest(),
+		new PositionSizingTest(),
 	];
 }

@@ -199,6 +199,12 @@ export function startDashboardServer(port: number = 3000): any {
 				allClosed.sort((a: any, b: any) => (b.exitTime || 0) - (a.exitTime || 0));
 				const wins = allClosed.filter((p: any) => (p.pnlPercent || 0) > 0).length;
 				const totalPnl = allClosed.reduce((s: number, p: any) => s + (p.pnlPercent || 0), 0);
+				// Kontrol grubu (saf random deneyler) ile adayları ayır — tek toplam
+				// yanıltıcı: kontroller bilerek "kaybetmesi beklenen" ölçüm cihazlarıdır.
+				// Not: 'Rejim Anahtarlı Random' girişte random olsa da ADAY sayılır.
+				const isControl = (name: string) => (name || '').startsWith('Random ');
+				const controlPnl = allClosed.filter((p: any) => isControl(p.expName)).reduce((s: number, p: any) => s + (p.pnlPercent || 0), 0);
+				const candidatePnl = totalPnl - controlPnl;
 				const exitMap: any = { take_profit:'Kâr Al', stop_loss:'Zarar Kes', trailing_stop:'İz Süren', fixed_exit:'Süre Doldu', experiment_end:'Deney Bitti' };
 				let tradeRows = '';
 				for (const t of allClosed.slice(0, 100)) {
@@ -232,7 +238,7 @@ table{width:100%;border-collapse:collapse;margin-bottom:24px;font-size:13px}
 th{text-align:left;padding:8px 10px;background:#f5f5fa;color:#5a5a7a;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid #e2e4ef}
 td{padding:7px 10px;border-bottom:1px solid #eee}
 tr:hover{background:#f8f8ff}
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:28px}
+.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:28px}
 .sb{text-align:center;padding:20px;border-radius:12px;background:#f5f5fa;border:1px solid #e2e4ef}
 .sb .v{font-size:28px;font-weight:800}
 .sb .l{font-size:11px;color:#888;text-transform:uppercase;margin-top:4px}
@@ -246,7 +252,8 @@ tr:hover{background:#f8f8ff}
 <p class="sub">${now} • Otonom Yanlışlama Motoru</p>
 <div class="stats">
 <div class="sb"><div class="v">${assumptions.length}</div><div class="l">Varsayım</div></div>
-<div class="sb"><div class="v" style="color:${totalPnl>=0?'#10b981':'#ef4444'}">${pct(totalPnl)}</div><div class="l">Net PnL</div></div>
+<div class="sb"><div class="v" style="color:${candidatePnl>=0?'#10b981':'#ef4444'}">${pct(candidatePnl)}</div><div class="l">Aday PnL</div></div>
+<div class="sb"><div class="v" style="color:#888">${pct(controlPnl)}</div><div class="l">Kontrol PnL (random)</div></div>
 <div class="sb"><div class="v">${allClosed.length}</div><div class="l">Kapanan İşlem</div></div>
 <div class="sb"><div class="v">${allClosed.length?((wins/allClosed.length)*100).toFixed(0):0}%</div><div class="l">Kazanma Oranı</div></div>
 </div>
