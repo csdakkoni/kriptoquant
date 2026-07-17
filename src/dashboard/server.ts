@@ -115,6 +115,17 @@ export function startDashboardServer(port: number = 3000): any {
 			} catch { return json(res, [], 500); }
 		}
 
+		// Piyasa rejimi (BULL / BEAR / CHOP)
+		if (url === '/api/organism/regime') {
+			try {
+				const rgFile = join(ORGANISM_DIR, 'regime.json');
+				if (existsSync(rgFile)) {
+					return json(res, JSON.parse(readFileSync(rgFile, 'utf-8')));
+				}
+				return json(res, { state: 'UNKNOWN' });
+			} catch { return json(res, { state: 'UNKNOWN' }, 500); }
+		}
+
 		// Gözlem Karnesi — gözlem tiplerinin sinyal kalitesi
 		if (url === '/api/organism/scoreboard') {
 			try {

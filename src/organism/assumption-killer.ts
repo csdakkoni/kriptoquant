@@ -20,6 +20,7 @@ import { ResearchJournal } from './journal.js';
 import { ExperimentRunner } from './experiment-runner.js';
 import { Evolver } from './evolver.js';
 import { ObservationScoreboard } from './observation-scoreboard.js';
+import { RegimeDetector } from './regime.js';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -43,6 +44,7 @@ export class AssumptionKiller {
 	private experimentRunner: ExperimentRunner;
 	private evolver: Evolver;
 	private scoreboard: ObservationScoreboard;
+	private regime: RegimeDetector;
 	private tickCount = 0;
 	private observationCount = 0;
 	private running = false;
@@ -59,6 +61,8 @@ export class AssumptionKiller {
 		this.experimentRunner = new ExperimentRunner(this.graph);
 		this.evolver = new Evolver(this.graph, this.experimentRunner);
 		this.scoreboard = new ObservationScoreboard();
+		this.regime = new RegimeDetector();
+		this.experimentRunner.setRegimeProvider(() => this.regime.getRegime());
 
 		// Initialize observers
 		this.observers = [
@@ -95,6 +99,9 @@ export class AssumptionKiller {
 		// tamponlar boş başlar ve organizma saatlerce kör kalır (gözlemciler
 		// 10-30, varsayım testleri 50, swing girişleri 192 mum ister).
 		await this.bootstrapHistory();
+
+		// Rejim dedektörünü uyandır (ilk fetch'i tetikler; 15dk'da bir tazelenir)
+		this.regime.getRegime();
 
 		// Connect to Binance WebSocket for live data
 		this.connectWebSocket();
@@ -254,6 +261,9 @@ export class AssumptionKiller {
 			this.graph.addObservation(obs);
 			log(`[${obs.type.toUpperCase()}] ${obs.description}`);
 		}
+
+		// Rejim dedektörünü canlı tut (bayatsa arka planda tazelenir)
+		this.regime.getRegime();
 
 		// Gözlem Karnesi: yeni gözlemleri kuyruğa al, olgunlaşan ufukları ölç
 		try {

@@ -627,6 +627,9 @@ a.report-btn { text-decoration: none; }
     </div>
   </div>
   <div class="header-right">
+    <div class="status-badge" id="regimeBadge" title="Piyasa rejimi: BTC 4h kapanışının 200-SMA'ya uzaklığı. ±%2 bandı = YATAY (nakit).">
+      <span id="regimeText">❓ Rejim: —</span>
+    </div>
     <a href="/rapor" target="_blank" class="report-btn">📄 Rapor İndir</a>
     <div class="status-badge" id="statusBadge">
       <div class="status-dot"></div>
@@ -875,9 +878,11 @@ function renderExperiments(experiments) {
     const pnlClass = pnl > 0 ? 'positive' : pnl < 0 ? 'negative' : 'neutral';
     const openPositions = (exp.positions || []).filter(p => !p.exitPrice).length;
     const statusEmoji = exp.status === 'running' ? '▶️' : exp.status === 'completed' ? '✅' : '💀';
-    const sideBadge = (exp.side || 'long') === 'short'
-      ? '<span class="trade-tag short" style="margin-left:6px">🔻 SHORT</span>'
-      : '<span class="trade-tag long" style="margin-left:6px">🔺 LONG</span>';
+    const sideBadge = exp.side === 'regime'
+      ? '<span class="trade-tag ts" style="margin-left:6px">🔀 REJİM</span>'
+      : (exp.side || 'long') === 'short'
+        ? '<span class="trade-tag short" style="margin-left:6px">🔻 SHORT</span>'
+        : '<span class="trade-tag long" style="margin-left:6px">🔺 LONG</span>';
     const promotedBadge = exp.promoted ? '<span class="trade-tag tp" style="margin-left:6px">⭐ ADAY</span>' : '';
 
     return `
@@ -1196,8 +1201,22 @@ function renderScoreboard(sb) {
 
 // ─── Polling Loop ────────────────────────────────────────────────────────────
 
+function renderRegime(rg) {
+  const el = document.getElementById('regimeText');
+  if (!el || !rg) return;
+  const meta = {
+    BULL: { label: '🐂 BOĞA — long motoru', color: 'var(--accent-green)' },
+    BEAR: { label: '🐻 AYI — short motoru', color: 'var(--accent-red)' },
+    CHOP: { label: '➡️ YATAY — nakit', color: 'var(--accent-amber)' },
+    UNKNOWN: { label: '❓ Rejim: veri bekleniyor', color: 'var(--text-dim)' },
+  }[rg.state || 'UNKNOWN'];
+  const dist = rg.distancePct != null ? ` (SMA'ya ${rg.distancePct >= 0 ? '+' : ''}${rg.distancePct}%)` : '';
+  el.textContent = meta.label + dist;
+  el.style.color = meta.color;
+}
+
 async function refresh() {
-  const [assumptions, observations, knowledge, journal, experiments, prices, scoreboard] = await Promise.all([
+  const [assumptions, observations, knowledge, journal, experiments, prices, scoreboard, regime] = await Promise.all([
     fetchJSON('/api/organism/assumptions'),
     fetchJSON('/api/organism/observations'),
     fetchJSON('/api/organism/knowledge'),
@@ -1205,6 +1224,7 @@ async function refresh() {
     fetchJSON('/api/organism/experiments'),
     fetchJSON('/api/organism/prices'),
     fetchJSON('/api/organism/scoreboard'),
+    fetchJSON('/api/organism/regime'),
   ]);
 
   renderAssumptions(assumptions);
@@ -1214,6 +1234,7 @@ async function refresh() {
   renderKnowledge(knowledge);
   renderJournal(journal);
   renderScoreboard(scoreboard);
+  renderRegime(regime);
 }
 
 // Initial load

@@ -13,6 +13,7 @@
 
 import { log, logError } from '../core/utils.js';
 import type { MarketTick, Observation } from './types.js';
+import type { MarketRegime } from './regime.js';
 import { KnowledgeGraph } from './knowledge-graph.js';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -72,7 +73,9 @@ export interface Experiment {
 	sourceAssumption?: string;  // Which assumption spawned this
 	entryRule: EntryRule;
 	exitRule: ExitRule;
-	side?: 'long' | 'short';    // Pozisyon yönü (varsayılan: long). İki kanat dersi: ayıda long-only deney seti kör kalır.
+	// Pozisyon yönü (varsayılan: long).
+	// 'regime' = yönü piyasa rejimi seçer: BULL→long, BEAR→short, CHOP→nakit (giriş yok).
+	side?: 'long' | 'short' | 'regime';
 	promoted?: boolean;         // Evolver terfi kararı — kalıcı (restart'ta unutulmaz)
 	coins: string[];
 	status: ExperimentStatus;
@@ -225,6 +228,22 @@ export function createShortExperiments(): Experiment[] {
 			coins,
 			maxDurationHours: 336,
 		},
+		// ── Rejim Anahtarı: canlı verinin ana bulgusunun sentezi ──
+		// Random LONG -16.9% / Random SHORT +7.6% (aynı kural!) → yön her şey.
+		// Bu deney yönü rejime devreder: BULL→long, BEAR→short, CHOP→nakit.
+		// Üç kardeş (saf long / saf short / rejim anahtarlı) yan yana yarışır;
+		// anahtar değer katıyorsa uzun vadede iki saf yönü de geçmeli.
+		{
+			...base,
+			id: randomUUID(),
+			name: 'Rejim Anahtarlı Random (1%/2%)',
+			hypothesis: 'Yön her şeyse ve yönü rejim seçerse (BULL→long, BEAR→short, CHOP→nakit), saf yönlü random kardeşleri uzun vadede geçilmeli',
+			entryRule: { type: 'random', probability: 0.05 },
+			exitRule: { type: 'stop_and_target', stopPercent: 1, targetPercent: 2 },
+			side: 'regime' as const,
+			coins,
+			maxDurationHours: 336, // rejim geçişlerini görebilmesi için 2 hafta
+		},
 	];
 }
 
@@ -248,9 +267,16 @@ export class ExperimentRunner {
 	// atılır (%5 ihtimal fiilen ~%40 olur) ve sayaçlar 10x şişer.
 	private lastEntryCandle = new Map<string, number>();
 
+	// Rejim sağlayıcı — 'regime' yönlü deneyler pozisyon açarken yönü buradan alır
+	private regimeProvider: () => MarketRegime = () => 'UNKNOWN';
+
 	constructor(graph: KnowledgeGraph) {
 		this.graph = graph;
 		this.load();
+	}
+
+	setRegimeProvider(provider: () => MarketRegime): void {
+		this.regimeProvider = provider;
 	}
 
 	getExperiments(): Experiment[] {
@@ -367,7 +393,16 @@ export class ExperimentRunner {
 	// ─── Position Management ──────────────────────────────────────────
 
 	private openPosition(exp: Experiment, coin: string, tick: MarketTick): void {
-		const side = exp.side ?? 'long';
+		let side: 'long' | 'short';
+		if (exp.side === 'regime') {
+			// Yönü rejim seçer; CHOP/UNKNOWN'da nakit — pozisyon açılmaz.
+			const regime = this.regimeProvider();
+			if (regime === 'BULL') side = 'long';
+			else if (regime === 'BEAR') side = 'short';
+			else return;
+		} else {
+			side = exp.side ?? 'long';
+		}
 		const pos: PaperPosition = {
 			id: randomUUID(),
 			experimentId: exp.id,
