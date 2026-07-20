@@ -28,6 +28,11 @@ const EXPERIMENTS_FILE = join(STATE_DIR, 'experiments.json');
 // maliyetsiz simülasyonda pozitif görünen her hızlı strateji gerçekte eksiydi.
 const ROUND_TRIP_COST_PCT = 0.3;
 
+/** Saf random kontrol grupları — ölümsüzdür, süre dolunca yeniden doğarlar. */
+export function isControlExperiment(name: string): boolean {
+	return (name || '').startsWith('Random ');
+}
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type ExperimentStatus = 'running' | 'completed' | 'failed';
@@ -40,6 +45,7 @@ export type EntryRule =
 	| { type: 'price_cross_sma_down'; period: number } // Enter on SMA cross (downward — short girişleri için)
 	| { type: 'dip_from_high'; lookback: number; dipPercent: number }   // Tepeden %X düşüş ANINDA gir (kesişim — swing dip)
 	| { type: 'rally_from_low'; lookback: number; rallyPercent: number } // Dipten %X yükseliş ANINDA gir (kesişim — rally fade short)
+	| { type: 'random_in_hours'; probability: number; startHourUtc: number; endHourUtc: number } // Sadece belirli UTC saat aralığında rastgele gir
 	| { type: 'always_long' };                         // Always be in position
 
 export type ExitRule =
@@ -233,6 +239,37 @@ export function createShortExperiments(): Experiment[] {
 		// Bu deney yönü rejime devreder: BULL→long, BEAR→short, CHOP→nakit.
 		// Üç kardeş (saf long / saf short / rejim anahtarlı) yan yana yarışır;
 		// anahtar değer katıyorsa uzun vadede iki saf yönü de geçmeli.
+		// ── 20 Tem raporunun iki bulgusundan doğan deneyler ──
+		// (1) Çıkış kırılımı: İz Süren %1.5 → 49 işlem, %29 kazanma, -22 puan.
+		// En çok kullanılan çıkış en çok zarar ettiren çıkıştı. Hipotez: stop
+		// çok dar, normal gürültüde tetikleniyor. Aynı girişle geniş trailing
+		// test edilir — fark çıkarsa "çıkış genişliği" gerçek bir kaldıraçtır.
+		{
+			...base,
+			id: randomUUID(),
+			name: 'Rejim + Geniş Trailing (%3)',
+			hypothesis: 'İz süren stop %1.5 çok dardı (-22 puan). %3 ile gürültüye dayanıp trendi tutabilir mi?',
+			entryRule: { type: 'random', probability: 0.05 },
+			exitRule: { type: 'trailing_stop', percent: 3 },
+			side: 'regime' as const,
+			coins,
+			maxDurationHours: 336,
+		},
+		// (2) Saat kırılımı: 06:00–12:00 UTC tek pozitif dilim (+8.22, %60
+		// kazanma, n=20) — diğer üç dilim toplamda -46 puan. Küçük örneklem,
+		// ama sıfır maliyetle test edilebilir: aynı random kural, sadece o
+		// pencerede. Rejim yönüyle birleştirilir.
+		{
+			...base,
+			id: randomUUID(),
+			name: 'Altın Saat 06-12 UTC (Rejim Yönlü)',
+			hypothesis: '06-12 UTC dilimi kırılım analizinde tek pozitif dilimdi (+8.22%). Gerçek bir seans etkisi mi, gürültü mü?',
+			entryRule: { type: 'random_in_hours', probability: 0.12, startHourUtc: 6, endHourUtc: 12 },
+			exitRule: { type: 'stop_and_target', stopPercent: 1, targetPercent: 2 },
+			side: 'regime' as const,
+			coins,
+			maxDurationHours: 336,
+		},
 		{
 			...base,
 			id: randomUUID(),
@@ -370,6 +407,14 @@ export class ExperimentRunner {
 				const prev = candles[candles.length - 2].close;
 				const curr = candles[candles.length - 1].close;
 				return prev > dipLine && curr <= dipLine;
+			}
+
+			case 'random_in_hours': {
+				const h = new Date(candles[candles.length - 1].timestamp).getUTCHours();
+				const inWindow = rule.startHourUtc <= rule.endHourUtc
+					? h >= rule.startHourUtc && h < rule.endHourUtc
+					: h >= rule.startHourUtc || h < rule.endHourUtc; // gece yarısını saran pencere
+				return inWindow && Math.random() < rule.probability;
 			}
 
 			case 'rally_from_low': {
@@ -532,6 +577,28 @@ export class ExperimentRunner {
 
 	// ─── Experiment Lifecycle ─────────────────────────────────────────
 
+	/**
+	 * Kontrol grupları BİLİMSEL ZORUNLULUKTUR — süresi dolunca ölmez, yeni
+	 * nesil olarak yeniden doğar. Aksi halde (18-20 Tem raporunda görüldüğü
+	 * gibi) tüm random kontroller ölür ve yeni deneyleri kıyaslayacak referans
+	 * kalmaz: "bu deney rastgeleyi yeniyor mu?" sorusu cevapsız kalır.
+	 */
+	private respawnControl(exp: Experiment): void {
+		const fresh: Experiment = {
+			...exp,
+			id: randomUUID(),
+			status: 'running',
+			startedAt: Date.now(),
+			endedAt: undefined,
+			promoted: false,
+			positions: [],
+			closedPositions: [],
+			stats: emptyStats(),
+		};
+		this.experiments.push(fresh);
+		log(`[EXPERIMENT] ♻️  Kontrol grubu yeniden doğdu: "${exp.name}" (yeni nesil)`);
+	}
+
 	private closeExperiment(exp: Experiment, ticks?: Map<string, MarketTick[]>): void {
 		// Süre dolduğunda açık pozisyonlar son bilinen fiyattan kapatılır —
 		// aksi halde istatistikler eksik kalır ve pozisyonlar zombiye döner.
@@ -560,6 +627,9 @@ export class ExperimentRunner {
 			`Experiment "${exp.name}" completed. Hypothesis: "${exp.hypothesis}". Result: ${exp.stats.totalTrades} trades, ${exp.stats.winRate.toFixed(1)}% win rate, ${exp.stats.totalPnlPercent >= 0 ? '+' : ''}${exp.stats.totalPnlPercent.toFixed(2)}% total PnL.`,
 			[],
 		);
+
+		// Kontrol grubuysa yerine yenisi doğar (referans hiç kaybolmaz)
+		if (isControlExperiment(exp.name)) this.respawnControl(exp);
 
 		this.save();
 	}
