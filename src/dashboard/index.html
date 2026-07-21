@@ -336,11 +336,29 @@ body::before {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   transition: all 0.2s;
+  cursor: pointer;
 }
 .exp-card:hover { transform: translateY(-2px); border-color: var(--accent-purple-dim); }
 .exp-card.positive { border-left: 3px solid var(--accent-green); }
 .exp-card.negative { border-left: 3px solid var(--accent-red); }
 .exp-card.neutral { border-left: 3px solid var(--text-dim); }
+.exp-card.selected {
+  border-color: var(--accent-purple);
+  box-shadow: 0 0 0 2px var(--accent-purple-dim);
+  background: var(--bg-card-hover);
+}
+#tradeFilterBar { margin-bottom: 12px; }
+.filter-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--accent-purple-dim); color: var(--accent-purple);
+  border: 1px solid var(--accent-purple); border-radius: 8px;
+  padding: 6px 12px; font-size: 12px; font-weight: 600;
+}
+.filter-chip button {
+  background: var(--accent-purple); color: #fff; border: none;
+  border-radius: 6px; padding: 3px 8px; font-size: 11px; cursor: pointer; font-weight: 600;
+}
+.filter-chip button:hover { opacity: 0.85; }
 .exp-name {
   font-size: 13px;
   font-weight: 600;
@@ -749,9 +767,10 @@ a.report-btn { text-decoration: none; }
     <!-- Trade Log -->
     <div class="card grid-full">
       <div class="card-header">
-        <span class="card-title">Son İşlemler</span>
+        <span class="card-title" id="tradeLogTitle">Son İşlemler</span>
         <span class="card-icon">💹</span>
       </div>
+      <div id="tradeFilterBar"></div>
       <div id="tradeSummaryContainer"></div>
       <div style="max-height: 400px; overflow-y: auto;" id="tradeLogContainer">
         <div class="empty">
@@ -866,8 +885,23 @@ function renderObservations(observations) {
 
 // ─── Render Experiments ──────────────────────────────────────────────────────
 
+// ── Deney filtresi: bir karta tıklayınca Son İşlemler sadece o deneyi gösterir ──
+let selectedExperiment = null; // null = tümü
+let lastExperiments = [];
+let lastPrices = {};
+
+function selectExperiment(name) {
+  selectedExperiment = (selectedExperiment === name) ? null : name; // tekrar tıkla = kaldır
+  renderExperiments(lastExperiments);
+  renderTradeLog(lastExperiments, lastPrices);
+  // Son İşlemler'e yumuşak kaydır
+  const el = document.getElementById('tradeSummaryContainer') || document.getElementById('tradeLogContainer');
+  if (selectedExperiment && el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 function renderExperiments(experiments) {
   if (!experiments || experiments.length === 0) return;
+  lastExperiments = experiments;
 
   const totalTrades = experiments.reduce((s, e) => s + e.stats.totalTrades, 0);
   document.getElementById('statTrades').textContent = totalTrades;
@@ -884,10 +918,11 @@ function renderExperiments(experiments) {
         ? '<span class="trade-tag short" style="margin-left:6px">🔻 SHORT</span>'
         : '<span class="trade-tag long" style="margin-left:6px">🔺 LONG</span>';
     const promotedBadge = exp.promoted ? '<span class="trade-tag tp" style="margin-left:6px">⭐ ADAY</span>' : '';
+    const isSelected = selectedExperiment === exp.name;
 
     return `
-      <div class="exp-card ${pnlClass}">
-        <div class="exp-name">${statusEmoji} ${exp.name} ${sideBadge}${promotedBadge}</div>
+      <div class="exp-card ${pnlClass}${isSelected ? ' selected' : ''}" onclick="selectExperiment(${JSON.stringify(exp.name).replace(/"/g, '&quot;')})" title="İşlemlerini görmek için tıkla">
+        <div class="exp-name">${isSelected ? '📌 ' : ''}${statusEmoji} ${exp.name} ${sideBadge}${promotedBadge}</div>
         <div class="exp-hypothesis">${exp.hypothesis}</div>
         <div class="exp-stats-row">
           <div class="exp-stat">
@@ -933,12 +968,27 @@ function fmtDuration(candles) {
 
 function renderTradeLog(experiments, prices) {
   if (!experiments || experiments.length === 0) return;
+  lastPrices = prices || {};
   const container = document.getElementById('tradeLogContainer');
+
+  // Filtre uygulanacak deney listesi
+  const filtered = selectedExperiment ? experiments.filter(e => e.name === selectedExperiment) : experiments;
+
+  // Başlık göstergesi + filtre çubuğu
+  const titleEl = document.getElementById('tradeLogTitle');
+  const filterBar = document.getElementById('tradeFilterBar');
+  if (selectedExperiment) {
+    if (titleEl) titleEl.textContent = 'Son İşlemler — ' + selectedExperiment;
+    if (filterBar) filterBar.innerHTML = `<span class="filter-chip">📌 ${selectedExperiment}<button onclick="selectExperiment(null)" title="Filtreyi kaldır">✕ tümünü göster</button></span>`;
+  } else {
+    if (titleEl) titleEl.textContent = 'Son İşlemler';
+    if (filterBar) filterBar.innerHTML = '';
+  }
 
   // Collect all trades (open + closed)
   const allTrades = [];
 
-  for (const exp of experiments) {
+  for (const exp of filtered) {
     const side = exp.side || 'long';
     for (const pos of (exp.positions || [])) {
       if (!pos.exitPrice) {
@@ -954,7 +1004,10 @@ function renderTradeLog(experiments, prices) {
 
   if (allTrades.length === 0) {
     summaryContainer.innerHTML = '';
-    container.innerHTML = '<div class="empty"><div class="empty-icon">📊</div><div class="empty-text">Henüz işlem yok — ilk 15 dakikalık mum kapanışlarıyla deneyler pozisyon açmaya başlayacak.</div></div>';
+    const msg = selectedExperiment
+      ? 'Bu deney henüz işlem açmadı. İlk pozisyonunu açınca burada görünecek.'
+      : 'Henüz işlem yok — ilk 15 dakikalık mum kapanışlarıyla deneyler pozisyon açmaya başlayacak.';
+    container.innerHTML = '<div class="empty"><div class="empty-icon">📊</div><div class="empty-text">' + msg + '</div></div>';
     return;
   }
 
@@ -1079,18 +1132,26 @@ function renderTradeLog(experiments, prices) {
 
 // ─── Render Knowledge Graph ──────────────────────────────────────────────────
 
+// Küçük yardımcı: element yoksa (kart kaldırılmışsa) sessizce atla — bir null
+// referans tüm refresh zincirini kesip sonraki kartların (karne dahil) render
+// olmamasına yol açıyordu.
+function setText(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
+}
+
 function renderKnowledge(data) {
   if (!data) return;
   const nodes = data.nodes || [];
-  document.getElementById('statKnowledge').textContent = nodes.length;
+  setText('statKnowledge', nodes.length);
 
   const observations = nodes.filter(n => n.type === 'observation').length;
   const insights = nodes.filter(n => n.type === 'insight').length;
   const questions = nodes.filter(n => n.type === 'question').length;
 
-  document.getElementById('kgObservations').textContent = observations;
-  document.getElementById('kgInsights').textContent = insights;
-  document.getElementById('kgQuestions').textContent = questions;
+  setText('kgObservations', observations);
+  setText('kgInsights', insights);
+  setText('kgQuestions', questions);
 
   // Type breakdown
   const typeCounts = {};
@@ -1101,7 +1162,7 @@ function renderKnowledge(data) {
 
   const breakdown = document.getElementById('kgTypeBreakdown');
   const types = Object.entries(typeCounts).sort((a, b) => b[1] - a[1]);
-  if (types.length > 0) {
+  if (breakdown && types.length > 0) {
     breakdown.innerHTML = `
       <div style="font-size:11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Gözlem Türleri</div>
       ${types.map(([type, count]) => `
