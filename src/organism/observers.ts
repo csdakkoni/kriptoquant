@@ -309,3 +309,91 @@ function pearsonCorrelation(x: number[], y: number[]): number {
 	const denom = Math.sqrt(dx2 * dy2);
 	return denom === 0 ? 0 : num / denom;
 }
+
+// ─── Liquidity Wick Observer ──────────────────────────────────────────────────
+// Detects long wicks which often signify liquidity hunting/stop cascades.
+
+export class LiquidityWickObserver implements Observer {
+	readonly name = 'LiquidityWickObserver';
+	readonly description = 'Detects candles with disproportionately long wicks (liquidity sweeps)';
+
+	observe(ticks: Map<string, MarketTick[]>): Observation[] {
+		const observations: Observation[] = [];
+
+		for (const [coin, candles] of ticks) {
+			if (candles.length < 20) continue;
+			
+			const c = candles[candles.length - 1];
+			const body = Math.abs(c.close - c.open) || 0.0001; // prevent div 0
+			const upperWick = c.high - Math.max(c.open, c.close);
+			const lowerWick = Math.min(c.open, c.close) - c.low;
+			
+			const totalRange = c.high - c.low || 0.0001;
+			const isHighVolume = c.volume > mean(candles.slice(-20, -1).map(x => x.volume)) * 1.5;
+
+			if (upperWick > body * 3 && upperWick > totalRange * 0.5 && isHighVolume) {
+				observations.push({
+					id: randomUUID(),
+					timestamp: Date.now(),
+					type: 'liquidity_sweep_high',
+					description: `${coin}: Upper liquidity sweep (wick ${(upperWick/body).toFixed(1)}x body) on high volume`,
+					confidence: Math.min(upperWick / body / 10, 1),
+					coins: [coin],
+					relatedData: { upperWick, body, totalRange, isHighVolume },
+				});
+			}
+
+			if (lowerWick > body * 3 && lowerWick > totalRange * 0.5 && isHighVolume) {
+				observations.push({
+					id: randomUUID(),
+					timestamp: Date.now(),
+					type: 'liquidity_sweep_low',
+					description: `${coin}: Lower liquidity sweep (wick ${(lowerWick/body).toFixed(1)}x body) on high volume`,
+					confidence: Math.min(lowerWick / body / 10, 1),
+					coins: [coin],
+					relatedData: { lowerWick, body, totalRange, isHighVolume },
+				});
+			}
+		}
+
+		return observations;
+	}
+}
+
+// ─── Bollinger Squeeze Observer ──────────────────────────────────────────────
+// Detects extreme volatility compression (the calm before the storm).
+
+export class BollingerSqueezeObserver implements Observer {
+	readonly name = 'BollingerSqueezeObserver';
+	readonly description = 'Detects volatility compression where recent stddev is far below historical stddev';
+
+	observe(ticks: Map<string, MarketTick[]>): Observation[] {
+		const observations: Observation[] = [];
+
+		for (const [coin, candles] of ticks) {
+			if (candles.length < 100) continue;
+			
+			const historicalCloses = candles.slice(-100).map(c => c.close);
+			const recentCloses = candles.slice(-20).map(c => c.close);
+			
+			const histStdDev = stddev(historicalCloses);
+			const recentStdDev = stddev(recentCloses);
+			
+			// If recent volatility is less than half of historical volatility
+			if (recentStdDev > 0 && histStdDev > 0 && recentStdDev < histStdDev * 0.5) {
+				const ratio = recentStdDev / histStdDev;
+				observations.push({
+					id: randomUUID(),
+					timestamp: Date.now(),
+					type: 'volatility_squeeze',
+					description: `${coin}: Extreme volatility squeeze (recent stddev is ${(ratio * 100).toFixed(0)}% of historical)`,
+					confidence: 1.0 - ratio, // lower ratio = higher confidence
+					coins: [coin],
+					relatedData: { recentStdDev, histStdDev, ratio },
+				});
+			}
+		}
+
+		return observations;
+	}
+}

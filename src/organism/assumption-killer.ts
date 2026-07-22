@@ -13,7 +13,7 @@
 import { WebSocket } from 'ws';
 import { log, logError } from '../core/utils.js';
 import type { Assumption, AssumptionTest, MarketTick, Observer, Observation, Evidence } from './types.js';
-import { DivergenceObserver, SilenceObserver, HerdObserver, SurpriseObserver } from './observers.js';
+import { DivergenceObserver, SilenceObserver, HerdObserver, SurpriseObserver, LiquidityWickObserver, BollingerSqueezeObserver } from './observers.js';
 import { createAllTests } from './assumptions.js';
 import { KnowledgeGraph } from './knowledge-graph.js';
 import { ResearchJournal } from './journal.js';
@@ -70,6 +70,8 @@ export class AssumptionKiller {
 			new SilenceObserver(),
 			new HerdObserver(),
 			new SurpriseObserver(),
+			new LiquidityWickObserver(),
+			new BollingerSqueezeObserver(),
 		];
 
 		// Initialize assumption tests

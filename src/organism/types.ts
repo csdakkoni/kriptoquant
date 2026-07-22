@@ -25,6 +25,9 @@ export type ObservationType =
 	| 'isolation'     // One coin diverging from the herd
 	| 'surprise'      // Reality differs from ALL expectations
 	| 'echo'          // A pattern repeating from the past
+	| 'liquidity_sweep_high' // Upper wick liquidity hunt
+	| 'liquidity_sweep_low'  // Lower wick liquidity hunt
+	| 'volatility_squeeze'   // Extreme Bollinger squeeze
 	| 'anomaly';      // Something that doesn't fit any category
 
 /** Evidence for or against an assumption */
@@ -115,4 +118,26 @@ export interface AssumptionTest {
 		observations: Observation[],
 		ticks: Map<string, MarketTick[]>,
 	): Evidence[];
+}
+
+/** Helper to aggregate lower timeframe candles into higher timeframe (e.g. 15m -> 4h) */
+export function aggregateCandles(candles: MarketTick[], factor: number): MarketTick[] {
+	if (candles.length === 0) return [];
+	const result: MarketTick[] = [];
+	for (let i = 0; i < candles.length; i += factor) {
+		const chunk = candles.slice(i, i + factor);
+		const first = chunk[0];
+		const last = chunk[chunk.length - 1];
+		result.push({
+			coin: first.coin,
+			timestamp: first.timestamp,
+			interval: `${factor}x${first.interval}`,
+			open: first.open,
+			high: Math.max(...chunk.map(c => c.high)),
+			low: Math.min(...chunk.map(c => c.low)),
+			close: last.close,
+			volume: chunk.reduce((sum, c) => sum + c.volume, 0)
+		});
+	}
+	return result;
 }

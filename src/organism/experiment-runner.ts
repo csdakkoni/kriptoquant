@@ -45,6 +45,7 @@ export type EntryRule =
 	| { type: 'price_cross_sma_down'; period: number } // Enter on SMA cross (downward — short girişleri için)
 	| { type: 'dip_from_high'; lookback: number; dipPercent: number }   // Tepeden %X düşüş ANINDA gir (kesişim — swing dip)
 	| { type: 'rally_from_low'; lookback: number; rallyPercent: number } // Dipten %X yükseliş ANINDA gir (kesişim — rally fade short)
+	| { type: 'anti_breakout'; thresholdPercent: number } // Büyük yeşil mumlarda (hacimli kırılım) TERSİNE gir (Tuzak avcısı)
 	| { type: 'random_in_hours'; probability: number; startHourUtc: number; endHourUtc: number } // Sadece belirli UTC saat aralığında rastgele gir
 	| { type: 'always_long' };                         // Always be in position
 
@@ -152,6 +153,16 @@ export function createDefaultExperiments(): Experiment[] {
 		{
 			...base,
 			id: randomUUID(),
+			name: 'Hit & Run Scalp (1% / 1%)',
+			hypothesis: 'Testere piyasasında çok dar hedefle vur-kaç yapmak trend takibinden daha kârlıdır',
+			sourceAssumption: 'chop-market-rules',
+			entryRule: { type: 'random', probability: 0.1 },
+			exitRule: { type: 'stop_and_target', stopPercent: 1.0, targetPercent: 1.0 },
+			coins,
+		},
+		{
+			...base,
+			id: randomUUID(),
 			name: 'Her 4 Saatte Giriş + Trailing Stop',
 			hypothesis: 'Sabit zamanlı giriş + trailing stop döngüsel piyasada çalışır mı?',
 			sourceAssumption: 'timeframe-matters',
@@ -190,6 +201,16 @@ export function createShortExperiments(): Experiment[] {
 	};
 
 	return [
+		{
+			...base,
+			id: randomUUID(),
+			name: 'Anti-Breakout SHORT (Tuzak Avcısı)',
+			hypothesis: 'Büyük hacimli yeşil kırılımlar FOMO tuzağıdır, tersi yönünde kısa scalp kazandırır',
+			entryRule: { type: 'anti_breakout', thresholdPercent: 1.5 },
+			exitRule: { type: 'stop_and_target', stopPercent: 1.0, targetPercent: 1.5 },
+			side: 'short' as const,
+			coins,
+		},
 		{
 			...base,
 			id: randomUUID(),
@@ -425,6 +446,17 @@ export class ExperimentRunner {
 				const prev = candles[candles.length - 2].close;
 				const curr = candles[candles.length - 1].close;
 				return prev < rallyLine && curr >= rallyLine;
+			}
+
+			case 'anti_breakout': {
+				if (candles.length < 20) return false;
+				const c = candles[candles.length - 1];
+				// Hacimli büyük yeşil mum mu?
+				const avgVol = candles.slice(-20, -1).reduce((s, x) => s + x.volume, 0) / 19;
+				const isHighVol = c.volume > avgVol * 2.0;
+				const retPct = ((c.close - c.open) / c.open) * 100;
+				// Eğer eşik değerden büyük bir artış ve hacim varsa tetikle
+				return retPct >= rule.thresholdPercent && isHighVol;
 			}
 
 			case 'always_long':

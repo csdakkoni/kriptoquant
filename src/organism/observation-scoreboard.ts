@@ -16,8 +16,8 @@ const STATE_DIR = join(process.cwd(), 'organism-data');
 const SCOREBOARD_FILE = join(STATE_DIR, 'observation-scoreboard.json');
 
 const CANDLE_MS = 900_000; // 15m
-// Ölçüm ufukları (mum cinsinden): 4 = 1 saat, 16 = 4 saat, 96 = 24 saat
-export const HORIZONS = [4, 16, 96] as const;
+// Ölçüm ufukları (mum cinsinden): 4 = 1 saat, 16 = 4 saat, 48 = 12 saat, 96 = 24 saat, 192 = 48 saat
+export const HORIZONS = [4, 16, 48, 96, 192] as const;
 
 const COOLDOWN_CANDLES = 4; // Aynı tip+coin için 1 saat içinde tekrar kayıt alma
 const MAX_PENDING = 500;
@@ -109,8 +109,8 @@ export class ObservationScoreboard {
 				this.dirty = true;
 			}
 
-			// Tüm ufuklar ölçüldüyse veya kayıt 30 saatten eskiyse kuyruğdan düş
-			const expired = latest.timestamp - p.ts > 120 * CANDLE_MS;
+			// Tüm ufuklar ölçüldüyse veya kayıt 50 saatten eskiyse kuyruğdan düş
+			const expired = latest.timestamp - p.ts > 200 * CANDLE_MS;
 			if (p.doneHorizons.length < HORIZONS.length && !expired) {
 				stillPending.push(p);
 			}
