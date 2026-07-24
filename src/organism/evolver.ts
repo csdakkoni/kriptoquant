@@ -299,6 +299,11 @@ export class Evolver {
 			sourceAssumption: 'cross-pollination',
 			entryRule: bestEntry.entryRule,
 			exitRule: bestExit.exitRule,
+			// KRİTİK: Yön giriş deneyinden MİRAS ALINIR. Bu alan atlandığında
+			// (24 Tem raporu) "en iyi SHORT girişi" long'a düşüp anlamsız bir
+			// melez üretti: 6 işlem, %0 kazanma, -8.47%. Giriş kuralı yönünden
+			// bağımsız değildir — SMA aşağı kırılımı long'da tam tersini yapar.
+			side: bestEntry.side ?? 'long',
 			coins: COINS,
 			status: 'running',
 			startedAt: Date.now(),

@@ -726,6 +726,26 @@ export class ExperimentRunner {
 				changed = true;
 			}
 		}
+
+		// ── Öksüz kontrol dirilişi ──
+		// Ölümsüzlük düzeltmesinden ÖNCE ölmüş kontroller donmuş kalıyordu.
+		// Sonuç (24 Tem raporu): adaylar son 3 günün düşüşünde işlem yaparken
+		// kontroller 18 Tem'de donmuştu → "adaylar rastgeleyi geçemedi" verdikti
+		// farklı dönemleri kıyaslayan GEÇERSİZ bir sonuçtu. Kontrol her zaman
+		// adaylarla AYNI piyasada koşmalı, yoksa kıyas anlamını yitirir.
+		const orphans = new Map<string, Experiment>();
+		for (const e of this.experiments) {
+			if (!isControlExperiment(e.name) || e.status === 'running') continue;
+			const hasLiveTwin = this.experiments.some(
+				(x) => x.name === e.name && x.status === 'running',
+			);
+			if (!hasLiveTwin) orphans.set(e.name, e);
+		}
+		for (const orphan of orphans.values()) {
+			this.respawnControl(orphan);
+			changed = true;
+		}
+
 		if (changed) this.save();
 	}
 

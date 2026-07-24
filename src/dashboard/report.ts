@@ -35,6 +35,15 @@ const EXIT_LABELS: Record<string, string> = {
 const CONTROL_PREFIX = 'Random '; // saf kontrol grupları
 const isControl = (name: string) => (name || '').startsWith(CONTROL_PREFIX);
 
+// Karne ufukları — observation-scoreboard.ts'teki HORIZONS ile aynı sırada
+const SB_HORIZONS: [string, string][] = [
+	['4', '1 saat'],
+	['16', '4 saat'],
+	['48', '12 saat'],
+	['96', '24 saat'],
+	['192', '48 saat'],
+];
+
 /** Bir işlem kümesinin özet istatistikleri */
 function summarize(trades: Trade[]) {
 	const n = trades.length;
@@ -151,15 +160,34 @@ function buildInsights(ctx: {
 		);
 	}
 
-	// 3) Aday vs kontrol
+	// 3) Aday vs kontrol — SADECE ORTAK DÖNEMDE geçerlidir.
+	// 24 Tem dersi: kontroller 18 Tem'de ölüp donmuştu, adaylar ise sonraki
+	// düşüşte işlem yapmaya devam etti. İki grubu ham toplamla kıyaslamak
+	// farklı piyasaları kıyaslamaktır ve yanlış verdikt üretir. Bu yüzden
+	// kıyas, iki grubun da işlem yaptığı zaman aralığıyla sınırlandırılır.
 	const candTrades = trades.filter((t) => !isControl(t.expName || ''));
 	const ctrlTrades = trades.filter((t) => isControl(t.expName || ''));
 	if (candTrades.length && ctrlTrades.length) {
-		const c = summarize(candTrades);
-		const k = summarize(ctrlTrades);
-		out.push(
-			`Adaylar vs kontrol: adaylar ${pct(c.sum)} (${c.n} işlem, ort. ${pct(c.avg)}), saf random kontroller ${pct(k.sum)} (${k.n} işlem, ort. ${pct(k.avg)}). ${c.avg > k.avg ? '✅ Adaylar rastgeleyi geçiyor.' : '⚠️ Adaylar henüz rastgeleyi geçemedi.'}`,
-		);
+		const times = (ts: Trade[]) => ts.map((t) => t.exitTime || 0).filter(Boolean);
+		const cT = times(candTrades);
+		const kT = times(ctrlTrades);
+		const overlapStart = Math.max(Math.min(...cT), Math.min(...kT));
+		const overlapEnd = Math.min(Math.max(...cT), Math.max(...kT));
+		const inWindow = (t: Trade) => (t.exitTime || 0) >= overlapStart && (t.exitTime || 0) <= overlapEnd;
+		const cw = summarize(candTrades.filter(inWindow));
+		const kw = summarize(ctrlTrades.filter(inWindow));
+		const staleHours = (Math.max(...cT) - Math.max(...kT)) / 3_600_000;
+
+		if (cw.n >= 10 && kw.n >= 10) {
+			const fmtDay = (ts: number) => new Date(ts).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' });
+			out.push(
+				`Adaylar vs kontrol <i>(ortak dönem: ${fmtDay(overlapStart)}–${fmtDay(overlapEnd)})</i>: adaylar ort. <b>${pct(cw.avg)}</b>/işlem (${cw.n} işlem), saf random kontroller ort. <b>${pct(kw.avg)}</b>/işlem (${kw.n} işlem). ${cw.avg > kw.avg ? '✅ Adaylar rastgeleyi geçiyor.' : '⚠️ Adaylar henüz rastgeleyi geçemedi.'}${staleHours > 24 ? ` <b>Not:</b> kontroller ${staleHours.toFixed(0)} saattir işlem açmıyor — ortak dönem dışındaki aday işlemleri bu kıyasa dahil edilmedi.` : ''}`,
+			);
+		} else {
+			out.push(
+				`⚠️ <b>Aday–kontrol kıyası şu an yapılamıyor:</b> iki grubun ortak işlem dönemi yetersiz (adaylar ${cw.n}, kontroller ${kw.n} işlem)${staleHours > 24 ? `; kontroller ${staleHours.toFixed(0)} saattir sessiz` : ''}. Kontroller yeniden işlem açtıkça kıyas otomatik geri gelir — o zamana kadar ham toplamları kıyaslamak farklı piyasa dönemlerini kıyaslamak olur.`,
+			);
+		}
 	}
 
 	// 4) Yön asimetrisi
@@ -307,7 +335,7 @@ export function buildReportHtml(data: {
 	let sbRows = '';
 	if (sb?.scores) {
 		for (const [type, horizons] of Object.entries(sb.scores as Record<string, any>)) {
-			const cells = ['4', '16', '96'].map((h) => {
+			const cells = SB_HORIZONS.map(([h]) => {
 				const c = horizons[h];
 				if (!c || !c.n) return '<td style="text-align:center;color:#bbb">—</td>';
 				const avg = c.sumRet / c.n;
@@ -403,7 +431,7 @@ ${finishedRows ? `<h3>Tamamlananlar / Öldürülenler</h3><table><thead><tr><th>
 <table><thead><tr><th>Durum</th><th>Varsayım</th><th style="text-align:center">Kanıt</th><th style="text-align:center">Destek</th><th>Sonuç</th></tr></thead><tbody>${assumptionRows}</tbody></table>
 
 <h2>📊 Gözlem Karnesi</h2>
-<table><thead><tr><th>Tip</th><th style="text-align:center">1 saat sonra</th><th style="text-align:center">4 saat sonra</th><th style="text-align:center">24 saat sonra</th><th>Değerlendirme</th></tr></thead><tbody>${sbRows || '<tr><td colspan="5" style="color:#888">Henüz skor yok</td></tr>'}</tbody></table>
+<table><thead><tr><th>Tip</th>${SB_HORIZONS.map(([, label]) => `<th style="text-align:center">${label} sonra</th>`).join('')}<th>Değerlendirme</th></tr></thead><tbody>${sbRows || `<tr><td colspan="${SB_HORIZONS.length + 2}" style="color:#888">Henüz skor yok</td></tr>`}</tbody></table>
 <p class="note">Verdikt 1 saatlik ufka göre verilir ve en az 20 ölçüm gerektirir. Referans: %0.3 gidiş-dönüş işlem maliyeti.</p>
 
 <h2>💹 Kapanan İşlemler (son 100)</h2>
