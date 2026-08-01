@@ -28,20 +28,31 @@ const REGIME_FILE = join(STATE_DIR, 'regime.json');
 export type MarketRegime = 'BULL' | 'BEAR' | 'CHOP' | 'UNKNOWN';
 
 // ─── Karar kuralı: Golden/Death Cross (50-SMA vs 200-SMA) ───────────────────
-// 1 Ağu'da yapılan tarihsel doğrulama (667 gün, 4h BTC, veri ikiye bölünüp
-// her yarıda ayrı ayrı sınandı — BTC rejimi → altcoin 3 günlük getirisi):
 //
-//   ESKİ  fiyatın 200-SMA'ya uzaklığı ±2% : ayrım +0.24  (yarılar +0.08/+0.11)
-//   YENİ  50-SMA vs 200-SMA farkı    ±1% : ayrım +0.65  (yarılar +0.38/+0.63)
+// ⚠️ DÜRÜSTLÜK NOTU — BU SİNYALİN KANITLANMIŞ BİR EDGE'İ YOKTUR.
 //
-// Eski kural "fiyat ortalamanın üstünde mi" diye bakıyordu; bu, tek bir sert
-// hareketle BULL'a geçip günlerce orada kalabiliyordu (24 Tem: BTC üç gün
-// düşerken rejim hâlâ BOĞA deyip long aldı). İki ortalamanın kesişimi ise
-// trendin KENDİSİNİ ölçer, anlık sapmayı değil.
+// 1 Ağu: 667 günlük 4h BTC verisi 8 ayrı ~90 günlük döneme bölünüp her
+// dönemde ayrı ayrı ölçüldü (BTC rejimi → 5 coinin 3 günlük getirisi,
+// ayrım = BULL sonrası ort. getiri − BEAR sonrası ort. getiri):
 //
-// NOT: Bant genişliği taramasında geniş bantlar (±5-10%) tüm veride daha iyi
-// görünüp ikiye bölününce çöktü — klasik aşırı-uyum. ±1% hem tutarlı hem de
-// bant duyarlılığı düşük (0-3% arası tüm değerler iki yarıda da pozitif).
+//   Golden Cross 50/200 : 8 dönemin sadece 3'ünde pozitif, dönem ortalaması -0.74
+//   Eski kural (fiyat vs 200-SMA ±2%) : 8 dönemin 1'inde pozitif, ortalama -1.64
+//
+// Yani ikisi de yazı-turadan ayırt edilemiyor. Tüm veride golden cross'un
+// pozitif görünmesi (+0.19) tek bir şanslı döneme (2025-02→05, +3.47)
+// dayanıyor; dönemler eşit ağırlıklandırıldığında işaret NEGATİFE dönüyor.
+//
+// Bu kural yine de korunuyor çünkü eski kuraldan daha az kötü (3/8 vs 1/8) ve
+// yönü rastgele seçmekten daha kötü olduğuna dair kanıt da yok. AMA:
+//   • "Rejim anahtarı çalışıyor" bir VARSAYIMDIR, kanıtlanmış bir edge değil.
+//   • Üstüne yeni katman inşa edilmemeli; canlı deneyler nihai hakemdir.
+//
+// Ayrıca kaydedilen iki negatif bulgu (tekrar denenmesin):
+//   • Hızlı ortalamalar sinyali TERSİNE çevirir (30-SMA ayrım -0.43).
+//   • Geniş bantlar tüm veride parlayıp alt dönemlerde çöker (aşırı-uyum).
+//   • Denenip elenen diğer kavramlar: piyasa genişliği, yavaş trend (100/300),
+//     volatiliteye normalize trend, çok-zamanlı uyum, zirveden düşüş,
+//     3'lü oylama — hiçbiri alt dönemlerde tutarlı değil.
 const FAST_PERIOD = 50;
 const SLOW_PERIOD = 200;
 const BAND_PCT = 1.0; // 50-SMA ile 200-SMA arasındaki fark eşiği
