@@ -645,7 +645,7 @@ a.report-btn { text-decoration: none; }
     </div>
   </div>
   <div class="header-right">
-    <div class="status-badge" id="regimeBadge" title="Piyasa rejimi: BTC 4h kapanışının 200-SMA'ya uzaklığı. ±%2 bandı = YATAY (nakit).">
+    <div class="status-badge" id="regimeBadge" title="Piyasa rejimi: BTC 4h grafiğinde 50-SMA'nın 200-SMA'ya farkı (golden/death cross). ±%1 bandı = YATAY (nakit).">
       <span id="regimeText">❓ Rejim: —</span>
     </div>
     <a href="/rapor" target="_blank" class="report-btn">📄 Rapor İndir</a>
@@ -1271,7 +1271,7 @@ function renderRegime(rg) {
     CHOP: { label: '➡️ YATAY — nakit', color: 'var(--accent-amber)' },
     UNKNOWN: { label: '❓ Rejim: veri bekleniyor', color: 'var(--text-dim)' },
   }[rg.state || 'UNKNOWN'];
-  const dist = rg.distancePct != null ? ` (SMA'ya ${rg.distancePct >= 0 ? '+' : ''}${rg.distancePct}%)` : '';
+  const dist = rg.distancePct != null ? ` (50/200 farkı ${rg.distancePct >= 0 ? '+' : ''}${rg.distancePct}%)` : '';
   el.textContent = meta.label + dist;
   el.style.color = meta.color;
 }

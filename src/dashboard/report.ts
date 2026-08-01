@@ -139,7 +139,7 @@ function buildInsights(ctx: {
 			CHOP: '➡️ YATAY — nakitte bekleniyor (yeni pozisyon açılmıyor)',
 			UNKNOWN: '❓ Rejim henüz belirlenmedi',
 		};
-		out.push(`Piyasa rejimi: <b>${labels[regime.state] || regime.state}</b> — BTC, 200-SMA'ya göre ${regime.distancePct >= 0 ? '+' : ''}${regime.distancePct}% konumda (±%${regime.bandPct ?? 2} bandı yatay sayılır).`);
+		out.push(`Piyasa rejimi: <b>${labels[regime.state] || regime.state}</b> — BTC 4h'te 50-SMA, 200-SMA'nın ${regime.distancePct >= 0 ? '+' : ''}${regime.distancePct}% ${(regime.distancePct ?? 0) >= 0 ? 'üstünde' : 'altında'} (golden/death cross; ±%${regime.bandPct ?? 1} bandı yatay sayılır).`);
 	}
 
 	// 2) Üç kardeş karşılaştırması — sistemin ana sorusu
