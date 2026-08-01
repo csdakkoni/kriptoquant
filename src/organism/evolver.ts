@@ -14,7 +14,7 @@
 import { log } from '../core/utils.js';
 import type { Assumption } from './types.js';
 import { KnowledgeGraph } from './knowledge-graph.js';
-import { ExperimentRunner, type Experiment, type EntryRule, type ExitRule } from './experiment-runner.js';
+import { ExperimentRunner, isControlExperiment, type Experiment, type EntryRule, type ExitRule } from './experiment-runner.js';
 import { randomUUID } from 'node:crypto';
 
 const COINS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT'];
@@ -223,6 +223,13 @@ export class Evolver {
 		for (const exp of experiments) {
 			if (exp.status !== 'running') continue;
 			if (this.promotedExperiments.has(exp.id) || this.killedExperiments.has(exp.id)) continue;
+
+			// KONTROLLER ÖLÇÜM CİHAZIDIR — terfi de etmez, öldürülmez de.
+			// Zarar eden bir kontrolü "kötü performans" diye öldürmek,
+			// soğuk gösterdi diye termometreyi çöpe atmaktır: kıyas tabanı yok
+			// olur ve "bu deney rastgeleyi yeniyor mu?" sorusu cevapsız kalır.
+			// (1 Ağu raporu: Evolver kontrolleri de öldürmüştü.)
+			if (isControlExperiment(exp.name)) continue;
 
 			const { stats } = exp;
 			if (stats.totalTrades < PROMOTE_THRESHOLD.minTrades) continue;

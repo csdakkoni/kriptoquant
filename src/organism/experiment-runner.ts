@@ -331,6 +331,7 @@ export class ExperimentRunner {
 	constructor(graph: KnowledgeGraph) {
 		this.graph = graph;
 		this.load();
+		this.ensureCorePopulation(); // açılışta boş kadro kalmasın
 	}
 
 	setRegimeProvider(provider: () => MarketRegime): void {
@@ -379,6 +380,10 @@ export class ExperimentRunner {
 
 		// Save periodically
 		if (this.tickCount % 5 === 0) this.save();
+
+		// Popülasyonu canlı tut: süresi dolan/öldürülen deneylerin yerine
+		// yeni nesil doğsun (~her 100 tikte bir kontrol, ucuz işlem).
+		if (this.tickCount % 100 === 0) this.ensureCorePopulation();
 	}
 
 	// ─── Entry Logic ──────────────────────────────────────────────────
@@ -681,6 +686,49 @@ export class ExperimentRunner {
 	/** Evolver kararlarını kalıcılaştırmak için dışarıdan çağrılabilir. */
 	persist(): void {
 		this.save();
+	}
+
+	/**
+	 * POPÜLASYON TABANI — organizmanın açlıktan ölmesini engeller.
+	 *
+	 * 1 Ağu raporunun teşhisi: ölüm oranı vardı, doğum oranı YOKTU.
+	 * Deneyler ya süresi dolunca kapanıyor (closeExperiment) ya da Evolver
+	 * tarafından öldürülüyordu; yerine yenisi yalnızca kontroller için
+	 * doğuyordu. Evolver'ın sentez kuralları da tek atışlıktır. Sonuç:
+	 * popülasyon tek yönlü azalıp SIFIRA indi — "Çalışan deney yok".
+	 *
+	 * Çözüm: çekirdek kadro (createDefaultExperiments) daimî bir hipotez
+	 * setidir. Bir üyesinin çalışan örneği kalmadıysa yeni nesli doğar.
+	 * Bu bilimsel olarak da doğrudur: temmuz ayısında ölen bir kural,
+	 * ağustos boğasında yeniden sınanmayı hak eder — her neslin istatistiği
+	 * ayrı tutulduğu ve ölen neslin kaydı bilgi grafiğinde kaldığı için
+	 * geçmiş sonuç kaybolmaz.
+	 *
+	 * [SYNTH]/[CROSS] deneyleri bu kadroda DEĞİLDİR: onlar belirli
+	 * koşullardan doğar ve ölümleri doğal seçilimdir.
+	 */
+	private ensureCorePopulation(): void {
+		const COOLDOWN_MS = 6 * 60 * 60 * 1000; // ölen neslin ardından dinlenme süresi
+		const now = Date.now();
+		let spawned = 0;
+
+		for (const template of createDefaultExperiments()) {
+			const sameName = this.experiments.filter((e) => e.name === template.name);
+			if (sameName.some((e) => e.status === 'running')) continue;
+
+			// Son nesil çok yeni öldüyse hemen diriltme (kill→respawn savrulması olmasın)
+			const lastEnd = Math.max(0, ...sameName.map((e) => e.endedAt || 0));
+			if (lastEnd > 0 && now - lastEnd < COOLDOWN_MS) continue;
+
+			this.experiments.push({ ...template, id: randomUUID(), startedAt: now });
+			log(`[EXPERIMENT] 🌱 Yeni nesil doğdu: "${template.name}"`);
+			spawned++;
+		}
+
+		if (spawned > 0) {
+			log(`[EXPERIMENT] Popülasyon tabanı korundu: ${spawned} deney yeniden doğdu.`);
+			this.save();
+		}
 	}
 
 	// ─── Persistence ──────────────────────────────────────────────────
