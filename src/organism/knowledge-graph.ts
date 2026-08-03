@@ -1,14 +1,13 @@
 // ============================================================================
 // ORGANISM — Knowledge Graph
 // ============================================================================
-// Not a memory. A web of RELATIONSHIPS between observations, assumptions,
-// insights, and questions. Over time, patterns emerge that no single
-// observation could reveal.
+// Gözlemler, iç görüler ve sorular arasındaki ilişki ağı. Arayüzdeki canlı
+// gözlem akışının kaynağı ve kararların gerekçe kaydı.
 // ============================================================================
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import type { KnowledgeNode, KnowledgeEdge, Observation, Evidence } from './types.js';
+import type { KnowledgeNode, KnowledgeEdge, Observation } from './types.js';
 import { randomUUID } from 'node:crypto';
 
 // Testlerin gerçek durumu ezmemesi için dizin ORGANISM_DATA_DIR ile değiştirilebilir

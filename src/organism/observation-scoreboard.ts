@@ -124,6 +124,44 @@ export class ObservationScoreboard {
 		}
 	}
 
+	/**
+	 * Karnedeki KANITLANMIŞ üstünlükler — deney doğurmaya yetecek kadar güçlü
+	 * olanlar. Karne 4 Ağu'ya kadar yalnızca ekrana yazılıyordu; artık kararı
+	 * bu fonksiyon besliyor.
+	 *
+	 * Bir tip+vade ancak şu üç şartı birden geçerse aday sayılır:
+	 *   1. Yeterli örneklem (n >= MIN_SAMPLE) — 3 gözlemle şans ayırt edilemez.
+	 *   2. Ortalama getiri gidiş-dönüş maliyetini AŞMALI. Maliyeti aşmayan bir
+	 *      sinyal doğru tahmin etse bile para kaybettirir.
+	 *   3. İsabet oranı yön ile tutarlı olmalı — tek bir dev hareketin ortalamayı
+	 *      taşıdığı durumları eler.
+	 *
+	 * Negatif kenar da adaydır: tutarlı biçimde DÜŞÜREN bir sinyal, ters yönde
+	 * (short) aynı derecede kullanışlıdır.
+	 */
+	getProvenEdges(): Array<{ type: string; horizon: number; avgRet: number; hitRate: number; n: number; side: 'long' | 'short' }> {
+		const MIN_SAMPLE = 20;
+		const MIN_ABS_RET = 0.45; // %0.3 maliyet + anlamlılık payı
+		const MIN_HIT_RATE = 0.55;
+
+		const out = [];
+		for (const [type, horizons] of Object.entries(this.state.scores)) {
+			for (const [h, cell] of Object.entries(horizons)) {
+				if (cell.n < MIN_SAMPLE) continue;
+				const avgRet = cell.sumRet / cell.n;
+				if (Math.abs(avgRet) < MIN_ABS_RET) continue;
+				// İsabet oranı yönle aynı tarafta mı? (negatif kenar için düşüş oranı)
+				const upRate = cell.pos / cell.n;
+				const side = avgRet > 0 ? 'long' as const : 'short' as const;
+				const hitRate = side === 'long' ? upRate : 1 - upRate;
+				if (hitRate < MIN_HIT_RATE) continue;
+				out.push({ type, horizon: Number(h), avgRet, hitRate, n: cell.n, side });
+			}
+		}
+		// En güçlü kanıt önce
+		return out.sort((a, b) => Math.abs(b.avgRet) - Math.abs(a.avgRet));
+	}
+
 	private load(): void {
 		if (existsSync(SCOREBOARD_FILE)) {
 			try {

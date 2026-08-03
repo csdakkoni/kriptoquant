@@ -27,39 +27,9 @@ export type ObservationType =
 	| 'volatility_squeeze'   // Extreme Bollinger squeeze
 	| 'anomaly';      // Something that doesn't fit any category
 
-/** Evidence for or against an assumption */
-export interface Evidence {
-	readonly timestamp: number;
-	readonly observationId?: string;
-	readonly supports: boolean; // true = supports assumption, false = refutes
-	readonly strength: number; // 0-1
-	readonly description: string;
-	readonly data?: Record<string, unknown>;
-}
-
-/** The verdict on an assumption after testing */
-export type AssumptionStatus = 'alive' | 'killed' | 'uncertain' | 'testing' | 'queued';
-
-/** An assumption to be tested and potentially killed */
-export interface Assumption {
-	readonly id: string;
-	readonly statement: string;
-	readonly nullHypothesis: string; // What we're trying to prove
-	readonly testMethod: string;
-	readonly status: AssumptionStatus;
-	readonly evidence: Evidence[];
-	readonly createdAt: number;
-	readonly testedWeek?: string;
-	readonly killedAt?: number;
-	readonly verdictAt?: number; // verdiktin verildiği an (yeniden test döngüsü için)
-	readonly verdict?: string;
-	readonly confidenceToKill: number; // 0-1, evidence threshold needed to kill
-}
-
-/** A node in the knowledge graph */
 export interface KnowledgeNode {
 	readonly id: string;
-	readonly type: 'observation' | 'assumption' | 'insight' | 'question' | 'experiment';
+	readonly type: 'observation' | 'insight' | 'question' | 'experiment';
 	readonly content: string;
 	readonly timestamp: number;
 	readonly connections: string[]; // IDs of related nodes
@@ -72,20 +42,6 @@ export interface KnowledgeEdge {
 	readonly to: string;
 	readonly relation: 'led_to' | 'refuted' | 'supported' | 'related' | 'evolved_from' | 'raised_question';
 	readonly timestamp: number;
-}
-
-/** Daily research journal entry */
-export interface JournalEntry {
-	readonly date: string;
-	readonly week: string;
-	readonly activeAssumption: string;
-	readonly observationCount: number;
-	readonly evidenceFor: number;
-	readonly evidenceAgainst: number;
-	readonly surprises: string[];
-	readonly insights: string[];
-	readonly newQuestions: string[];
-	readonly rawNotes: string;
 }
 
 /** A candle with all the data we need */
@@ -106,16 +62,6 @@ export interface Observer {
 	readonly description: string;
 	/** Process a new batch of market ticks and produce observations */
 	observe(ticks: Map<string, MarketTick[]>): Observation[];
-}
-
-/** Assumption tester interface */
-export interface AssumptionTest {
-	readonly assumptionId: string;
-	/** Given new observations and market data, produce evidence */
-	evaluate(
-		observations: Observation[],
-		ticks: Map<string, MarketTick[]>,
-	): Evidence[];
 }
 
 /** Helper to aggregate lower timeframe candles into higher timeframe (e.g. 15m -> 4h) */

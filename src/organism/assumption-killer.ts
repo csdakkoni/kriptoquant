@@ -1,22 +1,23 @@
 // ============================================================================
-// ORGANISM — Assumption Killer (Main Engine)
+// ORGANISM — Ana döngü
 // ============================================================================
-// "KriptoQuant is an autonomous falsification engine for financial markets."
+// Canlı piyasa verisine bağlanır, gözlemcileri çalıştırır, gözlemleri karneye
+// işler, kağıt deneyleri yürütür ve karnenin kanıtından yeni deney doğurur.
 //
-// This is the heart. It connects to live market data, runs observers,
-// feeds evidence to assumption tests, and tries to KILL beliefs.
-//
-// Every killed assumption produces KNOWLEDGE.
-// Knowledge is the real output. Trading is just the experiment.
+// 4 Ağu'da VARSAYIM PANOSU kaldırıldı (18 varsayım, ~1400 satır). Gerekçe:
+// panonun alım-satıma tek etkisi, verdiktlere bağlı 6 elle yazılmış deney
+// kuralıydı ve bunların ikisi kopuktu — biri canlıda hiç üretilmeyen bir
+// gözleme bağlıydı, diğerinin adı hacim derken kuralı başka sinyale bakıyordu.
+// Yerine geçen mekanizma daha dürüst: deneyler artık yalnızca gözlem karnesinin
+// ÖLÇTÜĞÜ kanıttan doğar. Ekranda rakam gösteren ama hiçbir karara dokunmayan
+// katman bırakmamak esas kuraldır.
 // ============================================================================
 
 import { WebSocket } from 'ws';
 import { log, logError } from '../core/utils.js';
-import type { Assumption, AssumptionTest, MarketTick, Observer, Observation, Evidence } from './types.js';
+import type { MarketTick, Observer, Observation } from './types.js';
 import { DivergenceObserver, SilenceObserver, HerdObserver, SurpriseObserver, LiquidityWickObserver, BollingerSqueezeObserver } from './observers.js';
-import { createAllTests } from './assumptions.js';
 import { KnowledgeGraph } from './knowledge-graph.js';
-import { ResearchJournal } from './journal.js';
 import { ExperimentRunner } from './experiment-runner.js';
 import { Evolver } from './evolver.js';
 import { ObservationScoreboard } from './observation-scoreboard.js';
@@ -26,7 +27,6 @@ import { join } from 'node:path';
 
 // Testlerin gerçek durumu ezmemesi için dizin ORGANISM_DATA_DIR ile değiştirilebilir
 const STATE_DIR = process.env.ORGANISM_DATA_DIR || join(process.cwd(), 'organism-data');
-const STATE_FILE = join(STATE_DIR, 'assumptions-state.json');
 
 const COINS = [
 	'BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT',
@@ -34,22 +34,11 @@ const COINS = [
 ];
 const INTERVAL = '15m';
 
-// Varsayım başına saklanan azami kanıt (dosya şişmesin, verdikt güncel kalsın)
-const MAX_EVIDENCE = 300;
-// Bir verdikt bu süreden eskiyse varsayım yeniden test edilmeye açılır.
-// Gerekçe: piyasa değişir. "Temmuz ayısında öldü" demek "sonsuza dek yanlış"
-// demek değildir. Yanlışlama motorunun kendi verdiktini de yeniden sınaması
-// gerekir — aksi halde donmuş bir inanç listesine dönüşür.
-const VERDICT_RETEST_MS = 30 * 24 * 60 * 60 * 1000; // 30 gün
-
 export class AssumptionKiller {
 	private ws: WebSocket | null = null;
 	private candleBuffers: Map<string, MarketTick[]> = new Map();
 	private observers: Observer[] = [];
-	private tests: Map<string, AssumptionTest> = new Map();
-	private assumptions: Assumption[] = [];
 	private graph: KnowledgeGraph;
-	private journal: ResearchJournal;
 	private experimentRunner: ExperimentRunner;
 	private evolver: Evolver;
 	private scoreboard: ObservationScoreboard;
@@ -61,12 +50,9 @@ export class AssumptionKiller {
 	private lastObservationPeriod = 0;
 	// Aynı gözlemin (tip+coin seti) 2 saat içinde tekrar yayınlanmasını engeller
 	private obsCooldown = new Map<string, number>();
-	// Kanıt örneklemesi zaman bazlı — restart'a dayanıklı (süreç sayacı değil)
-	private lastEvidenceRunTs = 0;
 
 	constructor() {
 		this.graph = new KnowledgeGraph();
-		this.journal = new ResearchJournal(this.graph);
 		this.experimentRunner = new ExperimentRunner(this.graph);
 		this.evolver = new Evolver(this.graph, this.experimentRunner);
 		this.scoreboard = new ObservationScoreboard();
@@ -83,13 +69,6 @@ export class AssumptionKiller {
 			new BollingerSqueezeObserver(),
 		];
 
-		// Initialize assumption tests
-		for (const test of createAllTests()) {
-			this.tests.set(test.assumptionId, test);
-		}
-
-		// Load or create assumptions
-		this.loadState();
 	}
 
 	// ─── Lifecycle ────────────────────────────────────────────────────────
@@ -99,8 +78,8 @@ export class AssumptionKiller {
 
 		log('');
 		log('╔══════════════════════════════════════════════════════════════╗');
-		log('║          ASSUMPTION KILLER — Research Organism              ║');
-		log('║  "Science progresses by trying to prove itself wrong."     ║');
+		log('║   KRİPTOQUANT — Ölçüm organizması                            ║');
+		log('║   Kanıt olmadan strateji doğmaz.                             ║');
 		log('╚══════════════════════════════════════════════════════════════╝');
 		log('');
 
@@ -117,13 +96,9 @@ export class AssumptionKiller {
 		// Connect to Binance WebSocket for live data
 		this.connectWebSocket();
 
-		// Schedule daily journal
-		this.scheduleDailyJournal();
-
 		const expCount = this.experimentRunner.getExperiments().filter(e => e.status === 'running').length;
 		log(`[Organism] Watching ${COINS.length} coins on ${INTERVAL}. ${this.observers.length} observers active.`);
-		log(`[Organism] ${this.assumptions.length} assumptions loaded. ${expCount} experiments running.`);
-		log(`[Organism] Let the falsification begin.`);
+		log(`[Organism] ${expCount} deney çalışıyor.`);
 	}
 
 	stop(): void {
@@ -132,8 +107,7 @@ export class AssumptionKiller {
 			this.ws.close();
 			this.ws = null;
 		}
-		this.saveState();
-		log('[Organism] Assumption Killer stopped. State saved.');
+		log('[Organism] Durduruldu.');
 	}
 
 	// ─── History Bootstrap ────────────────────────────────────────────────
@@ -284,400 +258,32 @@ export class AssumptionKiller {
 			logError(`[Organism] Scoreboard error: ${err}`);
 		}
 
-		// Step 2: Feed observations + data to ALL assumption tests (parallel)
-		// İSTATİSTİK NOTU: Testler her mumda çalışırsa aynı 200 mumluk pencere
-		// tekrar tekrar ölçülür — 30 "kanıt" aslında ~1 bağımsız ölçümün kopyası
-		// olur ve verdiktler sahte örneklem büyüklüğüyle verilir (pseudo-replication).
-		// Bu yüzden testler ~4 saatte bir çalışır. Zaman bazlı ölçülür ki pm2
-		// restart'ları sayacı sıfırlayıp örneklemeyi susturamasın; ilk parti
-		// açılıştan hemen sonra toplanır (pano anında canlanır).
-		const EVIDENCE_INTERVAL_MS = 4 * 60 * 60 * 1000;
-		if (Date.now() - this.lastEvidenceRunTs >= EVIDENCE_INTERVAL_MS) {
-			this.lastEvidenceRunTs = Date.now();
-			this.reopenStaleVerdicts(); // eskimiş verdiktler yeniden sınansın
-			for (const assumption of this.assumptions) {
-				if (assumption.status !== 'testing') continue;
-				const test = this.findTest(assumption.id);
-				if (!test) continue;
-				try {
-					const evidence = test.evaluate(observations, this.candleBuffers);
-					for (const e of evidence) {
-						(assumption.evidence as Evidence[]).push(e);
-					}
-					if (evidence.length > 0) {
-						const f = assumption.evidence.filter(e => e.supports).length;
-						const ag = assumption.evidence.filter(e => !e.supports).length;
-						log(`[EVIDENCE] ${assumption.id}: +${f}/-${ag} (${evidence.length} new)`);
-					}
-					this.checkVerdict(assumption);
-				} catch (err) {
-					logError(`[Organism] Test ${assumption.id} error: ${err}`);
-				}
-			}
-		}
-
-		// Step 3: Run experiments (paper trading)
+		// Deneyleri yürüt (kağıt üstünde)
 		try {
 			this.experimentRunner.processTick(this.candleBuffers, observations);
 		} catch (err) {
 			logError(`[Organism] Experiment runner error: ${err}`);
 		}
 
-		// Step 4: Evolve — synthesize new experiments from knowledge
+		// Kanıttan yeni deney doğur, terfi/öldürme kararlarını ver
 		if (this.tickCount % 20 === 0) {
 			try {
-				this.evolver.evolve(this.assumptions);
+				this.evolver.evolve(this.scoreboard);
 			} catch (err) {
 				logError(`[Organism] Evolver error: ${err}`);
 			}
 		}
 
-		// Step 5: Periodically save state
-		if (this.tickCount % 10 === 0) {
-			this.saveState();
-		}
-
-		// Step 6: Print periodic status
+		// Durum yazdır
 		if (this.tickCount % 50 === 0) {
 			this.printStatus();
 		}
-	}
-
-	/**
-	 * Varsayım kimliğine test eşler. Evrimle doğan varsayımların kimliklerinde
-	 * zaman damgası eki vardır (ör. "btc-leads-alts-1752...") — önek eşleşmesi
-	 * olmadan bu varsayımlar test edilemeden +0/-0'da zombi kalır.
-	 */
-	private findTest(assumptionId: string): AssumptionTest | undefined {
-		const direct = this.tests.get(assumptionId);
-		if (direct) return direct;
-		for (const [id, test] of this.tests) {
-			if (assumptionId.startsWith(`${id}-`) || assumptionId.startsWith(id)) return test;
-		}
-		return undefined;
-	}
-
-	/**
-	 * Eskimiş verdiktleri yeniden teste açar.
-	 * Eski davranış: bir varsayım 'alive' veya 'killed' olduğu anda kanıt
-	 * toplamayı SONSUZA DEK bırakıyordu (döngü yalnızca 'testing' olanları
-	 * işler). Yani yanlışlama motoru, kendi verdiktlerini bir daha asla
-	 * sınamıyordu — donmuş bir inanç listesine dönüşüyordu.
-	 */
-	private reopenStaleVerdicts(): void {
-		const now = Date.now();
-		let reopened = 0;
-		for (const a of this.assumptions) {
-			if (a.status !== 'alive' && a.status !== 'killed') continue;
-			const decidedAt = a.verdictAt ?? a.killedAt ?? 0;
-			if (decidedAt === 0 || now - decidedAt < VERDICT_RETEST_MS) continue;
-
-			// Önceki verdikt bilgi grafiğinde kalıcı — kayıt kaybolmuyor
-			this.graph.addInsight(
-				`Verdikt yeniden teste açıldı: "${a.statement}" — önceki sonuç: ${a.verdict ?? '—'} (${Math.round((now - decidedAt) / 86_400_000)} gün önce). Piyasa değişmiş olabilir.`,
-				[],
-			);
-			(a as any).status = 'testing';
-			(a as any).evidence = [];
-			(a as any).verdict = undefined;
-			(a as any).verdictAt = undefined;
-			reopened++;
-		}
-		if (reopened > 0) {
-			log(`[Organism] 🔄 ${reopened} eskimiş verdikt yeniden teste açıldı (30+ gün).`);
-			this.saveState();
-		}
-	}
-
-	private checkVerdict(assumption: Assumption): void {
-		// Kanıt dizisi sınırsız büyümemeli: 1 Ağu'da bazı varsayımlarda 1050+
-		// kanıt birikmişti. Verdikt için son 300 ölçüm fazlasıyla yeterli;
-		// eskiler düşer, dosya şişmez, verdikt GÜNCEL veriye dayanır.
-		if (assumption.evidence.length > MAX_EVIDENCE) {
-			(assumption as any).evidence = assumption.evidence.slice(-MAX_EVIDENCE);
-		}
-
-		const evidence = assumption.evidence;
-		if (evidence.length < 20) return; // Need minimum evidence
-
-		const supporting = evidence.filter(e => e.supports);
-		const refuting = evidence.filter(e => !e.supports);
-
-		const supportRatio = supporting.length / evidence.length;
-
-		// If >70% of evidence refutes, kill it
-		if (refuting.length / evidence.length > 0.7 && evidence.length >= 30) {
-			(assumption as any).status = 'killed';
-			(assumption as any).killedAt = Date.now();
-			(assumption as any).verdictAt = Date.now();
-			(assumption as any).verdict = `KILLED — ${refuting.length}/${evidence.length} evidence points refute this assumption (${(supportRatio * 100).toFixed(0)}% support rate)`;
-
-			log('');
-			log('════════════════════════════════════════════════════════════');
-			log(`💀 ASSUMPTION KILLED: "${assumption.statement}"`);
-			log(`   ${assumption.verdict}`);
-			log('════════════════════════════════════════════════════════════');
-			log('');
-
-			this.graph.addInsight(
-				`Assumption killed: "${assumption.statement}" — ${assumption.verdict}`,
-				evidence.slice(-5).map(e => e.observationId).filter((id): id is string => !!id),
-			);
-
-			// Evolution: death creates new life
-			this.evolve(assumption);
-		}
-
-		// If >70% supports after sufficient evidence, assumption survives this round
-		if (supportRatio > 0.7 && evidence.length >= 50) {
-			(assumption as any).status = 'alive';
-			(assumption as any).verdictAt = Date.now();
-			(assumption as any).verdict = `SURVIVED — ${supporting.length}/${evidence.length} evidence points support this assumption`;
-
-			log('');
-			log('════════════════════════════════════════════════════════════');
-			log(`🟢 ASSUMPTION SURVIVED: "${assumption.statement}"`);
-			log(`   ${assumption.verdict}`);
-			log('════════════════════════════════════════════════════════════');
-			log('');
-		}
-	}
-
-	private evolve(killedAssumption: Assumption): void {
-		// When an assumption dies, new questions are born
-		const newAssumptions: Assumption[] = [];
-		const base = {
-			status: 'testing' as const,
-			evidence: [],
-			createdAt: Date.now(),
-			testedWeek: new Date().toISOString().slice(0, 10),
-			confidenceToKill: 0.7,
-		};
-
-		switch (killedAssumption.id) {
-			case 'trend-exists':
-				newAssumptions.push({
-					...base, id: `mean-reversion-${Date.now()}`,
-					statement: 'Fiyat ortalamaya döner (mean reversion)',
-					nullHypothesis: 'Fiyat rastgele yürür',
-					testMethod: 'Aşırı sapma sonrası dönüş oranı',
-				});
-				break;
-			case 'coins-are-independent':
-				newAssumptions.push({
-					...base, id: `btc-leads-alts-${Date.now()}`,
-					statement: 'BTC altcoinlerden önce hareket eder',
-					nullHypothesis: 'Lider-takipçi ilişkisi yoktur',
-					testMethod: 'Çapraz korelasyon lag analizi',
-				});
-				break;
-			case 'entry-signal-matters':
-				newAssumptions.push({
-					...base, id: `position-sizing-matters-${Date.now()}`,
-					statement: 'Pozisyon boyutu girişten daha önemlidir',
-					nullHypothesis: 'Sabit vs değişken pozisyon boyutu aynı sonucu verir',
-					testMethod: 'Volatiliteye göre boyut vs sabit boyut karşılaştırması',
-				});
-				break;
-		}
-
-		// Always generate a random mutation
-		const mutations = [
-			{ id: `weekend-different-${Date.now()}`, statement: 'Hafta sonu piyasa tamamen farklı davranır', nullHypothesis: 'Hafta içi ve sonu arasında fark yoktur', testMethod: 'Hafta sonu vs hafta içi return dağılımı karşılaştırması' },
-			{ id: `night-moves-${Date.now()}`, statement: 'Gece saatlerinde fiyat daha öngörülebilirdir', nullHypothesis: 'Saat dilimi getiriyi etkilemez', testMethod: 'UTC 0-8 vs 8-16 vs 16-24 return karşılaştırması' },
-			{ id: `volatility-clusters-${Date.now()}`, statement: 'Volatilite kümelenir (yüksek vol daha yüksek vol getirir)', nullHypothesis: 'Volatilite rastgeledir', testMethod: 'Volatilite otokorelasyonu' },
-			{ id: `big-move-reversal-${Date.now()}`, statement: 'Büyük hareketler ertesi gün tersine döner', nullHypothesis: 'Büyük hareket sonrası yön rastgeledir', testMethod: '>2σ hareket sonrası forward return analizi' },
-			{ id: `volume-predicts-${Date.now()}`, statement: 'Hacim fiyattan önce hareket eder', nullHypothesis: 'Hacim ve fiyat eş zamanlıdır', testMethod: 'Hacim-fiyat çapraz korelasyon lag testi' },
-		];
-		const mutation = mutations[Math.floor(Math.random() * mutations.length)];
-		newAssumptions.push({ ...base, ...mutation });
-
-		for (const a of newAssumptions) {
-			// Aynı İFADEYLE bir varsayım zaten varsa yeniden doğurma (mükerrer önlemi)
-			const exists = this.assumptions.some((x) => x.statement === a.statement);
-			if (exists) continue;
-			this.assumptions.push(a);
-			log(`[EVOLUTION] 🧬 New assumption born: "${a.statement}"`);
-		}
-
-		this.saveState();
-	}
-
-	// ─── State ────────────────────────────────────────────────────────────
-
-	private loadState(): void {
-		if (existsSync(STATE_FILE)) {
-			try {
-				this.assumptions = JSON.parse(readFileSync(STATE_FILE, 'utf-8'));
-				// Tek seferlik temizlik: aynı ifadeli mükerrer varsayımlardan
-				// kanıtı çok olanı tut (eski evolve() dedupe'suz dönemin kalıntısı)
-				const byStatement = new Map<string, Assumption>();
-				let removed = 0;
-				for (const a of this.assumptions) {
-					const prev = byStatement.get(a.statement);
-					if (!prev) byStatement.set(a.statement, a);
-					else {
-						byStatement.set(a.statement, (a.evidence?.length || 0) >= (prev.evidence?.length || 0) ? a : prev);
-						removed++;
-					}
-				}
-				if (removed > 0) {
-					this.assumptions = [...byStatement.values()];
-					log(`[Organism] 🧹 ${removed} mükerrer varsayım temizlendi.`);
-					this.saveState();
-				}
-				return;
-			} catch {}
-		}
-
-		// Default assumptions — ALL start as 'testing' (parallel)
-		this.assumptions = [
-			{
-				id: 'trend-exists',
-				statement: 'Fiyat trendleri vardır ve tespit edilebilir',
-				nullHypothesis: 'Getiriler rastgeledir (otokorelasyon sıfır)',
-				testMethod: 'Farklı lag değerlerinde otokorelasyon ölçümü',
-				status: 'testing',
-				evidence: [],
-				createdAt: Date.now(),
-				testedWeek: new Date().toISOString().slice(0, 10),
-				confidenceToKill: 0.7,
-			},
-			{
-				id: 'coins-are-independent',
-				statement: 'Coinler birbirinden bağımsız hareket eder',
-				nullHypothesis: 'Coinler arasında korelasyon yoktur',
-				testMethod: 'Canlı Pearson korelasyon matrisi',
-				status: 'testing',
-				evidence: [],
-				createdAt: Date.now(),
-				testedWeek: new Date().toISOString().slice(0, 10),
-				confidenceToKill: 0.7,
-			},
-			{
-				id: 'entry-signal-matters',
-				statement: 'Giriş sinyali işlem sonucunu etkiler',
-				nullHypothesis: 'Rastgele giriş, stratejik girişle aynı sonucu verir',
-				testMethod: 'Rastgele giriş forward return analizi',
-				status: 'testing',
-				evidence: [],
-				createdAt: Date.now(),
-				testedWeek: new Date().toISOString().slice(0, 10),
-				confidenceToKill: 0.7,
-			},
-			{
-				id: 'timeframe-matters',
-				statement: '15 dakikalık zaman dilimi anlamlıdır',
-				nullHypothesis: 'Davranış tüm zaman dilimlerinde aynıdır',
-				testMethod: 'Farklı ölçeklerde otokorelasyon karşılaştırması',
-				status: 'testing',
-				evidence: [],
-				createdAt: Date.now(),
-				testedWeek: new Date().toISOString().slice(0, 10),
-				confidenceToKill: 0.7,
-			},
-			{
-				id: 'exit-beats-entry',
-				statement: 'Çıkış zamanlaması girişten daha önemlidir',
-				nullHypothesis: 'Farklı çıkış kuralları aynı sonucu verir',
-				testMethod: 'Sabit giriş ile farklı çıkış kurallarının karşılaştırması',
-				status: 'testing',
-				evidence: [],
-				createdAt: Date.now(),
-				testedWeek: new Date().toISOString().slice(0, 10),
-				confidenceToKill: 0.7,
-			},
-			// ─── Wild assumptions ─────────────────────────────────────
-			{
-				id: 'monday-effect',
-				statement: 'Pazartesi günleri farklı davranır',
-				nullHypothesis: 'Haftanın günü getiriyi etkilemez',
-				testMethod: 'Günlere göre return dağılımı karşılaştırması',
-				status: 'testing',
-				evidence: [],
-				createdAt: Date.now(),
-				testedWeek: new Date().toISOString().slice(0, 10),
-				confidenceToKill: 0.7,
-			},
-			{
-				id: 'silence-before-storm',
-				statement: 'Sessizlik büyük hareketin habercisidir',
-				nullHypothesis: 'Düşük volatilite sonrası yön rastgeledir',
-				testMethod: 'Volatilite sıkışması sonrası hareket büyüklüğü analizi',
-				status: 'testing',
-				evidence: [],
-				createdAt: Date.now(),
-				testedWeek: new Date().toISOString().slice(0, 10),
-				confidenceToKill: 0.7,
-			},
-			{
-				id: 'round-numbers-matter',
-				statement: 'Yuvarlak sayılar destek/direnç olarak çalışır',
-				nullHypothesis: 'Yuvarlak sayıların etkisi yoktur',
-				testMethod: 'Fiyatın yuvarlak sayılara yakınlığı ve tepki analizi',
-				status: 'testing',
-				evidence: [],
-				createdAt: Date.now(),
-				testedWeek: new Date().toISOString().slice(0, 10),
-				confidenceToKill: 0.7,
-			},
-			{
-				id: 'volume-spike-predictive',
-				statement: 'Hacim patlaması gelecek fiyatı tahmin eder',
-				nullHypothesis: 'Hacim ve gelecek fiyat ilişkisizdir',
-				testMethod: 'Hacim spike sonrası forward return analizi',
-				status: 'testing',
-				evidence: [],
-				createdAt: Date.now(),
-				testedWeek: new Date().toISOString().slice(0, 10),
-				confidenceToKill: 0.7,
-			},
-			{
-				id: 'whipsaw-cycle',
-				statement: 'Piyasa düzenli olarak tuzak hareketi yapar',
-				nullHypothesis: 'Ani tersine dönüşler rastgeledir',
-				testMethod: 'Breakout sonrası geri dönüş oranı analizi',
-				status: 'testing',
-				evidence: [],
-				createdAt: Date.now(),
-				testedWeek: new Date().toISOString().slice(0, 10),
-				confidenceToKill: 0.7,
-			},
-		];
-
-		this.saveState();
-	}
-
-	private saveState(): void {
-		if (!existsSync(STATE_DIR)) mkdirSync(STATE_DIR, { recursive: true });
-		writeFileSync(STATE_FILE, JSON.stringify(this.assumptions, null, 2));
-	}
-
-	// ─── Journal ──────────────────────────────────────────────────────────
-
-	private scheduleDailyJournal(): void {
-		// Generate journal every 6 hours
-		setInterval(() => {
-			const entry = this.journal.generateEntry(this.assumptions);
-			log(`[Journal] Daily research entry generated. ${entry.observationCount} observations, ${entry.surprises.length} surprises.`);
-		}, 6 * 60 * 60 * 1000);
-
-		// Also generate one now
-		setTimeout(() => {
-			const entry = this.journal.generateEntry(this.assumptions);
-			log(`[Journal] Initial research entry generated.`);
-		}, 60_000); // 1 minute after start
 	}
 
 	// ─── Display ──────────────────────────────────────────────────────────
 
 	private printStatus(): void {
 		const graphStats = this.graph.stats();
-		const alive = this.assumptions.filter(a => a.status === 'alive').length;
-		const killed = this.assumptions.filter(a => a.status === 'killed').length;
-		const testing = this.assumptions.filter(a => a.status === 'testing').length;
-		const queued = this.assumptions.filter(a => a.status === 'queued').length;
-
 		const experiments = this.experimentRunner.getExperiments();
 		const runningExps = experiments.filter(e => e.status === 'running');
 		const completedExps = experiments.filter(e => e.status === 'completed');
@@ -686,15 +292,6 @@ export class AssumptionKiller {
 		log('');
 		log('┌─ Organism Status ─────────────────────────────────────────┐');
 		log(`│ Ticks: ${this.tickCount}  Observations: ${this.observationCount}  Knowledge: ${graphStats.nodes}`);
-		log(`│ Assumptions: 🟢${alive} alive  💀${killed} killed  🔬${testing} testing  ⏳${queued} queued`);
-
-		const active = this.assumptions.find(a => a.status === 'testing');
-		if (active) {
-			const f = active.evidence.filter(e => e.supports).length;
-			const ag = active.evidence.filter(e => !e.supports).length;
-			log(`│ Active test: "${active.statement}" [+${f} / -${ag}]`);
-		}
-
 		log(`│ Experiments: ▶${runningExps.length} running  ✅${completedExps.length} done  📊${totalTrades} trades`);
 		for (const exp of runningExps) {
 			const open = exp.positions.filter(p => !p.exitPrice).length;
@@ -707,7 +304,6 @@ export class AssumptionKiller {
 	/** Get current state for API/dashboard */
 	getState() {
 		return {
-			assumptions: this.assumptions,
 			experiments: this.experimentRunner.getExperiments(),
 			stats: {
 				ticks: this.tickCount,

@@ -1,114 +1,30 @@
 // ============================================================================
-// ORGANISM — Evolver (Knowledge → Action Bridge)
+// ORGANISM — Evolver (Kanıt → Deney köprüsü)
 // ============================================================================
-// The missing link. Watches assumption verdicts and experiment results,
-// then AUTOMATICALLY:
-//   1. Combines surviving assumptions into new experiments
-//   2. Promotes winning experiments to "candidate" status
-//   3. Kills losing experiments
-//   4. Generates new hypotheses from experiment outcomes
+// Görevi üç şey:
+//   1. Gözlem karnesinde KANITLANMIŞ üstünlük gösteren sinyallerden deney doğur
+//   2. Maliyeti aşan deneyleri "aday" ilan et, sistematik kaybedeni öldür
+//   3. En iyi girişle en iyi çıkışı çaprazla
 //
-// This is what makes the organism ALIVE.
+// 4 Ağu değişikliği — deney doğurma kaynağı değişti:
+// Eskiden 6 adet ELLE YAZILMIŞ kural vardı ve varsayım verdiktlerine bakıyordu
+// ("coinler bağımsızdır ölürse şu deneyi kur"). İki sorun vardı:
+//   • Bağlantılar kopuktu: "Hacim Patlaması Girişi" adındaki deneyin giriş
+//     sinyali hacim değil 'divergence'tı; "BTC Liderlik Takibi" ise canlıda
+//     hiç üretilmeyen 'herd' gözlemine bağlıydı — doğsa bile işlem açamazdı.
+//   • Kaynağı kanıt değil, bizim tahminimizdi.
+// Artık deneyler yalnızca gözlem karnesinin ölçtüğü kanıttan doğar: bir gözlem
+// tipi yeterli örneklemle maliyeti aşan bir getiri gösteriyorsa, o tipe ve o
+// vadeye göre deney kurulur. Böylece karne süs olmaktan çıkıp karar verir.
 // ============================================================================
 
 import { log } from '../core/utils.js';
-import type { Assumption } from './types.js';
 import { KnowledgeGraph } from './knowledge-graph.js';
+import { ObservationScoreboard } from './observation-scoreboard.js';
 import { ExperimentRunner, isControlExperiment, type Experiment, type EntryRule, type ExitRule } from './experiment-runner.js';
 import { randomUUID } from 'node:crypto';
 
 const COINS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT'];
-
-// ─── Rules ───────────────────────────────────────────────────────────────────
-
-interface SynthesisRule {
-	/** Which assumptions trigger this rule (by id prefix) */
-	requires: { id: string; status: 'killed' | 'alive' }[];
-	/** What experiment to create */
-	create: () => Partial<Experiment>;
-}
-
-const SYNTHESIS_RULES: SynthesisRule[] = [
-	// "Entry doesn't matter" + "Exit matters" → pure exit-focused experiment
-	{
-		requires: [
-			{ id: 'entry-signal-matters', status: 'killed' },
-			{ id: 'exit-beats-entry', status: 'alive' },
-		],
-		create: () => ({
-			name: '[SYNTH] Random Giriş + Agresif Trailing',
-			hypothesis: 'Giriş önemsizse, sadece çıkış optimizasyonu yeter',
-			entryRule: { type: 'random', probability: 0.08 } as EntryRule,
-			exitRule: { type: 'trailing_stop', percent: 0.8 } as ExitRule,
-		}),
-	},
-
-	// "Coins are correlated" → trade alt when BTC moves
-	{
-		requires: [
-			{ id: 'coins-are-independent', status: 'killed' },
-		],
-		create: () => ({
-			name: '[SYNTH] BTC Liderlik Takibi',
-			hypothesis: 'Coinler korelasyonluysa, BTC hareketi altları tahmin eder',
-			entryRule: { type: 'on_observation', observationType: 'herd' } as EntryRule,
-			exitRule: { type: 'trailing_stop', percent: 1.2 } as ExitRule,
-			coins: ['ETHUSDT', 'SOLUSDT', 'BNBUSDT'],
-		}),
-	},
-
-	// "Trend doesn't exist" → mean reversion
-	{
-		requires: [
-			{ id: 'trend-exists', status: 'killed' },
-		],
-		create: () => ({
-			name: '[SYNTH] Mean Reversion Deneyi',
-			hypothesis: 'Trend yoksa, aşırı hareket sonrası geri dönüş olur',
-			entryRule: { type: 'on_observation', observationType: 'surprise' } as EntryRule,
-			exitRule: { type: 'fixed_candles', n: 8 } as ExitRule,
-		}),
-	},
-
-	// "Silence before storm" survived → enter after low vol
-	{
-		requires: [
-			{ id: 'silence-before-storm', status: 'alive' },
-		],
-		create: () => ({
-			name: '[SYNTH] Sessizlik Sonrası Giriş',
-			hypothesis: 'Düşük volatilite büyük hareket öncesi ise, sessizlikte pozisyon aç',
-			entryRule: { type: 'on_observation', observationType: 'silence' } as EntryRule,
-			exitRule: { type: 'trailing_stop', percent: 1.5 } as ExitRule,
-		}),
-	},
-
-	// "Volume spike predicts" survived → enter on volume
-	{
-		requires: [
-			{ id: 'volume-spike-predictive', status: 'alive' },
-		],
-		create: () => ({
-			name: '[SYNTH] Hacim Patlaması Girişi',
-			hypothesis: 'Hacim fiyatı tahmin ediyorsa, hacim spike\'ında gir',
-			entryRule: { type: 'on_observation', observationType: 'divergence' } as EntryRule,
-			exitRule: { type: 'stop_and_target', stopPercent: 1, targetPercent: 2.5 } as ExitRule,
-		}),
-	},
-
-	// "Whipsaw cycle" survived → fade breakouts
-	{
-		requires: [
-			{ id: 'whipsaw-cycle', status: 'alive' },
-		],
-		create: () => ({
-			name: '[SYNTH] Breakout Fade (Ters Pozisyon)',
-			hypothesis: 'Piyasa tuzak yapıyorsa, breakout\'un tersine pozisyon al',
-			entryRule: { type: 'on_observation', observationType: 'surprise' } as EntryRule,
-			exitRule: { type: 'fixed_candles', n: 6 } as ExitRule,
-		}),
-	},
-];
 
 // ─── Experiment Performance Thresholds ───────────────────────────────────────
 
@@ -149,46 +65,50 @@ export class Evolver {
 		}
 	}
 
-	/**
-	 * Called periodically by the Assumption Killer.
-	 * Checks current state and evolves the system.
-	 */
-	evolve(assumptions: Assumption[]): void {
-		this.synthesizeExperiments(assumptions);
+	/** Organizma döngüsü tarafından periyodik çağrılır. */
+	evolve(scoreboard: ObservationScoreboard): void {
+		this.synthesizeFromEvidence(scoreboard);
 		this.evaluateExperiments();
 		this.crossPollinate();
 	}
 
-	// ─── Phase 2a: Assumption → Experiment Synthesis ──────────────────
+	// ─── Aşama 1: Kanıt → Deney ───────────────────────────────────────
+	//
+	// Karnenin ölçtüğü her kanıtlanmış üstünlük için bir deney kurulur.
+	// Deneyin PARÇALARI doğrudan kanıttan gelir — tahmin yok:
+	//   • giriş sinyali = kanıtı veren gözlem tipinin ta kendisi
+	//   • tutma süresi  = kanıtın ölçüldüğü vade (48 mumluk kanıt → 48 mum tut)
+	//   • yön           = kanıtın işareti (düşüren sinyal short olarak denenir)
+	// Böylece "hacim deneyi divergence'a bağlı" türü uyumsuzluk imkânsız hale
+	// gelir: isim de kural da aynı ölçümden türetilir.
 
-	private synthesizeExperiments(assumptions: Assumption[]): void {
-		for (const rule of SYNTHESIS_RULES) {
-			// Check if all required assumptions have the right status
-			const allMet = rule.requires.every(req => {
-				const match = assumptions.find(a => a.id.startsWith(req.id) && a.status === req.status);
-				return !!match;
-			});
+	private synthesizeFromEvidence(scoreboard: ObservationScoreboard): void {
+		for (const edge of scoreboard.getProvenEdges()) {
+			const key = `${edge.type}|${edge.horizon}|${edge.side}`;
+			if (this.synthesizedRules.has(key)) continue;
 
-			if (!allMet) continue;
+			const saat = (edge.horizon * 15) / 60;
+			const name = `[KANIT] ${edge.type} → ${edge.side === 'long' ? 'LONG' : 'SHORT'} ${saat}sa`;
+			if (this.synthesizedRules.has(`name:${name}`)) continue;
+			this.synthesizedRules.add(key);
+			this.synthesizedRules.add(`name:${name}`);
 
-			// Create a unique key for this rule
-			const ruleKey = rule.requires.map(r => `${r.id}:${r.status}`).join('|');
-			if (this.synthesizedRules.has(ruleKey)) continue;
-			this.synthesizedRules.add(ruleKey);
-
-			// Create the experiment
-			const template = rule.create();
 			const experiment: Experiment = {
 				id: randomUUID(),
-				name: template.name || 'Synthesized Experiment',
-				hypothesis: template.hypothesis || '',
-				sourceAssumption: rule.requires.map(r => r.id).join('+'),
-				entryRule: template.entryRule || { type: 'random', probability: 0.05 },
-				exitRule: template.exitRule || { type: 'fixed_candles', n: 10 },
-				coins: template.coins || COINS,
+				name,
+				hypothesis:
+					`Karne: "${edge.type}" gözleminden ${saat} saat sonra ortalama ` +
+					`${edge.avgRet >= 0 ? '+' : ''}${edge.avgRet.toFixed(2)}%, ` +
+					`isabet %${(edge.hitRate * 100).toFixed(0)}, örneklem ${edge.n}. ` +
+					`Maliyeti aşıyorsa canlı deneyde de aşmalı.`,
+				sourceAssumption: `karne:${edge.type}@${edge.horizon}`,
+				entryRule: { type: 'on_observation', observationType: edge.type } as EntryRule,
+				exitRule: { type: 'fixed_candles', n: edge.horizon } as ExitRule,
+				side: edge.side,
+				coins: COINS,
 				status: 'running',
 				startedAt: Date.now(),
-				maxDurationHours: 168, // 1 week
+				maxDurationHours: 168,
 				positions: [],
 				closedPositions: [],
 				stats: {
@@ -199,18 +119,10 @@ export class Evolver {
 			};
 
 			this.experimentRunner.addExperiment(experiment);
-
-			log('');
-			log('════════════════════════════════════════════════════════════');
-			log(`🧬 SYNTHESIS: New experiment born from knowledge!`);
-			log(`   "${experiment.name}"`);
-			log(`   Hypothesis: ${experiment.hypothesis}`);
-			log(`   Source: ${experiment.sourceAssumption}`);
-			log('════════════════════════════════════════════════════════════');
-			log('');
-
+			log(`🧬 KANITTAN DOĞDU: "${name}" (n=${edge.n}, ort. ${edge.avgRet.toFixed(2)}%)`);
 			this.graph.addInsight(
-				`Synthesized experiment: "${experiment.name}" from assumptions [${experiment.sourceAssumption}]. Hypothesis: ${experiment.hypothesis}`,
+				`Gözlem karnesi "${edge.type}" tipinde ${saat} saatlik kanıt buldu ` +
+				`(ort. ${edge.avgRet.toFixed(2)}%, n=${edge.n}) → deney kuruldu: ${name}`,
 				[],
 			);
 		}

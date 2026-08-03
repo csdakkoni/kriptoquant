@@ -122,14 +122,13 @@ function groupBy(trades: Trade[], keyFn: (t: Trade) => string | null): Map<strin
  * Sistemin kendi sonuçlarını okuması; rapordaki en değerli bölüm.
  */
 function buildInsights(ctx: {
-	assumptions: any[];
 	experiments: any[];
 	trades: Trade[];
 	sb: any;
 	regime: any;
 }): string[] {
 	const out: string[] = [];
-	const { assumptions, experiments, trades, sb, regime } = ctx;
+	const { experiments, trades, sb, regime } = ctx;
 
 	// 1) Rejim durumu
 	if (regime?.state) {
@@ -201,19 +200,12 @@ function buildInsights(ctx: {
 		);
 	}
 
-	// 5) Hayatta kalan varsayımlar ve UYARI: büyüklük ≠ yön
-	const alive = assumptions.filter((a) => a.status === 'alive');
-	const killed = assumptions.filter((a) => a.status === 'killed');
-	if (alive.length || killed.length) {
+	// 5) Karneden doğan deneyler — karne artık karar veriyor, süs değil
+	const born = experiments.filter((e) => /^\[KANIT\]/.test(e.name || ''));
+	if (born.length) {
+		const traded = born.filter((e) => (e.stats?.totalTrades || 0) >= 5);
 		out.push(
-			`Varsayım bilançosu: <b>${alive.length} hayatta</b>, <b>${killed.length} öldürüldü</b>, ${assumptions.filter((a) => a.status === 'testing').length} test ediliyor. Ölen her varsayım, bir daha o yöne emek harcanmayacağı anlamına gelir.`,
-		);
-	}
-	const volAlive = alive.some((a) => /hacim/i.test(a.statement || ''));
-	const volExp = experiments.find((e) => /Hacim Patlaması/i.test(e.name || ''));
-	if (volAlive && volExp?.stats?.totalTrades > 0 && (volExp.stats.totalPnlPercent || 0) < 0) {
-		out.push(
-			`⚠️ <b>Kritik nüans:</b> "Hacim geleceği tahmin eder" varsayımı hayatta (istatistiksel olarak doğru) ama ondan doğan deney ${pct(volExp.stats.totalPnlPercent)} zararda. Sebep: hacim testi hareketin <b>büyüklüğünü</b> öngörüyor, <b>yönünü</b> değil. Volatilite tahmini tek başına para kazandırmaz — yön filtresiyle birleşmesi gerekir.`,
+			`Gözlem karnesi ${born.length} deney doğurdu${traded.length ? `; ${traded.length} tanesi işlem yapacak kadar tetiklendi (${traded.map((e) => `${esc(e.name)} ${pct(e.stats.totalPnlPercent)}`).join(', ')})` : ' ama henüz hiçbiri tetiklenmedi'}. Bunlar bizim tahminimiz değil, karnenin ölçtüğü kanıttan türedi — canlıda da tutup tutmadıkları asıl sınav.`,
 		);
 	}
 
@@ -250,12 +242,11 @@ function buildInsights(ctx: {
 // ─── Ana rapor üreteci ──────────────────────────────────────────────────────
 
 export function buildReportHtml(data: {
-	assumptions: any[];
 	experiments: any[];
 	scoreboard: any;
 	regime: any;
 }): string {
-	const { assumptions, experiments, scoreboard: sb, regime } = data;
+	const { experiments, scoreboard: sb, regime } = data;
 	const now = new Date().toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' });
 
 	// Tüm kapanan işlemler (deney adı ve yönüyle zenginleştirilmiş)
@@ -273,27 +264,10 @@ export function buildReportHtml(data: {
 	dayStart.setHours(0, 0, 0, 0);
 	const today = summarize(trades.filter((t) => (t.exitTime || 0) >= dayStart.getTime()));
 
-	const insights = buildInsights({ assumptions, experiments, trades, sb, regime });
+	const insights = buildInsights({ experiments, trades, sb, regime });
 
 	// ── Varsayımlar (durum grupları halinde) ──
 	const statusOrder = ['alive', 'killed', 'testing', 'queued'];
-	const statusMeta: Record<string, { icon: string; label: string; color: string }> = {
-		alive: { icon: '🟢', label: 'HAYATTA', color: '#10b981' },
-		killed: { icon: '💀', label: 'ÖLDÜ', color: '#ef4444' },
-		testing: { icon: '🔬', label: 'TEST EDİLİYOR', color: '#6366f1' },
-		queued: { icon: '⏳', label: 'SIRADA', color: '#888' },
-	};
-	const assumptionRows = statusOrder
-		.flatMap((st) => assumptions.filter((a) => a.status === st))
-		.map((a) => {
-			const f = (a.evidence || []).filter((e: any) => e.supports).length;
-			const g = (a.evidence || []).length - f;
-			const m = statusMeta[a.status] || { icon: '❓', label: a.status, color: '#888' };
-			const ratio = f + g > 0 ? ((f / (f + g)) * 100).toFixed(0) : '—';
-			return `<tr><td style="color:${m.color};font-weight:600;white-space:nowrap">${m.icon} ${m.label}</td><td>${esc(a.statement)}</td><td style="text-align:center">+${f} / -${g}</td><td style="text-align:center">%${ratio}</td><td style="font-size:11px;color:#666">${esc(a.verdict || '—')}</td></tr>`;
-		})
-		.join('');
-
 	// ── Deneyler (çalışan + biten) ──
 	const expRow = (e: any) => {
 		const s = e.stats || {};
@@ -426,9 +400,6 @@ ${finishedRows ? `<h3>Tamamlananlar / Öldürülenler</h3><table><thead><tr><th>
   <div>${dirTable}${exitTable}</div>
   <div>${coinTable}${hourTable}</div>
 </div>
-
-<h2>🎯 Varsayımlar</h2>
-<table><thead><tr><th>Durum</th><th>Varsayım</th><th style="text-align:center">Kanıt</th><th style="text-align:center">Destek</th><th>Sonuç</th></tr></thead><tbody>${assumptionRows}</tbody></table>
 
 <h2>📊 Gözlem Karnesi</h2>
 <table><thead><tr><th>Tip</th>${SB_HORIZONS.map(([, label]) => `<th style="text-align:center">${label} sonra</th>`).join('')}<th>Değerlendirme</th></tr></thead><tbody>${sbRows || `<tr><td colspan="${SB_HORIZONS.length + 2}" style="color:#888">Henüz skor yok</td></tr>`}</tbody></table>

@@ -6,7 +6,7 @@
 // ============================================================================
 
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
 import { log, logError } from '../core/utils.js';
@@ -14,9 +14,7 @@ import { buildReportHtml } from './report.js';
 
 // Testlerin gerçek durumu ezmemesi için dizin ORGANISM_DATA_DIR ile değiştirilebilir
 const ORGANISM_DIR = process.env.ORGANISM_DATA_DIR || join(process.cwd(), 'organism-data');
-const STATE_FILE = join(ORGANISM_DIR, 'assumptions-state.json');
 const GRAPH_FILE = join(ORGANISM_DIR, 'knowledge-graph.json');
-const JOURNAL_DIR = join(ORGANISM_DIR, 'journal');
 
 function json(res: ServerResponse, data: unknown, status = 200): void {
 	res.writeHead(status, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
@@ -60,17 +58,6 @@ export function startDashboardServer(port: number = 3000): any {
 
 		// ─── API Routes ──────────────────────────────────────────────
 
-		// Assumptions state
-		if (url === '/api/organism/assumptions') {
-			try {
-				if (existsSync(STATE_FILE)) {
-					const data = JSON.parse(readFileSync(STATE_FILE, 'utf-8'));
-					return json(res, data);
-				}
-				return json(res, []);
-			} catch { return json(res, [], 500); }
-		}
-
 		// Knowledge graph
 		if (url === '/api/organism/knowledge') {
 			try {
@@ -92,26 +79,6 @@ export function startDashboardServer(port: number = 3000): any {
 						.sort((a: any, b: any) => b.timestamp - a.timestamp)
 						.slice(0, 100);
 					return json(res, observations);
-				}
-				return json(res, []);
-			} catch { return json(res, [], 500); }
-		}
-
-		// Journal entries
-		if (url === '/api/organism/journal') {
-			try {
-				if (existsSync(JOURNAL_DIR)) {
-					const entries = readdirSync(JOURNAL_DIR)
-						.filter(f => f.endsWith('.json'))
-						.sort()
-						.reverse()
-						.slice(0, 30)
-						.map(f => {
-							try { return JSON.parse(readFileSync(join(JOURNAL_DIR, f), 'utf-8')); }
-							catch { return null; }
-						})
-						.filter(Boolean);
-					return json(res, entries);
 				}
 				return json(res, []);
 			} catch { return json(res, [], 500); }
@@ -168,7 +135,6 @@ export function startDashboardServer(port: number = 3000): any {
 					try { return JSON.parse(readFileSync(p, 'utf-8')); } catch { return null; }
 				};
 				const html = buildReportHtml({
-					assumptions: readJ('assumptions-state.json') || [],
 					experiments: readJ('experiments.json') || [],
 					scoreboard: readJ('observation-scoreboard.json'),
 					regime: readJ('regime.json'),

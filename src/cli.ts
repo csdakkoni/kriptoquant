@@ -3,7 +3,7 @@
 // ============================================================================
 // KriptoQuant is an autonomous falsification engine for financial markets.
 // Kullanım:
-//   npx tsx src/cli.ts organism       ← Start the Assumption Killer
+//   npx tsx src/cli.ts organism       ← ölçüm organizmasını başlat
 //   npx tsx src/cli.ts dashboard      ← Start web dashboard
 // ============================================================================
 
@@ -22,7 +22,7 @@ function printUsage(): void {
 ╚══════════════════════════════════════════════════════════════╝
 
 Komutlar:
-  organism      🔬 Assumption Killer — Varsayım yanlışlama motoru
+  organism      🔬 Ölçüm organizması — gözlem, deney, kanıt
   dashboard     📊 Web dashboard
 
 Örnekler:
