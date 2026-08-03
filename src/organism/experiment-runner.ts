@@ -110,18 +110,24 @@ export interface ExperimentStats {
 
 export function createDefaultExperiments(): Experiment[] {
 	const coins = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT'];
-	const base = {
+	// KRİTİK: base bir FONKSİYON olmalı. Tek bir nesne yapıp {...base} ile
+	// kopyalamak SIĞ kopyadır — positions/closedPositions/stats referansları
+	// tüm deneyler arasında PAYLAŞILIR. O durumda bir deneyin kapattığı işlem
+	// kardeşlerinin geçmişine de yazılır (3 Ağu'da yakalandı: LONG stratejisi
+	// SHORT pozisyon tutuyor görünüyordu, 4 deney birebir aynı veriyi
+	// gösteriyordu). Her çağrı taze dizi döndürmeli.
+	const base = () => ({
 		status: 'running' as ExperimentStatus,
 		startedAt: Date.now(),
 		maxDurationHours: 168, // 1 week
-		positions: [],
-		closedPositions: [],
+		positions: [] as PaperPosition[],
+		closedPositions: [] as PaperPosition[],
 		stats: emptyStats(),
-	};
+	});
 
 	return [
 		{
-			...base,
+			...base(),
 			id: randomUUID(),
 			name: 'Random + Fixed Exit (10 candle)',
 			hypothesis: 'Rastgele giriş + sabit 10 mum çıkış başabaş olmalı',
@@ -131,7 +137,7 @@ export function createDefaultExperiments(): Experiment[] {
 			coins,
 		},
 		{
-			...base,
+			...base(),
 			id: randomUUID(),
 			name: 'Random + Trailing Stop (1.5%)',
 			hypothesis: 'Rastgele giriş + trailing stop trendlerden faydalanabilir',
@@ -141,7 +147,7 @@ export function createDefaultExperiments(): Experiment[] {
 			coins,
 		},
 		{
-			...base,
+			...base(),
 			id: randomUUID(),
 			name: 'Random + Stop/Target (1%/2%)',
 			hypothesis: '1:2 risk/ödül oranı rastgele girişle bile pozitif olabilir mi?',
@@ -151,7 +157,7 @@ export function createDefaultExperiments(): Experiment[] {
 			coins,
 		},
 		{
-			...base,
+			...base(),
 			id: randomUUID(),
 			name: 'Hit & Run Scalp (1% / 1%)',
 			hypothesis: 'Testere piyasasında çok dar hedefle vur-kaç yapmak trend takibinden daha kârlıdır',
@@ -161,7 +167,7 @@ export function createDefaultExperiments(): Experiment[] {
 			coins,
 		},
 		{
-			...base,
+			...base(),
 			id: randomUUID(),
 			name: 'Her 4 Saatte Giriş + Trailing Stop',
 			hypothesis: 'Sabit zamanlı giriş + trailing stop döngüsel piyasada çalışır mı?',
@@ -171,7 +177,7 @@ export function createDefaultExperiments(): Experiment[] {
 			coins,
 		},
 		{
-			...base,
+			...base(),
 			id: randomUUID(),
 			name: 'Gözlem Tetikli Giriş (Divergence)',
 			hypothesis: 'Divergence gözlemi gerçek bir sinyal mi yoksa gürültü mü?',
@@ -191,18 +197,19 @@ export function createDefaultExperiments(): Experiment[] {
  */
 export function createShortExperiments(): Experiment[] {
 	const coins = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT'];
-	const base = {
+	// Aynı sığ-kopya tuzağı burada da vardı — bkz. createDefaultExperiments
+	const base = () => ({
 		status: 'running' as ExperimentStatus,
 		startedAt: Date.now(),
 		maxDurationHours: 168,
-		positions: [],
-		closedPositions: [],
+		positions: [] as PaperPosition[],
+		closedPositions: [] as PaperPosition[],
 		stats: emptyStats(),
-	};
+	});
 
 	return [
 		{
-			...base,
+			...base(),
 			id: randomUUID(),
 			name: 'Anti-Breakout SHORT (Tuzak Avcısı)',
 			hypothesis: 'Büyük hacimli yeşil kırılımlar FOMO tuzağıdır, tersi yönünde kısa scalp kazandırır',
@@ -212,7 +219,7 @@ export function createShortExperiments(): Experiment[] {
 			coins,
 		},
 		{
-			...base,
+			...base(),
 			id: randomUUID(),
 			name: 'SMA20 Aşağı Kırılım SHORT + Trailing',
 			hypothesis: 'Düşüş kırılımını short\'lamak ayı piyasasında pozitif olmalı (Donchian short bulgusunun canlı testi)',
@@ -222,7 +229,7 @@ export function createShortExperiments(): Experiment[] {
 			coins,
 		},
 		{
-			...base,
+			...base(),
 			id: randomUUID(),
 			name: 'Random SHORT + Stop/Target (1%/2%)',
 			hypothesis: 'Kontrol grubu: rastgele short, ayı driftinde bile maliyet sonrası başabaş kalmalı',
@@ -235,7 +242,7 @@ export function createShortExperiments(): Experiment[] {
 		// Mikro deneylerde (%1-2 hedef) %0.3 maliyet kârın üçte birini yer;
 		// %5-6 hedefte %5'ini. Lab bulgusu: rally fade %5 short PF 1.109 (POZİTİF).
 		{
-			...base,
+			...base(),
 			id: randomUUID(),
 			name: 'Swing Dip %5 → Hedef +%6 (Erdem ölçeği)',
 			hypothesis: '48s tepesinden %5 düşeni almak, büyük hedefle maliyeti önemsizleştirir',
@@ -245,7 +252,7 @@ export function createShortExperiments(): Experiment[] {
 			maxDurationHours: 336, // swing işlemler günlerce sürer — 2 hafta pencere
 		},
 		{
-			...base,
+			...base(),
 			id: randomUUID(),
 			name: 'Rally Fade %5 → SHORT Hedef -%5',
 			hypothesis: 'Ayıda dipten %5 sıçrayanı short\'lamak pozitif (lab: PF 1.109)',
@@ -266,7 +273,7 @@ export function createShortExperiments(): Experiment[] {
 		// çok dar, normal gürültüde tetikleniyor. Aynı girişle geniş trailing
 		// test edilir — fark çıkarsa "çıkış genişliği" gerçek bir kaldıraçtır.
 		{
-			...base,
+			...base(),
 			id: randomUUID(),
 			name: 'Rejim + Geniş Trailing (%3)',
 			hypothesis: 'İz süren stop %1.5 çok dardı (-22 puan). %3 ile gürültüye dayanıp trendi tutabilir mi?',
@@ -281,7 +288,7 @@ export function createShortExperiments(): Experiment[] {
 		// ama sıfır maliyetle test edilebilir: aynı random kural, sadece o
 		// pencerede. Rejim yönüyle birleştirilir.
 		{
-			...base,
+			...base(),
 			id: randomUUID(),
 			name: 'Altın Saat 06-12 UTC (Rejim Yönlü)',
 			hypothesis: '06-12 UTC dilimi kırılım analizinde tek pozitif dilimdi (+8.22%). Gerçek bir seans etkisi mi, gürültü mü?',
@@ -292,7 +299,7 @@ export function createShortExperiments(): Experiment[] {
 			maxDurationHours: 336,
 		},
 		{
-			...base,
+			...base(),
 			id: randomUUID(),
 			name: 'Rejim Anahtarlı Random (1%/2%)',
 			hypothesis: 'Yön her şeyse ve yönü rejim seçerse (BULL→long, BEAR→short, CHOP→nakit), saf yönlü random kardeşleri uzun vadede geçilmeli',
