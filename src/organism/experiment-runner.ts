@@ -622,71 +622,114 @@ export class ExperimentRunner {
 		const openPos = exp.positions.filter(p => p.coin === coin && !p.exitPrice);
 
 		for (const pos of openPos) {
-			// Mum sayacı ve high/low takibi yalnızca YENİ mumda ilerler —
-			// aynı mumun tekrar işlenmesi (diğer coinlerin kapanış tetiklemeleri)
-			// sayaçları şişirmez.
+			// Mum sayacı yalnızca YENİ mumda ilerler — aynı mumun tekrar işlenmesi
+			// (diğer coinlerin kapanış tetiklemeleri) sayaçları şişirmez.
 			if (pos.lastTickTs !== tick.timestamp) {
 				(pos as any).lastTickTs = tick.timestamp;
 				pos.candlesSinceEntry++;
-				if (tick.high > pos.highSinceEntry) (pos as any).highSinceEntry = tick.high;
-				if (tick.low < pos.lowSinceEntry) (pos as any).lowSinceEntry = tick.low;
 			}
 
-			const shouldExit = this.checkExit(exp.exitRule, pos, tick);
-			if (shouldExit) {
-				this.closePosition(exp, pos, tick, shouldExit);
+			const exit = this.checkExit(exp.exitRule, pos, tick);
+			if (exit) {
+				this.closePosition(exp, pos, tick, exit.reason, exit.price);
+				continue;
+			}
+
+			// Uç değerler çıkış kontrolünden SONRA güncellenir. Aksi halde trailing
+			// stop, aynı mumun zirvesiyle önce yükseltilip sonra o zirveye göre
+			// ölçülür ve mum içindeki geri çekilme görünmez olur (iyimser sapma).
+			if (tick.timestamp > pos.entryTime) {
+				if (tick.high > pos.highSinceEntry) (pos as any).highSinceEntry = tick.high;
+				if (tick.low < pos.lowSinceEntry) (pos as any).lowSinceEntry = tick.low;
 			}
 		}
 	}
 
-	private checkExit(rule: ExitRule, pos: PaperPosition, tick: MarketTick): string | null {
-		// Yön farkındalığı: short pozisyonda kâr, fiyat DÜŞÜNCE oluşur.
-		const sign = pos.side === 'short' ? -1 : 1;
-		const currentPnl = sign * ((tick.close - pos.entryPrice) / pos.entryPrice) * 100;
+	/**
+	 * Çıkış kontrolü — mum İÇİ fiyatlarla.
+	 *
+	 * 4 Ağu düzeltmesi: eskiden yalnızca `tick.close` bakılıyordu. Gerçekte stop
+	 * ve hedef borsada BEKLEYEN emirlerdir; fiyat oraya değdiği an çalışırlar.
+	 * Kapanışa bakan kod, iğneyle eşiği delip geri dönen mumları görmezden
+	 * geliyordu — canlı veride 20 saatte 5 pozisyon bu yüzden açık kalmıştı.
+	 * Sonucu: "%1/%1 scalp" deneyi 7 saat pozisyon taşıyor, 5 coinin 5'i de
+	 * dolduğu için yeni giriş yapılamıyordu.
+	 *
+	 * Sapmanın YÖNÜ piyasaya bağlıdır (kaçırılan stop sonucu güzelleştirir,
+	 * kaçırılan hedef çirkinleştirir) — 20 saatlik canlı veride aynı girişler
+	 * yeniden oynatıldığında 38 yerine 43 kapanış, işlem başına -0.450% yerine
+	 * -0.355% çıktı. Kesin olan zarar ölçümde değil AKIŞTA: pozisyonlar
+	 * kapanmayınca kadro tıkanıyor ve sistem tasarlandığından az işlem yapıyor.
+	 *
+	 * Muhafazakâr varsayımlar (mum içi sırayı bilemeyiz):
+	 *   • Aynı mumda hem stop hem hedef değdiyse → STOP önce sayılır.
+	 *   • Aleyhte boşlukta (gap) dolum eşikten değil, açılıştan yapılır.
+	 *   • Lehte boşlukta bonus verilmez — dolum tam hedef fiyatından sayılır.
+	 * Giriş mumunun kendi high/low'u kullanılmaz (girişten önceki hareketi içerir).
+	 */
+	private checkExit(rule: ExitRule, pos: PaperPosition, tick: MarketTick): { reason: string; price: number } | null {
+		const isLong = pos.side !== 'short';
+		// Giriş mumunda mum içi fiyat yok sayılır → kapanış tek referans
+		const intra = tick.timestamp > pos.entryTime;
+		const hi = intra ? tick.high : tick.close;
+		const lo = intra ? tick.low : tick.close;
+
+		// Aleyhte yön (stop tarafı) ve lehte yön (hedef tarafı) uç fiyatları
+		const adverse = isLong ? lo : hi;
+		const favorable = isLong ? hi : lo;
+		// Aleyhte boşluk koruması: fiyat mum açılışında eşiğin ötesindeyse orada dolar
+		const fillStop = (trigger: number) => (isLong ? Math.min(trigger, tick.open) : Math.max(trigger, tick.open));
+		const hitStop = (trigger: number) => (isLong ? adverse <= trigger : adverse >= trigger);
+		const hitTarget = (trigger: number) => (isLong ? favorable >= trigger : favorable <= trigger);
+		const off = (pct: number) => pos.entryPrice * (1 + (isLong ? pct : -pct) / 100);
 
 		switch (rule.type) {
 			case 'fixed_candles':
-				if (pos.candlesSinceEntry >= rule.n) return 'fixed_exit';
+				if (pos.candlesSinceEntry >= rule.n) return { reason: 'fixed_exit', price: tick.close };
 				return null;
 
-			case 'stop_loss':
-				if (currentPnl <= -rule.percent) return 'stop_loss';
-				return null;
+			case 'stop_loss': {
+				const s = off(-rule.percent);
+				return hitStop(s) ? { reason: 'stop_loss', price: fillStop(s) } : null;
+			}
 
-			case 'take_profit':
-				if (currentPnl >= rule.percent) return 'take_profit';
-				return null;
+			case 'take_profit': {
+				const t = off(rule.percent);
+				return hitTarget(t) ? { reason: 'take_profit', price: t } : null;
+			}
 
-			case 'trailing_stop': {
-				// Long: zirveden geri çekilme | Short: dipten geri yükselme
-				const drawback = pos.side === 'short'
-					? ((tick.close - pos.lowSinceEntry) / pos.lowSinceEntry) * 100
-					: ((pos.highSinceEntry - tick.close) / pos.highSinceEntry) * 100;
-				if (drawback >= rule.percent) return 'trailing_stop';
+			case 'stop_and_target': {
+				const s = off(-rule.stopPercent);
+				const t = off(rule.targetPercent);
+				// Sıra bilinmiyor → kötü senaryo: stop önce
+				if (hitStop(s)) return { reason: 'stop_loss', price: fillStop(s) };
+				if (hitTarget(t)) return { reason: 'take_profit', price: t };
 				return null;
 			}
 
-			case 'stop_and_target':
-				if (currentPnl <= -rule.stopPercent) return 'stop_loss';
-				if (currentPnl >= rule.targetPercent) return 'take_profit';
-				return null;
+			case 'trailing_stop': {
+				// Tetik, ÖNCEKİ zirveye/dibe göre hesaplanır (bu mumun ucu henüz işlenmedi)
+				const peak = isLong ? pos.highSinceEntry : pos.lowSinceEntry;
+				const trigger = isLong ? peak * (1 - rule.percent / 100) : peak * (1 + rule.percent / 100);
+				return hitStop(trigger) ? { reason: 'trailing_stop', price: fillStop(trigger) } : null;
+			}
 
 			default:
 				return null;
 		}
 	}
 
-	private closePosition(exp: Experiment, pos: PaperPosition, tick: MarketTick, reason: string): void {
+	private closePosition(exp: Experiment, pos: PaperPosition, tick: MarketTick, reason: string, exitPrice = tick.close): void {
 		const sign = pos.side === 'short' ? -1 : 1;
-		(pos as any).exitPrice = tick.close;
+		(pos as any).exitPrice = exitPrice;
 		(pos as any).exitTime = tick.timestamp;
 		(pos as any).exitReason = reason;
 		// Net PnL = yönlü brüt getiri - gidiş/dönüş işlem maliyeti
-		(pos as any).pnlPercent = sign * ((tick.close - pos.entryPrice) / pos.entryPrice) * 100 - ROUND_TRIP_COST_PCT;
+		(pos as any).pnlPercent = sign * ((exitPrice - pos.entryPrice) / pos.entryPrice) * 100 - ROUND_TRIP_COST_PCT;
 
 		const pnl = pos.pnlPercent!;
 		const emoji = pnl >= 0 ? '🟢' : '🔴';
-		log(`[EXPERIMENT] ${emoji} ${exp.name} | ${pos.coin} CLOSE @ ${tick.close.toFixed(2)} | PnL: ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}% | Reason: ${reason}`);
+		log(`[EXPERIMENT] ${emoji} ${exp.name} | ${pos.coin} CLOSE @ ${exitPrice.toFixed(2)} | PnL: ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}% | Reason: ${reason}`);
 
 		// Move to closed
 		exp.closedPositions.push({ ...pos });

@@ -318,3 +318,88 @@ describe('Bekleme gerekçesi', () => {
 		expect(exp.waiting, 'rastgele kural için anlamsız açıklama üretildi').toBeUndefined();
 	});
 });
+
+// ============================================================================
+// MUM İÇİ ÇIKIŞ (stop/hedef "iğne" ile tetiklenmeli)
+// ============================================================================
+// 4 Ağu, canlı sistemde bulundu: checkExit yalnızca mumun KAPANIŞINA bakıyordu.
+// Gerçekte stop ve hedef borsada bekleyen emirlerdir — fiyat değdiği an çalışır.
+// Sonuç: 20 saatte 5 pozisyon eşiği delip geri döndüğü için açık kalmıştı;
+// "%1/%1 scalp" 7 saat pozisyon taşıyor, 5 coin dolunca sistem duruyordu.
+// ============================================================================
+
+/** OHLC'si elle verilen mum serisi — iğneleri test edebilmek için */
+function ohlc(rows: Array<[number, number, number, number]>, startTs = 1_700_000_000_000): MarketTick[] {
+	return rows.map(([o, h, l, c], i) => ({
+		coin: COIN, timestamp: startTs + i * CANDLE_MS,
+		open: o, high: h, low: l, close: c, volume: 1000, interval: '15m',
+	}));
+}
+
+describe('Mum içi çıkış', () => {
+	const NET = -0.3; // gidiş-dönüş maliyeti
+
+	it('hedefe İĞNEYLE dokunup geri dönen mum, pozisyonu hedeften kapatmalı', () => {
+		const exp = mkExperiment({ exitRule: { type: 'stop_and_target', stopPercent: 1, targetPercent: 2 } });
+		const runner = setupRunner(exp);
+		// Giriş 100 | sonraki mum 103'e değip 100.2'de kapanıyor (stop 99'a değmiyor)
+		feed(runner, ohlc([[100, 100, 100, 100], [100, 100, 100, 100], [100, 103, 99.5, 100.2]]));
+		const closed = exp.closedPositions;
+		expect(closed.length, 'iğne hedefi deldi ama pozisyon kapanmadı').toBe(1);
+		expect(closed[0].exitReason).toBe('take_profit');
+		expect(closed[0].exitPrice, 'çıkış kapanıştan yapıldı, hedeften değil').toBeCloseTo(102, 6);
+		expect(closed[0].pnlPercent).toBeCloseTo(2 + NET, 6);
+	});
+
+	it('stopa İĞNEYLE dokunup toparlayan mum, ZARARI kayda geçirmeli', () => {
+		const exp = mkExperiment({ exitRule: { type: 'stop_and_target', stopPercent: 1, targetPercent: 2 } });
+		const runner = setupRunner(exp);
+		feed(runner, ohlc([[100, 100, 100, 100], [100, 100, 100, 100], [100, 100.5, 98.7, 100.1]]));
+		expect(exp.closedPositions.length, 'stop delindi ama zarar kaydedilmedi').toBe(1);
+		expect(exp.closedPositions[0].exitReason).toBe('stop_loss');
+		expect(exp.closedPositions[0].pnlPercent).toBeCloseTo(-1 + NET, 6);
+	});
+
+	it('aynı mumda hem stop hem hedef delindiyse STOP önce sayılmalı (kötü senaryo)', () => {
+		const exp = mkExperiment({ exitRule: { type: 'stop_and_target', stopPercent: 1, targetPercent: 2 } });
+		const runner = setupRunner(exp);
+		feed(runner, ohlc([[100, 100, 100, 100], [100, 100, 100, 100], [100, 103, 98.5, 101]]));
+		expect(exp.closedPositions[0].exitReason, 'belirsiz mumda iyimser taraf seçildi').toBe('stop_loss');
+	});
+
+	it('GİRİŞ mumunun kendi iğnesi çıkış tetiklememeli (girişten önceki hareket)', () => {
+		const exp = mkExperiment({ exitRule: { type: 'stop_and_target', stopPercent: 1, targetPercent: 2 } });
+		const runner = setupRunner(exp);
+		const ticks = ohlc([[100, 100, 100, 100], [100, 110, 90, 100]]);
+		feed(runner, ticks); // pozisyon 2. mumun kapanışında açılır
+		runner.processTick(new Map([[COIN, ticks]]), []); // aynı mum tekrar işlenir
+		expect(exp.closedPositions.length, 'giriş mumunun kendi iğnesiyle çıkış yapıldı').toBe(0);
+	});
+
+	it('aleyhte BOŞLUKTA dolum eşikten değil, açılıştan yapılmalı', () => {
+		const exp = mkExperiment({ exitRule: { type: 'stop_loss', percent: 1 } });
+		const runner = setupRunner(exp);
+		// Stop 99; mum 97'den açılıyor → 99'da dolum hayal olurdu
+		feed(runner, ohlc([[100, 100, 100, 100], [100, 100, 100, 100], [97, 98, 96, 96.5]]));
+		expect(exp.closedPositions[0].exitPrice, 'boşluk yokmuş gibi eşikten dolduruldu').toBeCloseTo(97, 6);
+		expect(exp.closedPositions[0].pnlPercent).toBeCloseTo(-3 + NET, 6);
+	});
+
+	it('trailing stop, zirveden geri çekilmeyi mum İÇİNDE görmeli', () => {
+		const exp = mkExperiment({ exitRule: { type: 'trailing_stop', percent: 1 } });
+		const runner = setupRunner(exp);
+		// 100 giriş → zirve 104 → sonraki mum 102.5'e iniyor (zirveden -%1.44) ama 104'te kapanıyor
+		feed(runner, ohlc([[100, 100, 100, 100], [100, 100, 100, 100], [100, 104, 100, 104], [104, 104.2, 102.5, 104]]));
+		expect(exp.closedPositions.length, 'mum içi geri çekilme görülmedi').toBe(1);
+		expect(exp.closedPositions[0].exitReason).toBe('trailing_stop');
+		expect(exp.closedPositions[0].exitPrice, 'çıkış 104*0.99 = 102.96 olmalıydı').toBeCloseTo(102.96, 6);
+	});
+
+	it('SHORT pozisyonda stop YUKARI iğneyle tetiklenmeli', () => {
+		const exp = mkExperiment({ side: 'short', exitRule: { type: 'stop_and_target', stopPercent: 1, targetPercent: 2 } });
+		const runner = setupRunner(exp, 'BEAR');
+		feed(runner, ohlc([[100, 100, 100, 100], [100, 100, 100, 100], [100, 101.3, 99.5, 100.1]]));
+		expect(exp.closedPositions[0]?.exitReason, 'short stopu yukarı iğneyi görmedi').toBe('stop_loss');
+		expect(exp.closedPositions[0].pnlPercent).toBeCloseTo(-1 + NET, 6);
+	});
+});
