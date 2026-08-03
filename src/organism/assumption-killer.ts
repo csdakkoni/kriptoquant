@@ -24,7 +24,8 @@ import { RegimeDetector } from './regime.js';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-const STATE_DIR = join(process.cwd(), 'organism-data');
+// Testlerin gerçek durumu ezmemesi için dizin ORGANISM_DATA_DIR ile değiştirilebilir
+const STATE_DIR = process.env.ORGANISM_DATA_DIR || join(process.cwd(), 'organism-data');
 const STATE_FILE = join(STATE_DIR, 'assumptions-state.json');
 
 const COINS = [
@@ -32,6 +33,14 @@ const COINS = [
 	'ADAUSDT', 'AVAXUSDT', 'DOGEUSDT', 'LINKUSDT', 'DOTUSDT',
 ];
 const INTERVAL = '15m';
+
+// Varsayım başına saklanan azami kanıt (dosya şişmesin, verdikt güncel kalsın)
+const MAX_EVIDENCE = 300;
+// Bir verdikt bu süreden eskiyse varsayım yeniden test edilmeye açılır.
+// Gerekçe: piyasa değişir. "Temmuz ayısında öldü" demek "sonsuza dek yanlış"
+// demek değildir. Yanlışlama motorunun kendi verdiktini de yeniden sınaması
+// gerekir — aksi halde donmuş bir inanç listesine dönüşür.
+const VERDICT_RETEST_MS = 30 * 24 * 60 * 60 * 1000; // 30 gün
 
 export class AssumptionKiller {
 	private ws: WebSocket | null = null;
@@ -285,6 +294,7 @@ export class AssumptionKiller {
 		const EVIDENCE_INTERVAL_MS = 4 * 60 * 60 * 1000;
 		if (Date.now() - this.lastEvidenceRunTs >= EVIDENCE_INTERVAL_MS) {
 			this.lastEvidenceRunTs = Date.now();
+			this.reopenStaleVerdicts(); // eskimiş verdiktler yeniden sınansın
 			for (const assumption of this.assumptions) {
 				if (assumption.status !== 'testing') continue;
 				const test = this.findTest(assumption.id);
@@ -347,7 +357,46 @@ export class AssumptionKiller {
 		return undefined;
 	}
 
+	/**
+	 * Eskimiş verdiktleri yeniden teste açar.
+	 * Eski davranış: bir varsayım 'alive' veya 'killed' olduğu anda kanıt
+	 * toplamayı SONSUZA DEK bırakıyordu (döngü yalnızca 'testing' olanları
+	 * işler). Yani yanlışlama motoru, kendi verdiktlerini bir daha asla
+	 * sınamıyordu — donmuş bir inanç listesine dönüşüyordu.
+	 */
+	private reopenStaleVerdicts(): void {
+		const now = Date.now();
+		let reopened = 0;
+		for (const a of this.assumptions) {
+			if (a.status !== 'alive' && a.status !== 'killed') continue;
+			const decidedAt = a.verdictAt ?? a.killedAt ?? 0;
+			if (decidedAt === 0 || now - decidedAt < VERDICT_RETEST_MS) continue;
+
+			// Önceki verdikt bilgi grafiğinde kalıcı — kayıt kaybolmuyor
+			this.graph.addInsight(
+				`Verdikt yeniden teste açıldı: "${a.statement}" — önceki sonuç: ${a.verdict ?? '—'} (${Math.round((now - decidedAt) / 86_400_000)} gün önce). Piyasa değişmiş olabilir.`,
+				[],
+			);
+			(a as any).status = 'testing';
+			(a as any).evidence = [];
+			(a as any).verdict = undefined;
+			(a as any).verdictAt = undefined;
+			reopened++;
+		}
+		if (reopened > 0) {
+			log(`[Organism] 🔄 ${reopened} eskimiş verdikt yeniden teste açıldı (30+ gün).`);
+			this.saveState();
+		}
+	}
+
 	private checkVerdict(assumption: Assumption): void {
+		// Kanıt dizisi sınırsız büyümemeli: 1 Ağu'da bazı varsayımlarda 1050+
+		// kanıt birikmişti. Verdikt için son 300 ölçüm fazlasıyla yeterli;
+		// eskiler düşer, dosya şişmez, verdikt GÜNCEL veriye dayanır.
+		if (assumption.evidence.length > MAX_EVIDENCE) {
+			(assumption as any).evidence = assumption.evidence.slice(-MAX_EVIDENCE);
+		}
+
 		const evidence = assumption.evidence;
 		if (evidence.length < 20) return; // Need minimum evidence
 
@@ -360,6 +409,7 @@ export class AssumptionKiller {
 		if (refuting.length / evidence.length > 0.7 && evidence.length >= 30) {
 			(assumption as any).status = 'killed';
 			(assumption as any).killedAt = Date.now();
+			(assumption as any).verdictAt = Date.now();
 			(assumption as any).verdict = `KILLED — ${refuting.length}/${evidence.length} evidence points refute this assumption (${(supportRatio * 100).toFixed(0)}% support rate)`;
 
 			log('');
@@ -381,6 +431,7 @@ export class AssumptionKiller {
 		// If >70% supports after sufficient evidence, assumption survives this round
 		if (supportRatio > 0.7 && evidence.length >= 50) {
 			(assumption as any).status = 'alive';
+			(assumption as any).verdictAt = Date.now();
 			(assumption as any).verdict = `SURVIVED — ${supporting.length}/${evidence.length} evidence points support this assumption`;
 
 			log('');

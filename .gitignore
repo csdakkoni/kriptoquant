@@ -34,3 +34,6 @@ Thumbs.db
 
 # Organism runtime state (sunucu kendi state'ini yazar, git'e girmez)
 organism-data/
+
+# test state
+.test-organism-data/

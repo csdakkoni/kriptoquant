@@ -12,7 +12,8 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Observation, MarketTick } from './types.js';
 
-const STATE_DIR = join(process.cwd(), 'organism-data');
+// Testlerin gerçek durumu ezmemesi için dizin ORGANISM_DATA_DIR ile değiştirilebilir
+const STATE_DIR = process.env.ORGANISM_DATA_DIR || join(process.cwd(), 'organism-data');
 const SCOREBOARD_FILE = join(STATE_DIR, 'observation-scoreboard.json');
 
 const CANDLE_MS = 900_000; // 15m
@@ -121,10 +122,6 @@ export class ObservationScoreboard {
 			this.save();
 			this.dirty = false;
 		}
-	}
-
-	getState(): ScoreboardState {
-		return this.state;
 	}
 
 	private load(): void {

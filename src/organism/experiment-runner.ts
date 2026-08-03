@@ -19,7 +19,8 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
-const STATE_DIR = join(process.cwd(), 'organism-data');
+// Testlerin gerçek durumu ezmemesi için dizin ORGANISM_DATA_DIR ile değiştirilebilir
+const STATE_DIR = process.env.ORGANISM_DATA_DIR || join(process.cwd(), 'organism-data');
 const EXPERIMENTS_FILE = join(STATE_DIR, 'experiments.json');
 
 // Gerçekçi işlem maliyeti: %0.10 komisyon + %0.05 slipaj her yönde ≈ %0.3 tur.

@@ -22,7 +22,8 @@ import { writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { log, logError } from '../core/utils.js';
 
-const STATE_DIR = join(process.cwd(), 'organism-data');
+// Testlerin gerçek durumu ezmemesi için dizin ORGANISM_DATA_DIR ile değiştirilebilir
+const STATE_DIR = process.env.ORGANISM_DATA_DIR || join(process.cwd(), 'organism-data');
 const REGIME_FILE = join(STATE_DIR, 'regime.json');
 
 export type MarketRegime = 'BULL' | 'BEAR' | 'CHOP' | 'UNKNOWN';
@@ -71,10 +72,6 @@ export class RegimeDetector {
 	getRegime(): MarketRegime {
 		this.refreshIfStale();
 		return this.state;
-	}
-
-	getSnapshot(): { state: MarketRegime; distancePct: number; btcPrice: number; sma200: number; sma50: number } {
-		return { state: this.state, distancePct: this.distancePct, btcPrice: this.btcPrice, sma200: this.sma200, sma50: this.sma50 };
 	}
 
 	private refreshIfStale(): void {

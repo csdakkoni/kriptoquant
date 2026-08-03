@@ -7,6 +7,8 @@
 		"start": "tsx src/cli.ts",
 		"organism": "tsx src/cli.ts organism",
 		"dashboard": "tsx src/cli.ts dashboard --port 3008",
+		"test": "vitest run",
+		"test:watch": "vitest",
 		"lint": "biome check .",
 		"format": "biome format --write ."
 	},
@@ -14,7 +16,8 @@
 		"@biomejs/biome": "^1.9.0",
 		"@types/ws": "^8.18.1",
 		"tsx": "^4.19.0",
-		"typescript": "^5.7.0"
+		"typescript": "^5.7.0",
+		"vitest": "^4.1.10"
 	},
 	"engines": {
 		"node": ">=22.0.0"

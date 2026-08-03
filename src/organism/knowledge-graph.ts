@@ -11,7 +11,8 @@ import { join } from 'node:path';
 import type { KnowledgeNode, KnowledgeEdge, Observation, Evidence } from './types.js';
 import { randomUUID } from 'node:crypto';
 
-const GRAPH_DIR = join(process.cwd(), 'organism-data');
+// Testlerin gerçek durumu ezmemesi için dizin ORGANISM_DATA_DIR ile değiştirilebilir
+const GRAPH_DIR = process.env.ORGANISM_DATA_DIR || join(process.cwd(), 'organism-data');
 const GRAPH_FILE = join(GRAPH_DIR, 'knowledge-graph.json');
 
 interface GraphData {
@@ -136,44 +137,17 @@ export class KnowledgeGraph {
 		return id;
 	}
 
-	connect(fromId: string, toId: string, relation: KnowledgeEdge['relation']): void {
-		this.edges.push({ from: fromId, to: toId, relation, timestamp: Date.now() });
-		this.save();
-	}
-
 	// ─── Query ────────────────────────────────────────────────────────────
-
-	getNode(id: string): KnowledgeNode | undefined {
-		return this.nodes.get(id);
-	}
-
-	getConnections(id: string): KnowledgeNode[] {
-		const connected: KnowledgeNode[] = [];
-		for (const edge of this.edges) {
-			if (edge.from === id) {
-				const node = this.nodes.get(edge.to);
-				if (node) connected.push(node);
-			}
-			if (edge.to === id) {
-				const node = this.nodes.get(edge.from);
-				if (node) connected.push(node);
-			}
-		}
-		return connected;
-	}
-
-	getObservationsByType(type: string, since?: number): KnowledgeNode[] {
-		const results: KnowledgeNode[] = [];
-		for (const node of this.nodes.values()) {
-			if (node.type === 'observation' && node.metadata.observationType === type) {
-				if (!since || node.timestamp >= since) results.push(node);
-			}
-		}
-		return results;
-	}
 
 	getAllQuestions(): KnowledgeNode[] {
 		return [...this.nodes.values()].filter(n => n.type === 'question');
+	}
+
+	getRecentInsights(hours: number = 24): KnowledgeNode[] {
+		const since = Date.now() - hours * 60 * 60 * 1000;
+		return [...this.nodes.values()]
+			.filter(n => n.type === 'insight' && n.timestamp >= since)
+			.sort((a, b) => b.timestamp - a.timestamp);
 	}
 
 	getRecentObservations(hours: number = 24): KnowledgeNode[] {

@@ -12,7 +12,8 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { log, logError } from '../core/utils.js';
 import { buildReportHtml } from './report.js';
 
-const ORGANISM_DIR = join(process.cwd(), 'organism-data');
+// Testlerin gerçek durumu ezmemesi için dizin ORGANISM_DATA_DIR ile değiştirilebilir
+const ORGANISM_DIR = process.env.ORGANISM_DATA_DIR || join(process.cwd(), 'organism-data');
 const STATE_FILE = join(ORGANISM_DIR, 'assumptions-state.json');
 const GRAPH_FILE = join(ORGANISM_DIR, 'knowledge-graph.json');
 const JOURNAL_DIR = join(ORGANISM_DIR, 'journal');

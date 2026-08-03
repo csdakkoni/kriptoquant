@@ -112,17 +112,18 @@ const SYNTHESIS_RULES: SynthesisRule[] = [
 
 // ─── Experiment Performance Thresholds ───────────────────────────────────────
 
-const PROMOTE_THRESHOLD = {
-	minTrades: 15,
-	minWinRate: 52,
-	minPnl: 1.0,
-};
-
-const KILL_THRESHOLD = {
-	minTrades: 15,
-	maxDrawdown: 8,
-	maxLoss: -5,
-};
+// ─── Terfi / Öldürme eşikleri ────────────────────────────────────────────────
+// 3 Ağu denetimi: eski eşikler TOPLAM yüzdeye bakıyordu (minPnl 1.0, maxLoss -5,
+// maxDrawdown 8). Toplam, işlem sayısıyla büyür — ortalama %1.5 zarar eden bir
+// deneyde 6 ardışık kayıp 9 puan "drawdown" yapar ve deney kalitesinden bağımsız
+// olarak ÖLÜR. 1 Ağu'daki toplu yok oluşun sebebi buydu.
+//
+// Yeni eşikler İŞLEM BAŞINA ortalamaya bakar — ölçekten bağımsızdır ve doğrudan
+// anlamlıdır: pnlPercent zaten %0.3 maliyet düşülmüş nettir, yani ortalama > 0
+// olması "maliyeti aşıyor" demektir.
+const MIN_TRADES_FOR_VERDICT = 20;
+const PROMOTE_AVG_PNL = 0.15;  // işlem başına net +%0.15 → maliyeti anlamlı şekilde aşıyor
+const KILL_AVG_PNL = -0.5;     // işlem başına net -%0.5 → sistematik kaybettiriyor
 
 // ─── Evolver ─────────────────────────────────────────────────────────────────
 
@@ -232,13 +233,12 @@ export class Evolver {
 			if (isControlExperiment(exp.name)) continue;
 
 			const { stats } = exp;
-			if (stats.totalTrades < PROMOTE_THRESHOLD.minTrades) continue;
+			if (stats.totalTrades < MIN_TRADES_FOR_VERDICT) continue;
 
-			// Check for promotion
-			if (
-				stats.winRate >= PROMOTE_THRESHOLD.minWinRate &&
-				stats.totalPnlPercent >= PROMOTE_THRESHOLD.minPnl
-			) {
+			// Terfi ve öldürme BİRBİRİNİ DIŞLAR — eski kodda iki blok da ayrı ayrı
+			// çalışıyordu, bir deney aynı geçişte hem "⭐ ADAY" hem "💀 ÖLDÜ"
+			// olabiliyordu.
+			if (stats.avgPnlPercent >= PROMOTE_AVG_PNL) {
 				this.promotedExperiments.add(exp.id);
 				(exp as any).promoted = true; // kalıcılaştır
 				this.experimentRunner.persist();
@@ -246,22 +246,16 @@ export class Evolver {
 				log('');
 				log('════════════════════════════════════════════════════════════');
 				log(`⭐ PROMOTED: "${exp.name}"`);
-				log(`   ${stats.totalTrades} trades | Win: ${stats.winRate.toFixed(1)}% | PnL: +${stats.totalPnlPercent.toFixed(2)}%`);
+				log(`   ${stats.totalTrades} trades | Win: ${stats.winRate.toFixed(1)}% | işlem başına: ${stats.avgPnlPercent >= 0 ? '+' : ''}${stats.avgPnlPercent.toFixed(3)}%`);
 				log(`   → Bu deney gerçek para ile test edilmeye ADAY`);
 				log('════════════════════════════════════════════════════════════');
 				log('');
 
 				this.graph.addInsight(
-					`⭐ Experiment PROMOTED: "${exp.name}" — ${stats.totalTrades} trades, ${stats.winRate.toFixed(1)}% win rate, +${stats.totalPnlPercent.toFixed(2)}% PnL. CANDIDATE for real money.`,
+					`⭐ Experiment PROMOTED: "${exp.name}" — ${stats.totalTrades} trades, ${stats.winRate.toFixed(1)}% win rate, işlem başına ${stats.avgPnlPercent.toFixed(3)}%. CANDIDATE for real money.`,
 					[],
 				);
-			}
-
-			// Check for kill
-			if (
-				stats.totalPnlPercent <= KILL_THRESHOLD.maxLoss ||
-				stats.maxDrawdownPercent >= KILL_THRESHOLD.maxDrawdown
-			) {
+			} else if (stats.avgPnlPercent <= KILL_AVG_PNL) {
 				this.killedExperiments.add(exp.id);
 				// Öldürülen deney gerçekten DURMALI — eski kod sadece not alıyordu,
 				// deney koşmaya devam ediyordu.
@@ -270,7 +264,7 @@ export class Evolver {
 				this.experimentRunner.persist();
 
 				log('');
-				log(`💀 EXPERIMENT KILLED: "${exp.name}" — PnL: ${stats.totalPnlPercent.toFixed(2)}%, DD: ${stats.maxDrawdownPercent.toFixed(2)}%`);
+				log(`💀 EXPERIMENT KILLED: "${exp.name}" — işlem başına ${stats.avgPnlPercent.toFixed(3)}% (${stats.totalTrades} işlem)`);
 				log('');
 
 				this.graph.addInsight(

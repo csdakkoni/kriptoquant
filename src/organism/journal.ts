@@ -6,12 +6,25 @@
 //  that coins are NOT independent — correlation was 0.87."
 // ============================================================================
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
+import { writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Assumption, JournalEntry } from './types.js';
 import type { KnowledgeGraph } from './knowledge-graph.js';
 
-const JOURNAL_DIR = join(process.cwd(), 'organism-data', 'journal');
+// Testlerin gerçek durumu ezmemesi için dizin ORGANISM_DATA_DIR ile değiştirilebilir
+const JOURNAL_DIR = join(process.env.ORGANISM_DATA_DIR || join(process.cwd(), 'organism-data'), 'journal');
+
+
+/** ISO-8601 hafta etiketi (ör. 2026-W31). Eski kod ayın haftasını hesaplayıp
+ *  yılın haftası gibi etiketliyordu — rapordaki hafta bilgisi anlamsızdı. */
+function isoWeekLabel(d: Date): string {
+	const t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+	// Perşembeye kaydır: ISO haftası, perşembesi hangi yıldaysa o yıla aittir
+	t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
+	const yearStart = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+	const week = Math.ceil(((t.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+	return `${t.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+}
 
 export class ResearchJournal {
 	constructor(private graph: KnowledgeGraph) {}
@@ -20,7 +33,7 @@ export class ResearchJournal {
 	generateEntry(assumptions: Assumption[]): JournalEntry {
 		const now = new Date();
 		const date = now.toISOString().slice(0, 10);
-		const week = `${now.getFullYear()}-W${String(Math.ceil((now.getDate() + new Date(now.getFullYear(), now.getMonth(), 1).getDay()) / 7)).padStart(2, '0')}`;
+		const week = isoWeekLabel(now); // eski hesap ayın haftasını bulup yılın haftası gibi etiketliyordu
 
 		const active = assumptions.find(a => a.status === 'testing');
 		const recentObs = this.graph.getRecentObservations(24);
@@ -31,6 +44,9 @@ export class ResearchJournal {
 			.map(n => n.content);
 
 		// Collect insights
+		// insights alanı eskiden HEP boş dizi yazılıyordu — raporda ölü bir alandı
+		const recentInsights = this.graph.getRecentInsights(24).map((n) => n.content);
+
 		const allQuestions = this.graph.getAllQuestions();
 		const recentQuestions = allQuestions
 			.filter(q => q.timestamp > Date.now() - 24 * 60 * 60 * 1000)
@@ -58,7 +74,7 @@ export class ResearchJournal {
 			evidenceFor,
 			evidenceAgainst,
 			surprises: surprises.slice(0, 5),
-			insights: [],
+			insights: recentInsights.slice(0, 5),
 			newQuestions: recentQuestions.slice(0, 5),
 			rawNotes: notes,
 		};
@@ -129,19 +145,4 @@ export class ResearchJournal {
 		writeFileSync(join(JOURNAL_DIR, mdFilename), entry.rawNotes);
 	}
 
-	/** Get all journal entries, sorted by date */
-	getEntries(): JournalEntry[] {
-		if (!existsSync(JOURNAL_DIR)) return [];
-		return readdirSync(JOURNAL_DIR)
-			.filter(f => f.endsWith('.json'))
-			.sort()
-			.map(f => {
-				try {
-					return JSON.parse(readFileSync(join(JOURNAL_DIR, f), 'utf-8')) as JournalEntry;
-				} catch {
-					return null;
-				}
-			})
-			.filter((e): e is JournalEntry => e !== null);
-	}
 }

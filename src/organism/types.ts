@@ -18,13 +18,10 @@ export interface Observation {
 
 export type ObservationType =
 	| 'divergence'    // Two things that should move together, didn't
-	| 'convergence'   // Two things that shouldn't move together, did
 	| 'silence'       // Abnormal lack of movement
-	| 'eruption'      // Sudden break from silence
 	| 'herd'          // Everything moving in lockstep
 	| 'isolation'     // One coin diverging from the herd
 	| 'surprise'      // Reality differs from ALL expectations
-	| 'echo'          // A pattern repeating from the past
 	| 'liquidity_sweep_high' // Upper wick liquidity hunt
 	| 'liquidity_sweep_low'  // Lower wick liquidity hunt
 	| 'volatility_squeeze'   // Extreme Bollinger squeeze
@@ -54,6 +51,7 @@ export interface Assumption {
 	readonly createdAt: number;
 	readonly testedWeek?: string;
 	readonly killedAt?: number;
+	readonly verdictAt?: number; // verdiktin verildiği an (yeniden test döngüsü için)
 	readonly verdict?: string;
 	readonly confidenceToKill: number; // 0-1, evidence threshold needed to kill
 }
