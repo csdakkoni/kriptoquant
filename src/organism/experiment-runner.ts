@@ -93,6 +93,9 @@ export interface Experiment {
 	positions: PaperPosition[];
 	closedPositions: PaperPosition[];
 	stats: ExperimentStats;
+	// "0 işlem" opak bir sayı olmasın: giriş koşulu neden tetiklenmedi, insan
+	// diliyle ve mesafe ölçüsüyle yazılır. Pozisyon açıkken tanımsızdır.
+	waiting?: string;
 }
 
 export interface ExperimentStats {
@@ -384,6 +387,8 @@ export class ExperimentRunner {
 					}
 				}
 			}
+
+			exp.waiting = this.describeWaiting(exp, ticks);
 		}
 
 		// Save periodically
@@ -477,6 +482,109 @@ export class ExperimentRunner {
 
 			default:
 				return false;
+		}
+	}
+
+	/**
+	 * Deney neden işlem yapmıyor? — "0 işlem" gören kullanıcı, deneyin BOZUK mu
+	 * yoksa koşulunu mu beklediğini ayırt edemiyordu. Burası o farkı ölçülebilir
+	 * bir cümleye çevirir: koşul + şu an eşiğe ne kadar uzak olduğu.
+	 *
+	 * Sadece açıklayıcıdır — hiçbir giriş/çıkış kararını etkilemez.
+	 */
+	private describeWaiting(exp: Experiment, ticks: Map<string, MarketTick[]>): string | undefined {
+		if (exp.positions.some(p => !p.exitPrice)) return undefined; // pozisyonda, beklemiyor
+
+		// Rejim anahtarlı deneyler yatay piyasada TASARIM GEREĞİ nakittedir
+		if (exp.side === 'regime') {
+			const r = this.regimeProvider();
+			if (r === 'CHOP') return 'Rejim YATAY — kural gereği nakitte (yön belirsizken pozisyon açmaz)';
+			if (r === 'UNKNOWN') return 'Rejim henüz okunamadı — veri bekleniyor';
+		}
+
+		const rule = exp.entryRule;
+		// Eşiğe en yakın coini bul: "hiç olmadı" ile "kıl payı kaçtı" farklı şeyler
+		const closest = (fn: (c: MarketTick[]) => number | null): number | null => {
+			let best: number | null = null;
+			for (const coin of exp.coins) {
+				const candles = ticks.get(coin);
+				if (!candles || candles.length < 3) continue;
+				const gap = fn(candles);
+				if (gap === null) continue;
+				if (best === null || gap < best) best = gap;
+			}
+			return best;
+		};
+		const pct = (n: number) => `%${n.toFixed(2)}`;
+
+		switch (rule.type) {
+			case 'dip_from_high': {
+				const gap = closest((candles) => {
+					if (candles.length < rule.lookback + 2) return null;
+					const window = candles.slice(-(rule.lookback + 1), -1);
+					const line = Math.max(...window.map(c => c.high)) * (1 - rule.dipPercent / 100);
+					const curr = candles[candles.length - 1].close;
+					return ((curr - line) / line) * 100; // >0 → henüz çizginin üstünde
+				});
+				const near = gap === null ? '' : ` — en yakın coin giriş çizgisinin ${pct(Math.abs(gap))} ${gap > 0 ? 'üstünde' : 'altında'}`;
+				return `${rule.lookback} mumluk tepeden -${pct(rule.dipPercent)} düşüş bekliyor${near}`;
+			}
+
+			case 'rally_from_low': {
+				const gap = closest((candles) => {
+					if (candles.length < rule.lookback + 2) return null;
+					const window = candles.slice(-(rule.lookback + 1), -1);
+					const line = Math.min(...window.map(c => c.low)) * (1 + rule.rallyPercent / 100);
+					const curr = candles[candles.length - 1].close;
+					return ((line - curr) / line) * 100; // >0 → henüz çizginin altında
+				});
+				const near = gap === null ? '' : ` — en yakın coin giriş çizgisinin ${pct(Math.abs(gap))} ${gap > 0 ? 'altında' : 'üstünde'}`;
+				return `${rule.lookback} mumluk dipten +${pct(rule.rallyPercent)} yükseliş bekliyor${near}`;
+			}
+
+			case 'anti_breakout': {
+				// Burada "en yakın" = son 20 mumun en büyük yeşil mumu
+				let biggest: number | null = null;
+				for (const coin of exp.coins) {
+					const candles = ticks.get(coin);
+					if (!candles || candles.length < 20) continue;
+					for (const c of candles.slice(-20)) {
+						const ret = ((c.close - c.open) / c.open) * 100;
+						if (biggest === null || ret > biggest) biggest = ret;
+					}
+				}
+				const near = biggest === null ? '' : ` — son 20 mumun en büyük yeşili ${pct(biggest)}`;
+				return `Yüksek hacimli (2x) ve ${pct(rule.thresholdPercent)}'ten büyük yeşil mum bekliyor${near}`;
+			}
+
+			case 'price_cross_sma':
+			case 'price_cross_sma_down': {
+				const dir = rule.type === 'price_cross_sma' ? 'yukarı' : 'aşağı';
+				const gap = closest((candles) => {
+					if (candles.length < rule.period + 1) return null;
+					const sma = candles.slice(-rule.period).reduce((s, c) => s + c.close, 0) / rule.period;
+					return Math.abs(((candles[candles.length - 1].close - sma) / sma) * 100);
+				});
+				const near = gap === null ? '' : ` — en yakın coin ortalamaya ${pct(gap)} uzaklıkta`;
+				return `Fiyatın ${rule.period} mumluk ortalamayı ${dir} kesmesini bekliyor${near}`;
+			}
+
+			case 'on_observation':
+				return `"${rule.observationType}" gözlemi bekliyor — gözlemciler bu sinyali üretmedi`;
+
+			case 'random_in_hours': {
+				const anyCandles = [...ticks.values()].find(c => c.length > 0);
+				if (!anyCandles) return undefined;
+				const h = new Date(anyCandles[anyCandles.length - 1].timestamp).getUTCHours();
+				const inWindow = rule.startHourUtc <= rule.endHourUtc
+					? h >= rule.startHourUtc && h < rule.endHourUtc
+					: h >= rule.startHourUtc || h < rule.endHourUtc;
+				if (!inWindow) return `Saat penceresi dışında (yalnız ${rule.startHourUtc}:00–${rule.endHourUtc}:00 UTC arası işlem açar, şu an ${h}:00)`;
+				return undefined; // pencere içinde — rastgele bekliyor, açıklamaya değmez
+			}
+
+			default:
+				return undefined; // random / every_n / always_long: zaten düzenli işlem açar
 		}
 	}
 

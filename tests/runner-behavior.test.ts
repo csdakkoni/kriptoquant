@@ -270,3 +270,51 @@ describe('Popülasyon tabanı (1 Ağu: sıfır deneye düştü)', () => {
 		expect(running2.length, 'ölü organizma dirilmedi').toBeGreaterThan(0);
 	});
 });
+
+// ============================================================================
+// BEKLEME GEREKÇESİ ("neden 0 işlem?")
+// ============================================================================
+// 4 Ağu: kullanıcı üçüncü kez "bazı deneyler hiç alım satım yapmamış, bozuk mu"
+// diye sordu. Deneyler bozuk değildi — koşulları oluşmamıştı. Opak "0" sayısı
+// artık ölçülebilir bir cümleye dönüşüyor. Bu testler o cümlenin doğru ve
+// yanıltıcı olmayan kalmasını sağlar.
+// ============================================================================
+
+describe('Bekleme gerekçesi', () => {
+	it('YATAY rejimde rejim deneyi "kural gereği nakitte" demeli, sessiz kalmamalı', () => {
+		const exp = mkExperiment({ side: 'regime', entryRule: { type: 'random', probability: 1 } });
+		const runner = setupRunner(exp, 'CHOP');
+		feed(runner, makeTicks([100, 101, 102]));
+		expect(exp.stats.totalTrades, 'YATAY rejimde işlem açıldı').toBe(0);
+		expect(exp.waiting, 'kullanıcı 0 işlemin sebebini göremiyor').toMatch(/YATAY/);
+	});
+
+	it('tetiklenmeyen dip kuralı, eşiğe olan MESAFEYİ bildirmeli', () => {
+		// Düz yükselen piyasa: -%5 dip çizgisi hiç kesilmez
+		const exp = mkExperiment({ entryRule: { type: 'dip_from_high', lookback: 10, dipPercent: 5 } });
+		const runner = setupRunner(exp);
+		feed(runner, makeTicks(Array.from({ length: 15 }, (_, i) => 100 + i)));
+		expect(exp.stats.totalTrades).toBe(0);
+		expect(exp.waiting).toMatch(/düşüş bekliyor/);
+		// Mesafe gerçek bir sayı olmalı — "NaN" veya boş bırakmak kullanıcıyı yanıltır
+		expect(exp.waiting).toMatch(/%\d+\.\d\d (üstünde|altında)/);
+	});
+
+	it('pozisyon açıkken bekleme gerekçesi GÖSTERİLMEMELİ', () => {
+		const exp = mkExperiment({
+			entryRule: { type: 'always_long' },
+			exitRule: { type: 'fixed_candles', n: 50 }, // uzun tutsun
+		});
+		const runner = setupRunner(exp);
+		feed(runner, makeTicks([100, 101, 102]));
+		expect(exp.positions.some(p => !p.exitPrice), 'test kurulumu: pozisyon açılmalıydı').toBe(true);
+		expect(exp.waiting, 'işlemdeyken "bekliyor" yazısı gösteriliyor').toBeUndefined();
+	});
+
+	it('düzenli işlem açan rastgele deneyde gereksiz açıklama olmamalı', () => {
+		const exp = mkExperiment({ entryRule: { type: 'random', probability: 0 }, side: 'long' });
+		const runner = setupRunner(exp);
+		feed(runner, makeTicks([100, 101, 102]));
+		expect(exp.waiting, 'rastgele kural için anlamsız açıklama üretildi').toBeUndefined();
+	});
+});

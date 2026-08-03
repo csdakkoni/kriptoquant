@@ -407,6 +407,18 @@ body::before {
 .exp-pnl.negative { background: var(--accent-red-dim); color: var(--accent-red); }
 .exp-pnl.neutral { background: rgba(136,136,160,0.1); color: var(--text-secondary); }
 
+/* "0 işlem" opak kalmasın: deneyin hangi koşulu beklediğini kartın altında yazar */
+.exp-waiting {
+  margin-top: 8px;
+  padding: 7px 9px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  background: rgba(136,136,160,0.08);
+  border-left: 2px solid var(--text-dim);
+  border-radius: 4px;
+}
+
 /* ─── Stats ─── */
 .stats-row {
   display: grid;
@@ -899,6 +911,10 @@ function selectExperiment(name) {
   if (selectedExperiment && el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 function renderExperiments(experiments) {
   if (!experiments || experiments.length === 0) return;
   lastExperiments = experiments;
@@ -939,6 +955,7 @@ function renderExperiments(experiments) {
           </div>
         </div>
         <div class="exp-pnl ${pnlClass}">${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%</div>
+        ${exp.waiting ? `<div class="exp-waiting">⏳ ${esc(exp.waiting)}</div>` : ''}
       </div>
     `;
   }).join('');
