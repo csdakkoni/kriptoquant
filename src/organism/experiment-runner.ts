@@ -12,9 +12,11 @@
 // ============================================================================
 
 import { log, logError } from '../core/utils.js';
+import { config } from '../core/config.js';
 import type { MarketTick, Observation } from './types.js';
 import type { MarketRegime } from './regime.js';
 import { KnowledgeGraph } from './knowledge-graph.js';
+import { LiveBroker } from './live-broker.js';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -85,6 +87,7 @@ export interface Experiment {
 	// 'regime' = yönü piyasa rejimi seçer: BULL→long, BEAR→short, CHOP→nakit (giriş yok).
 	side?: 'long' | 'short' | 'regime';
 	promoted?: boolean;         // Evolver terfi kararı — kalıcı (restart'ta unutulmaz)
+	isLiveTradingEnabled?: boolean; // Canlı borsa işlemleri (gerçek veya dry-run) için yetki var mı?
 	coins: string[];
 	status: ExperimentStatus;
 	startedAt: number;
@@ -168,6 +171,7 @@ export function createDefaultExperiments(): Experiment[] {
 			sourceAssumption: 'chop-market-rules',
 			entryRule: { type: 'random', probability: 0.1 },
 			exitRule: { type: 'stop_and_target', stopPercent: 1.0, targetPercent: 1.0 },
+			isLiveTradingEnabled: true,
 			coins,
 		},
 		{
@@ -339,8 +343,11 @@ export class ExperimentRunner {
 	// Rejim sağlayıcı — 'regime' yönlü deneyler pozisyon açarken yönü buradan alır
 	private regimeProvider: () => MarketRegime = () => 'UNKNOWN';
 
+	private liveBroker: LiveBroker;
+
 	constructor(graph: KnowledgeGraph) {
 		this.graph = graph;
+		this.liveBroker = new LiveBroker();
 		this.load();
 		this.ensureCorePopulation(); // açılışta boş kadro kalmasın
 	}
@@ -613,8 +620,15 @@ export class ExperimentRunner {
 			lowSinceEntry: tick.close,
 			lastTickTs: tick.timestamp, // giriş mumu sayaca dahil edilmez
 		};
-		exp.positions.push(pos);
+		
+		if (exp.isLiveTradingEnabled) {
+			// Ateşle ve unut (fire-and-forget). Risk yöneticisi redderse false döner ama
+			// kağıt üzerinde pozisyon açılmaya devam eder (paper trading'i bozmamak için).
+			// İleride gerçek gerçekleşme fiyatını pos.entryPrice'a eşitleyebiliriz.
+			this.liveBroker.executeEntry(coin, side, tick.close).catch(err => logError(String(err)));
+		}
 
+		exp.positions.push(pos);
 		log(`[EXPERIMENT] ${side === 'short' ? '📉' : '📈'} ${exp.name} | ${coin} ${side.toUpperCase()} @ ${tick.close.toFixed(2)}`);
 	}
 
@@ -730,6 +744,11 @@ export class ExperimentRunner {
 		const pnl = pos.pnlPercent!;
 		const emoji = pnl >= 0 ? '🟢' : '🔴';
 		log(`[EXPERIMENT] ${emoji} ${exp.name} | ${pos.coin} CLOSE @ ${exitPrice.toFixed(2)} | PnL: ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}% | Reason: ${reason}`);
+
+		if (exp.isLiveTradingEnabled) {
+			const estimatedPnlUsd = (pnl / 100) * config.risk.maxTradeSizeUsd;
+			this.liveBroker.executeExit(pos.coin, pos.side, exitPrice, estimatedPnlUsd).catch(err => logError(String(err)));
+		}
 
 		// Move to closed
 		exp.closedPositions.push({ ...pos });
