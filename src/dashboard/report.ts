@@ -18,6 +18,8 @@ interface Trade {
 	exitTime?: number;
 	expName?: string;
 	expSide?: string;
+	lowSinceEntry?: number;
+	highSinceEntry?: number;
 }
 
 const pct = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
@@ -212,14 +214,27 @@ function buildInsights(ctx: {
 	// 6) Karne bulguları
 	if (sb?.scores) {
 		const mature = Object.entries(sb.scores as Record<string, any>)
-			.map(([type, h]) => ({ type, c: h['4'] }))
-			.filter((r) => r.c && r.c.n >= 20);
-		const signals = mature.filter((r) => r.c.sumRet / r.c.n >= 0.15);
-		const inverse = mature.filter((r) => r.c.sumRet / r.c.n <= -0.15);
-		const noise = mature.filter((r) => Math.abs(r.c.sumRet / r.c.n) < 0.15);
+			.map(([type, horizons]) => {
+				let bestAvg = 0;
+				let maxN = 0;
+				for (const h of Object.values(horizons) as any[]) {
+					if (h && h.n >= 20) {
+						maxN = Math.max(maxN, h.n);
+						const avg = h.sumRet / h.n;
+						if (Math.abs(avg) > Math.abs(bestAvg)) bestAvg = avg;
+					}
+				}
+				return { type, maxN, bestAvg };
+			})
+			.filter((r) => r.maxN >= 20);
+		
+		const signals = mature.filter((r) => r.bestAvg >= 0.45);
+		const inverse = mature.filter((r) => r.bestAvg <= -0.45);
+		const noise = mature.filter((r) => Math.abs(r.bestAvg) < 0.45);
+		
 		if (mature.length) {
 			out.push(
-				`Gözlem karnesi (n≥20): ${signals.length ? `sinyal adayı: <b>${signals.map((s) => s.type).join(', ')}</b>` : 'sinyal adayı yok'}${inverse.length ? `; ters sinyal: <b>${inverse.map((s) => s.type).join(', ')}</b>` : ''}${noise.length ? `; gürültü: ${noise.map((s) => s.type).join(', ')}` : ''}. Gürültü çıkan gözlemcilerin akıştaki mesajları işlem kararına girmemeli.`,
+				`Gözlem karnesi (n≥20): ${signals.length ? `sinyal adayı: <b>${signals.map((s) => s.type).join(', ')}</b>` : 'sinyal adayı yok'}${inverse.length ? `; ters sinyal: <b>${inverse.map((s) => s.type).join(', ')}</b>` : ''}${noise.length ? `; gürültü: ${noise.map((s) => s.type).join(', ')}` : ''}. Gürültü sanılan sinyallerin uzun vadeli (48h) etkileri olabilir.`
 			);
 		}
 	}
@@ -234,6 +249,21 @@ function buildInsights(ctx: {
 		out.push(
 			`Sıralama: en iyi <b>${esc(best.name)}</b> ${pct(best.stats.totalPnlPercent)} — en kötü <b>${esc(worst.name)}</b> ${pct(worst.stats.totalPnlPercent)}. Terfi eşiği: 15+ işlem, %52+ kazanma, pozitif PnL.`,
 		);
+	}
+
+	// 8) MAE / MFE Analizi (Maximum Adverse/Favorable Excursion)
+	const winners = trades.filter((t) => (t.pnlPercent || 0) > 0 && t.lowSinceEntry && t.highSinceEntry && t.entryPrice);
+	if (winners.length > 0) {
+		let totalMae = 0;
+		for (const w of winners) {
+			const entry = w.entryPrice!;
+			const mae = w.side === 'long' 
+				? ((w.lowSinceEntry! - entry) / entry) * 100 
+				: -((w.highSinceEntry! - entry) / entry) * 100;
+			totalMae += mae;
+		}
+		const avgMae = totalMae / winners.length;
+		out.push(`<b>MAE Analizi:</b> Kârla kapanan ${winners.length} işlem, hedefe ulaşmadan önce ortalama <b>%${Math.abs(avgMae).toFixed(2)}</b> terste kalmış (Adverse Excursion). Stop noktaları bu toleransın altına konulmamalı.`);
 	}
 
 	return out;
@@ -315,9 +345,16 @@ export function buildReportHtml(data: {
 				const avg = c.sumRet / c.n;
 				return `<td style="text-align:center;color:${col(avg)}">${pct(avg)}<div style="font-size:10px;color:#999">%${((c.pos / c.n) * 100).toFixed(0)} poz · n=${c.n}</div></td>`;
 			}).join('');
-			const c1 = horizons['4'];
-			const avg1 = c1 && c1.n ? c1.sumRet / c1.n : 0;
-			const verdict = !c1 || c1.n < 20 ? ['⏳ Veri birikiyor', '#888'] : avg1 >= 0.15 ? ['✅ Sinyal adayı', '#10b981'] : avg1 <= -0.15 ? ['🔄 Ters sinyal', '#f59e0b'] : ['❌ Gürültü', '#ef4444'];
+			let bestAvg = 0;
+			let maxN = 0;
+			for (const h of Object.values(horizons) as any[]) {
+				if (h && h.n >= 20) {
+					maxN = Math.max(maxN, h.n);
+					const avg = h.sumRet / h.n;
+					if (Math.abs(avg) > Math.abs(bestAvg)) bestAvg = avg;
+				}
+			}
+			const verdict = maxN < 20 ? ['⏳ Veri birikiyor', '#888'] : bestAvg >= 0.45 ? ['✅ Sinyal adayı', '#10b981'] : bestAvg <= -0.45 ? ['🔄 Ters sinyal', '#f59e0b'] : ['❌ Gürültü', '#ef4444'];
 			sbRows += `<tr><td style="font-weight:600">${esc(type)}</td>${cells}<td style="color:${verdict[1]};font-weight:600">${verdict[0]}</td></tr>`;
 		}
 	}
@@ -403,7 +440,7 @@ ${finishedRows ? `<h3>Tamamlananlar / Öldürülenler</h3><table><thead><tr><th>
 
 <h2>📊 Gözlem Karnesi</h2>
 <table><thead><tr><th>Tip</th>${SB_HORIZONS.map(([, label]) => `<th style="text-align:center">${label} sonra</th>`).join('')}<th>Değerlendirme</th></tr></thead><tbody>${sbRows || `<tr><td colspan="${SB_HORIZONS.length + 2}" style="color:#888">Henüz skor yok</td></tr>`}</tbody></table>
-<p class="note">Verdikt 1 saatlik ufka göre verilir ve en az 20 ölçüm gerektirir. Referans: %0.3 gidiş-dönüş işlem maliyeti.</p>
+<p class="note">Verdikt en kârlı zaman ufkuna göre verilir ve en az 20 ölçüm gerektirir. Referans: %0.3 gidiş-dönüş işlem maliyeti.</p>
 
 <h2>💹 Kapanan İşlemler (son 100)</h2>
 <table><thead><tr><th>Coin</th><th style="text-align:center">Yön</th><th style="text-align:right">Giriş</th><th style="text-align:right">Çıkış</th><th style="text-align:center">Net PnL</th><th>Sebep</th><th>Deney</th><th>Tarih</th></tr></thead><tbody>${tradeRows || '<tr><td colspan="8" style="color:#888">Henüz kapanan işlem yok</td></tr>'}</tbody></table>

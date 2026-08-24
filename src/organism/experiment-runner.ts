@@ -166,6 +166,17 @@ export function createDefaultExperiments(): Experiment[] {
 		{
 			...base(),
 			id: randomUUID(),
+			name: 'Altın Saat Swing (Rejim Yönlü, 3%/6%)',
+			hypothesis: '06-12 UTC altın saatlerinde rejim yönünde geniş ufuklu (3% stop / 6% hedef) dalga yakalamak, dar scalptan daha iyidir',
+			sourceAssumption: 'exit-beats-entry',
+			entryRule: { type: 'random_in_hours', startHourUtc: 6, endHourUtc: 12, probability: 0.1 },
+			exitRule: { type: 'stop_and_target', stopPercent: 3.0, targetPercent: 6.0 },
+			side: 'regime' as const,
+			coins,
+		},
+		{
+			...base(),
+			id: randomUUID(),
 			name: 'Hit & Run Scalp (1% / 1%)',
 			hypothesis: 'Testere piyasasında çok dar hedefle vur-kaç yapmak trend takibinden daha kârlıdır',
 			sourceAssumption: 'chop-market-rules',
