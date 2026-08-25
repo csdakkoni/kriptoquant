@@ -126,7 +126,7 @@ export function createDefaultExperiments(): Experiment[] {
 	const base = () => ({
 		status: 'running' as ExperimentStatus,
 		startedAt: Date.now(),
-		maxDurationHours: 168, // 1 week
+		maxDurationHours: 720, // 30 days
 		positions: [] as PaperPosition[],
 		closedPositions: [] as PaperPosition[],
 		stats: emptyStats(),

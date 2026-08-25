@@ -108,7 +108,7 @@ export class Evolver {
 				coins: COINS,
 				status: 'running',
 				startedAt: Date.now(),
-				maxDurationHours: 168,
+				maxDurationHours: 720,
 				positions: [],
 				closedPositions: [],
 				stats: {
