@@ -742,7 +742,8 @@ function renderExperiments(experiments) {
   });
 
   html += '</tbody></table>';
-  grid.innerHTML = html;
+  const grid = document.getElementById('experimentGrid');
+  if (grid) grid.innerHTML = html;
 }
 
 // ─── Render Trade Log ──────────────────────────────────────────────────────
