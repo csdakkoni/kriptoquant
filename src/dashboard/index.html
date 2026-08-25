@@ -605,7 +605,7 @@ a.report-btn { text-decoration: none; }
         <span class="card-title">Paper Trading Deneyleri</span>
         <span class="card-icon">🧪</span>
       </div>
-      <div class="exp-grid" id="experimentGrid">
+      <div style="max-height: 400px; overflow-y: auto;" id="experimentGrid">
         <div class="empty">
           <div class="empty-icon">⏳</div>
           <div class="empty-text">Deneyler yükleniyor...</div>
@@ -710,43 +710,39 @@ function renderExperiments(experiments) {
   setText('statExperiments', experiments.filter(e => e.status === 'running').length);
   setText('statEvidenceBorn', experiments.filter(e => (e.name || '').startsWith('[KANIT]')).length);
 
-  const grid = document.getElementById('experimentGrid');
-  grid.innerHTML = experiments.map(exp => {
+  let html = '<table class="trade-table" style="width:100%"><thead><tr>';
+  html += '<th>Durum</th><th>Deney</th><th>Yön</th><th style="text-align:right">İşlem</th><th style="text-align:right">Kazanma</th><th style="text-align:right">Açık</th><th style="text-align:right">PnL</th>';
+  html += '</tr></thead><tbody>';
+
+  experiments.forEach(exp => {
     const pnl = exp.stats.totalPnlPercent || 0;
-    const pnlClass = pnl > 0 ? 'positive' : pnl < 0 ? 'negative' : 'neutral';
+    const pnlClass = pnl > 0 ? 'pnl-positive' : pnl < 0 ? 'pnl-negative' : '';
     const openPositions = (exp.positions || []).filter(p => !p.exitPrice).length;
     const statusEmoji = exp.status === 'running' ? '▶️' : exp.status === 'completed' ? '✅' : '💀';
-    const sideBadge = exp.side === 'regime'
-      ? '<span class="trade-tag ts" style="margin-left:6px">🔀 REJİM</span>'
-      : (exp.side || 'long') === 'short'
-        ? '<span class="trade-tag short" style="margin-left:6px">🔻 SHORT</span>'
-        : '<span class="trade-tag long" style="margin-left:6px">🔺 LONG</span>';
-    const promotedBadge = exp.promoted ? '<span class="trade-tag tp" style="margin-left:6px">⭐ ADAY</span>' : '';
-    const isSelected = selectedExperimentId === exp.id;
+    
+    let sideBadge = '';
+    if (exp.side === 'regime') sideBadge = '<span class="trade-tag ts">🔀 REJİM</span>';
+    else if ((exp.side || 'long') === 'short') sideBadge = '<span class="trade-tag short">🔻 SHORT</span>';
+    else sideBadge = '<span class="trade-tag long">🔺 LONG</span>';
 
-    return `
-      <div class="exp-card ${pnlClass}${isSelected ? ' selected' : ''}" onclick="selectExperiment('${exp.id}', ${JSON.stringify(exp.name).replace(/"/g, '&quot;')})" title="İşlemlerini görmek için tıkla">
-        <div class="exp-name">${isSelected ? '📌 ' : ''}${statusEmoji} ${exp.name} ${sideBadge}${promotedBadge}</div>
-        <div class="exp-hypothesis">${exp.hypothesis}</div>
-        <div class="exp-stats-row">
-          <div class="exp-stat">
-            <div class="exp-stat-val" style="color: var(--text-primary)">${exp.stats.totalTrades}</div>
-            <div class="exp-stat-label">İşlem</div>
-          </div>
-          <div class="exp-stat">
-            <div class="exp-stat-val" style="color: var(--accent-green)">${exp.stats.winRate?.toFixed(0) || 0}%</div>
-            <div class="exp-stat-label">Kazanma</div>
-          </div>
-          <div class="exp-stat">
-            <div class="exp-stat-val" style="color: var(--accent-cyan)">${openPositions}</div>
-            <div class="exp-stat-label">Açık</div>
-          </div>
-        </div>
-        <div class="exp-pnl ${pnlClass}">${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%</div>
-        ${exp.waiting ? `<div class="exp-waiting">⏳ ${esc(exp.waiting)}</div>` : ''}
-      </div>
-    `;
-  }).join('');
+    const promotedBadge = exp.promoted ? ' <span class="trade-tag tp">⭐ ADAY</span>' : '';
+    const isSelected = selectedExperimentId === exp.id;
+    const rowClass = isSelected ? 'style="background: var(--bg-card-hover);"' : '';
+    const winRate = exp.stats.winRate?.toFixed(0) || 0;
+
+    html += `<tr ${rowClass} onclick="selectExperiment('${exp.id}', ${JSON.stringify(exp.name).replace(/"/g, '&quot;')})" style="cursor:pointer" title="${esc(exp.hypothesis)}">
+      <td>${isSelected ? '📌 ' : ''}${statusEmoji}</td>
+      <td style="font-family:'Inter',sans-serif;font-weight:500">${esc(exp.name)}${promotedBadge}</td>
+      <td>${sideBadge}</td>
+      <td style="text-align:right">${exp.stats.totalTrades}</td>
+      <td style="text-align:right">${winRate}%</td>
+      <td style="text-align:right;color:var(--accent-cyan)">${openPositions}</td>
+      <td style="text-align:right" class="${pnlClass}">${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%</td>
+    </tr>`;
+  });
+
+  html += '</tbody></table>';
+  grid.innerHTML = html;
 }
 
 // ─── Render Trade Log ──────────────────────────────────────────────────────
