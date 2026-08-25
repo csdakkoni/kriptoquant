@@ -677,17 +677,24 @@ function renderObservations(observations) {
 // ─── Render Experiments ──────────────────────────────────────────────────────
 
 // ── Deney filtresi: bir karta tıklayınca Son İşlemler sadece o deneyi gösterir ──
-let selectedExperiment = null; // null = tümü
+let selectedExperimentId = null; // null = tümü
+let selectedExperimentName = null;
 let lastExperiments = [];
 let lastPrices = {};
 
-function selectExperiment(name) {
-  selectedExperiment = (selectedExperiment === name) ? null : name; // tekrar tıkla = kaldır
+function selectExperiment(id, name) {
+  if (selectedExperimentId === id) {
+    selectedExperimentId = null;
+    selectedExperimentName = null;
+  } else {
+    selectedExperimentId = id;
+    selectedExperimentName = name;
+  }
   renderExperiments(lastExperiments);
   renderTradeLog(lastExperiments, lastPrices);
   // Son İşlemler'e yumuşak kaydır
   const el = document.getElementById('tradeSummaryContainer') || document.getElementById('tradeLogContainer');
-  if (selectedExperiment && el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (selectedExperimentId && el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function esc(s) {
@@ -715,10 +722,10 @@ function renderExperiments(experiments) {
         ? '<span class="trade-tag short" style="margin-left:6px">🔻 SHORT</span>'
         : '<span class="trade-tag long" style="margin-left:6px">🔺 LONG</span>';
     const promotedBadge = exp.promoted ? '<span class="trade-tag tp" style="margin-left:6px">⭐ ADAY</span>' : '';
-    const isSelected = selectedExperiment === exp.name;
+    const isSelected = selectedExperimentId === exp.id;
 
     return `
-      <div class="exp-card ${pnlClass}${isSelected ? ' selected' : ''}" onclick="selectExperiment(${JSON.stringify(exp.name).replace(/"/g, '&quot;')})" title="İşlemlerini görmek için tıkla">
+      <div class="exp-card ${pnlClass}${isSelected ? ' selected' : ''}" onclick="selectExperiment('${exp.id}', ${JSON.stringify(exp.name).replace(/"/g, '&quot;')})" title="İşlemlerini görmek için tıkla">
         <div class="exp-name">${isSelected ? '📌 ' : ''}${statusEmoji} ${exp.name} ${sideBadge}${promotedBadge}</div>
         <div class="exp-hypothesis">${exp.hypothesis}</div>
         <div class="exp-stats-row">
@@ -770,14 +777,14 @@ function renderTradeLog(experiments, prices) {
   const container = document.getElementById('tradeLogContainer');
 
   // Filtre uygulanacak deney listesi
-  const filtered = selectedExperiment ? experiments.filter(e => e.name === selectedExperiment) : experiments;
+  const filtered = selectedExperimentId ? experiments.filter(e => e.id === selectedExperimentId) : experiments;
 
   // Başlık göstergesi + filtre çubuğu
   const titleEl = document.getElementById('tradeLogTitle');
   const filterBar = document.getElementById('tradeFilterBar');
-  if (selectedExperiment) {
-    if (titleEl) titleEl.textContent = 'Son İşlemler — ' + selectedExperiment;
-    if (filterBar) filterBar.innerHTML = `<span class="filter-chip">📌 ${selectedExperiment}<button onclick="selectExperiment(null)" title="Filtreyi kaldır">✕ tümünü göster</button></span>`;
+  if (selectedExperimentId) {
+    if (titleEl) titleEl.textContent = 'Son İşlemler — ' + selectedExperimentName;
+    if (filterBar) filterBar.innerHTML = `<span class="filter-chip">📌 ${selectedExperimentName}<button onclick="selectExperiment(null, null)" title="Filtreyi kaldır">✕ tümünü göster</button></span>`;
   } else {
     if (titleEl) titleEl.textContent = 'Son İşlemler';
     if (filterBar) filterBar.innerHTML = '';
@@ -802,10 +809,10 @@ function renderTradeLog(experiments, prices) {
 
   if (allTrades.length === 0) {
     summaryContainer.innerHTML = '';
-    const msg = selectedExperiment
-      ? 'Bu deney henüz işlem açmadı. İlk pozisyonunu açınca burada görünecek.'
-      : 'Henüz işlem yok — ilk 15 dakikalık mum kapanışlarıyla deneyler pozisyon açmaya başlayacak.';
-    container.innerHTML = '<div class="empty"><div class="empty-icon">📊</div><div class="empty-text">' + msg + '</div></div>';
+    const msg = selectedExperimentId
+      ? 'Bu deneyde henüz işlem açılmadı.'
+      : 'Sistemde henüz işlem bulunmuyor. Piyasanın sinyal üretmesi bekleniyor...';
+    container.innerHTML = `<div class="empty"><div class="empty-icon">⏳</div><div class="empty-text">${msg}</div></div>`;
     return;
   }
 
