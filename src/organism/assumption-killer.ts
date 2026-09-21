@@ -18,9 +18,10 @@ import { log, logError } from '../core/utils.js';
 import type { MarketTick, Observer, Observation } from './types.js';
 import { DivergenceObserver, SilenceObserver, HerdObserver, SurpriseObserver, LiquidityWickObserver, BollingerSqueezeObserver } from './observers.js';
 import { KnowledgeGraph } from './knowledge-graph.js';
+import { ObservationScoreboard } from './observation-scoreboard.js';
 import { ExperimentRunner } from './experiment-runner.js';
 import { Evolver } from './evolver.js';
-import { ObservationScoreboard } from './observation-scoreboard.js';
+import * as crypto from 'node:crypto';
 import { RegimeDetector } from './regime.js';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -117,7 +118,7 @@ export class AssumptionKiller {
 		for (const coin of COINS) {
 			try {
 				const res = await fetch(
-					`https://api.binance.com/api/v3/klines?symbol=${coin}&interval=${INTERVAL}&limit=201`,
+					`https://api.binance.com/api/v3/klines?symbol=${coin}&interval=${INTERVAL}&limit=501`,
 				);
 				if (!res.ok) throw new Error(`HTTP ${res.status}`);
 				const data = (await res.json()) as any[];
@@ -199,8 +200,8 @@ export class AssumptionKiller {
 			buffer.push(tick);
 		}
 
-		// Keep last 200 candles per coin
-		if (buffer.length > 200) buffer.splice(0, buffer.length - 200);
+		// Keep last 500 candles per coin
+		if (buffer.length > 500) buffer.splice(0, buffer.length - 500);
 
 		this.tickCount++;
 
@@ -234,7 +235,7 @@ export class AssumptionKiller {
 			// sayesinde her coin için saatte bir ölçülür. Bu sayede observer'ların gerçekten 
 			// mi çalıştığı yoksa piyasa driftine mi bindiği (baseline ile kıyaslanarak) ölçülür.
 			observations.push({
-				id: require('node:crypto').randomUUID(),
+				id: crypto.randomUUID(),
 				timestamp: Date.now(),
 				type: 'baseline_drift',
 				coins: Array.from(this.candleBuffers.keys()),
@@ -282,7 +283,7 @@ export class AssumptionKiller {
 		// Kanıttan yeni deney doğur, terfi/öldürme kararlarını ver
 		if (this.tickCount % 20 === 0) {
 			try {
-				this.evolver.evolve(this.scoreboard);
+				// this.evolver.evolve(this.scoreboard); // KAPALI: 21 Eylul - Tek Strateji Dönemi
 			} catch (err) {
 				logError(`[Organism] Evolver error: ${err}`);
 			}

@@ -46,12 +46,16 @@ export class LiveBroker {
 
 		// 3. Live Execution
 		try {
-			// Calculate amount in base currency
-			const amount = amountUsd / currentPrice;
+			// Ensure markets are loaded for precision rules
+			await this.exchange.loadMarkets();
+			
+			// Calculate amount in base currency and format to exchange precision rules
+			const rawAmount = amountUsd / currentPrice;
+			const preciseAmount = this.exchange.amountToPrecision(symbol, rawAmount);
 			const ccxtSide = side === 'long' ? 'buy' : 'sell';
 
-			log(`[BROKER] Executing LIVE ENTRY: ${side.toUpperCase()} ${amount.toFixed(4)} ${symbol}`);
-			// await this.exchange.createMarketOrder(symbol, ccxtSide, amount);
+			log(`[BROKER] Executing LIVE ENTRY: ${side.toUpperCase()} ${preciseAmount} ${symbol}`);
+			// await this.exchange.createMarketOrder(symbol, ccxtSide, Number(preciseAmount));
 			
 			this.riskManager.onTradeOpened();
 			return true;

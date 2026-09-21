@@ -145,10 +145,16 @@ export class ObservationScoreboard {
 		const MIN_HIT_RATE = 0.55;
 
 		const out = [];
+		const baselineScores = this.state.scores['baseline_drift'] || {};
 		for (const [type, horizons] of Object.entries(this.state.scores)) {
+			if (type === 'baseline_drift') continue;
 			for (const [h, cell] of Object.entries(horizons)) {
 				if (cell.n < MIN_SAMPLE) continue;
-				const avgRet = cell.sumRet / cell.n;
+				const rawAvgRet = cell.sumRet / cell.n;
+				const baselineCell = baselineScores[h];
+				const baselineAvgRet = baselineCell && baselineCell.n >= 5 ? (baselineCell.sumRet / baselineCell.n) : 0;
+				const avgRet = rawAvgRet - baselineAvgRet;
+
 				if (Math.abs(avgRet) < MIN_ABS_RET) continue;
 				// İsabet oranı yönle aynı tarafta mı? (negatif kenar için düşüş oranı)
 				const upRate = cell.pos / cell.n;
