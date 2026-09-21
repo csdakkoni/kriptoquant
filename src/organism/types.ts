@@ -17,14 +17,15 @@ export interface Observation {
 }
 
 export type ObservationType =
+	| 'baseline_drift'// Piyasamin standart 48h yönelimi (drift ölçümü)
 	| 'divergence'    // Two things that should move together, didn't
-	| 'silence'       // Abnormal lack of movement
-	| 'herd'          // Everything moving in lockstep
-	| 'isolation'     // One coin diverging from the herd
-	| 'surprise'      // Reality differs from ALL expectations
-	| 'liquidity_sweep_high' // Upper wick liquidity hunt
-	| 'liquidity_sweep_low'  // Lower wick liquidity hunt
-	| 'volatility_squeeze'   // Extreme Bollinger squeeze
+	| 'volatility_squeeze' // Compression before expansion
+	| 'isolation'     // One coin moving while market sleeps
+	| 'herd'          // Everyone moving in sync, uncharacteristically
+	| 'surprise'      // Price moved opposite to a major structural signal
+	| 'liquidity_sweep_high' // Hızlıca yukarı iğne atıp kapanışı düşük yapma
+	| 'liquidity_sweep_low'  // Hızlıca aşağı iğne atıp kapanışı yüksek yapma
+	| 'silence'       // Extreme lack of activity
 	| 'anomaly';      // Something that doesn't fit any category
 
 export interface KnowledgeNode {

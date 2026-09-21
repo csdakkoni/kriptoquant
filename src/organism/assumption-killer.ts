@@ -229,6 +229,20 @@ export class AssumptionKiller {
 				}
 			}
 
+			// Drift Baseline (Koşulsuz Getiri Ölçümü): 
+			// Her 15m kapanışında bir "baseline" gözlemi atılır. Scoreboard'daki COOLDOWN_CANDLES
+			// sayesinde her coin için saatte bir ölçülür. Bu sayede observer'ların gerçekten 
+			// mi çalıştığı yoksa piyasa driftine mi bindiği (baseline ile kıyaslanarak) ölçülür.
+			observations.push({
+				id: require('node:crypto').randomUUID(),
+				timestamp: Date.now(),
+				type: 'baseline_drift',
+				coins: Array.from(this.candleBuffers.keys()),
+				description: 'Piyasanın koşulsuz yapısal sürüklenmesini (drift) ölçmek için referans gözlem',
+				confidence: 1.0,
+				relatedData: {}
+			});
+
 			// Tekrar filtresi: aynı tip+coin seti gözlem 8 period (2 saat) içinde
 			// yeniden yayınlanmaz — koşul sürüyor diye akış dolmasın.
 			observations = observations.filter((obs) => {
