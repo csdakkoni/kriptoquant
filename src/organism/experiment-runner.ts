@@ -117,12 +117,6 @@ export interface ExperimentStats {
 
 export function createDefaultExperiments(): Experiment[] {
 	const coins = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT'];
-	// KRİTİK: base bir FONKSİYON olmalı. Tek bir nesne yapıp {...base} ile
-	// kopyalamak SIĞ kopyadır — positions/closedPositions/stats referansları
-	// tüm deneyler arasında PAYLAŞILIR. O durumda bir deneyin kapattığı işlem
-	// kardeşlerinin geçmişine de yazılır (3 Ağu'da yakalandı: LONG stratejisi
-	// SHORT pozisyon tutuyor görünüyordu, 4 deney birebir aynı veriyi
-	// gösteriyordu). Her çağrı taze dizi döndürmeli.
 	const base = () => ({
 		status: 'running' as ExperimentStatus,
 		startedAt: Date.now(),
@@ -133,26 +127,6 @@ export function createDefaultExperiments(): Experiment[] {
 	});
 
 	return [
-		{
-			...base(),
-			id: randomUUID(),
-			name: 'Random + Fixed Exit (10 candle)',
-			hypothesis: 'Rastgele giriş + sabit 10 mum çıkış başabaş olmalı',
-			sourceAssumption: 'entry-signal-matters',
-			entryRule: { type: 'random', probability: 0.05 },
-			exitRule: { type: 'fixed_candles', n: 10 },
-			coins,
-		},
-		{
-			...base(),
-			id: randomUUID(),
-			name: 'Random + Trailing Stop (1.5%)',
-			hypothesis: 'Rastgele giriş + trailing stop trendlerden faydalanabilir',
-			sourceAssumption: 'exit-beats-entry',
-			entryRule: { type: 'random', probability: 0.05 },
-			exitRule: { type: 'trailing_stop', percent: 1.5 },
-			coins,
-		},
 		{
 			...base(),
 			id: randomUUID(),
@@ -177,157 +151,23 @@ export function createDefaultExperiments(): Experiment[] {
 		{
 			...base(),
 			id: randomUUID(),
-			name: 'Hit & Run Scalp (1% / 1%)',
-			hypothesis: 'Testere piyasasında çok dar hedefle vur-kaç yapmak trend takibinden daha kârlıdır',
-			sourceAssumption: 'chop-market-rules',
-			entryRule: { type: 'random', probability: 0.1 },
-			exitRule: { type: 'stop_and_target', stopPercent: 1.0, targetPercent: 1.0 },
-			isLiveTradingEnabled: true,
-			coins,
-		},
-		{
-			...base(),
-			id: randomUUID(),
-			name: 'Her 4 Saatte Giriş + Trailing Stop',
-			hypothesis: 'Sabit zamanlı giriş + trailing stop döngüsel piyasada çalışır mı?',
-			sourceAssumption: 'timeframe-matters',
-			entryRule: { type: 'every_n', n: 16 }, // 16 x 15min = 4 hours
-			exitRule: { type: 'trailing_stop', percent: 1.0 },
-			coins,
-		},
-		{
-			...base(),
-			id: randomUUID(),
-			name: 'Gözlem Tetikli Giriş (Divergence)',
-			hypothesis: 'Divergence gözlemi gerçek bir sinyal mi yoksa gürültü mü?',
-			sourceAssumption: 'trend-exists',
-			entryRule: { type: 'on_observation', observationType: 'divergence' },
-			exitRule: { type: 'stop_and_target', stopPercent: 1.5, targetPercent: 3 },
-			coins,
-		},
-		...createShortExperiments(),
-	];
-}
-
-/**
- * Short deneyler — iki kanat dersi (legacy-two-wing): 365 günlük ayı verisinde
- * pozitif çıkan TEK strateji ailesi short trend takibiydi (Donchian short
- * PF 1.288). Deney seti long-only kalırsa organizma ayıda kör kalır.
- */
-export function createShortExperiments(): Experiment[] {
-	const coins = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT'];
-	// Aynı sığ-kopya tuzağı burada da vardı — bkz. createDefaultExperiments
-	const base = () => ({
-		status: 'running' as ExperimentStatus,
-		startedAt: Date.now(),
-		maxDurationHours: 168,
-		positions: [] as PaperPosition[],
-		closedPositions: [] as PaperPosition[],
-		stats: emptyStats(),
-	});
-
-	return [
-		{
-			...base(),
-			id: randomUUID(),
-			name: 'Anti-Breakout SHORT (Tuzak Avcısı)',
-			hypothesis: 'Büyük hacimli yeşil kırılımlar FOMO tuzağıdır, tersi yönünde kısa scalp kazandırır',
-			entryRule: { type: 'anti_breakout', thresholdPercent: 1.5 },
-			exitRule: { type: 'stop_and_target', stopPercent: 1.0, targetPercent: 1.5 },
-			side: 'short' as const,
-			coins,
-		},
-		{
-			...base(),
-			id: randomUUID(),
-			name: 'SMA20 Aşağı Kırılım SHORT + Trailing',
-			hypothesis: 'Düşüş kırılımını short\'lamak ayı piyasasında pozitif olmalı (Donchian short bulgusunun canlı testi)',
-			entryRule: { type: 'price_cross_sma_down', period: 20 },
-			exitRule: { type: 'trailing_stop', percent: 1.5 },
-			side: 'short' as const,
-			coins,
-		},
-		{
-			...base(),
-			id: randomUUID(),
-			name: 'Random SHORT + Stop/Target (1%/2%)',
-			hypothesis: 'Kontrol grubu: rastgele short, ayı driftinde bile maliyet sonrası başabaş kalmalı',
-			entryRule: { type: 'random', probability: 0.05 },
-			exitRule: { type: 'stop_and_target', stopPercent: 1, targetPercent: 2 },
-			side: 'short' as const,
-			coins,
-		},
-		// ── Swing ölçeği: büyük hedefler, maliyetin önemsizleştiği bölge ──
-		// Mikro deneylerde (%1-2 hedef) %0.3 maliyet kârın üçte birini yer;
-		// %5-6 hedefte %5'ini. Lab bulgusu: rally fade %5 short PF 1.109 (POZİTİF).
-		{
-			...base(),
-			id: randomUUID(),
 			name: 'Swing Dip %5 → Hedef +%6 (Erdem ölçeği)',
 			hypothesis: '48s tepesinden %5 düşeni almak, büyük hedefle maliyeti önemsizleştirir',
+			sourceAssumption: 'entry-signal-matters',
 			entryRule: { type: 'dip_from_high', lookback: 192, dipPercent: 5 },
 			exitRule: { type: 'stop_and_target', stopPercent: 6, targetPercent: 6 },
 			coins,
-			maxDurationHours: 336, // swing işlemler günlerce sürer — 2 hafta pencere
 		},
 		{
 			...base(),
 			id: randomUUID(),
-			name: 'Rally Fade %5 → SHORT Hedef -%5',
-			hypothesis: 'Ayıda dipten %5 sıçrayanı short\'lamak pozitif (lab: PF 1.109)',
-			entryRule: { type: 'rally_from_low', lookback: 192, rallyPercent: 5 },
-			exitRule: { type: 'stop_and_target', stopPercent: 5, targetPercent: 5 },
-			side: 'short' as const,
+			name: 'Gözlem Tetikli Giriş (Herd 24h Takibi)',
+			hypothesis: 'Sürü psikolojisi (herd) gözlemi 24 saat süren yapısal bir trend (drift) yaratır',
+			sourceAssumption: 'trend-exists',
+			entryRule: { type: 'on_observation', observationType: 'herd' },
+			exitRule: { type: 'fixed_candles', n: 96 },
 			coins,
-			maxDurationHours: 336,
-		},
-		// ── Rejim Anahtarı: canlı verinin ana bulgusunun sentezi ──
-		// Random LONG -16.9% / Random SHORT +7.6% (aynı kural!) → yön her şey.
-		// Bu deney yönü rejime devreder: BULL→long, BEAR→short, CHOP→nakit.
-		// Üç kardeş (saf long / saf short / rejim anahtarlı) yan yana yarışır;
-		// anahtar değer katıyorsa uzun vadede iki saf yönü de geçmeli.
-		// ── 20 Tem raporunun iki bulgusundan doğan deneyler ──
-		// (1) Çıkış kırılımı: İz Süren %1.5 → 49 işlem, %29 kazanma, -22 puan.
-		// En çok kullanılan çıkış en çok zarar ettiren çıkıştı. Hipotez: stop
-		// çok dar, normal gürültüde tetikleniyor. Aynı girişle geniş trailing
-		// test edilir — fark çıkarsa "çıkış genişliği" gerçek bir kaldıraçtır.
-		{
-			...base(),
-			id: randomUUID(),
-			name: 'Rejim + Geniş Trailing (%3)',
-			hypothesis: 'İz süren stop %1.5 çok dardı (-22 puan). %3 ile gürültüye dayanıp trendi tutabilir mi?',
-			entryRule: { type: 'random', probability: 0.05 },
-			exitRule: { type: 'trailing_stop', percent: 3 },
-			side: 'regime' as const,
-			coins,
-			maxDurationHours: 336,
-		},
-		// (2) Saat kırılımı: 06:00–12:00 UTC tek pozitif dilim (+8.22, %60
-		// kazanma, n=20) — diğer üç dilim toplamda -46 puan. Küçük örneklem,
-		// ama sıfır maliyetle test edilebilir: aynı random kural, sadece o
-		// pencerede. Rejim yönüyle birleştirilir.
-		{
-			...base(),
-			id: randomUUID(),
-			name: 'Altın Saat 06-12 UTC (Rejim Yönlü)',
-			hypothesis: '06-12 UTC dilimi kırılım analizinde tek pozitif dilimdi (+8.22%). Gerçek bir seans etkisi mi, gürültü mü?',
-			entryRule: { type: 'random_in_hours', probability: 0.12, startHourUtc: 6, endHourUtc: 12 },
-			exitRule: { type: 'stop_and_target', stopPercent: 1, targetPercent: 2 },
-			side: 'regime' as const,
-			coins,
-			maxDurationHours: 336,
-		},
-		{
-			...base(),
-			id: randomUUID(),
-			name: 'Rejim Anahtarlı Random (1%/2%)',
-			hypothesis: 'Yön her şeyse ve yönü rejim seçerse (BULL→long, BEAR→short, CHOP→nakit), saf yönlü random kardeşleri uzun vadede geçilmeli',
-			entryRule: { type: 'random', probability: 0.05 },
-			exitRule: { type: 'stop_and_target', stopPercent: 1, targetPercent: 2 },
-			side: 'regime' as const,
-			coins,
-			maxDurationHours: 336, // rejim geçişlerini görebilmesi için 2 hafta
-		},
+		}
 	];
 }
 
@@ -955,14 +795,7 @@ export class ExperimentRunner {
 		}
 		if (changed) this.experiments = [...byName.values()];
 
-		for (const shortExp of createShortExperiments()) {
-			const exists = this.experiments.some((e) => e.name === shortExp.name);
-			if (!exists) {
-				this.experiments.push(shortExp);
-				log(`[EXPERIMENT] 🧬 Migration: yeni deney eklendi — "${shortExp.name}"`);
-				changed = true;
-			}
-		}
+		if (changed) this.experiments = [...byName.values()];
 
 		// ── Öksüz kontrol dirilişi ──
 		// Ölümsüzlük düzeltmesinden ÖNCE ölmüş kontroller donmuş kalıyordu.
