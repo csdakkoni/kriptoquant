@@ -795,8 +795,6 @@ export class ExperimentRunner {
 		}
 		if (changed) this.experiments = [...byName.values()];
 
-		if (changed) this.experiments = [...byName.values()];
-
 		// ── Öksüz kontrol dirilişi ──
 		// Ölümsüzlük düzeltmesinden ÖNCE ölmüş kontroller donmuş kalıyordu.
 		// Sonuç (24 Tem raporu): adaylar son 3 günün düşüşünde işlem yaparken

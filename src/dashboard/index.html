@@ -988,15 +988,16 @@ const OBS_TYPE_META = {
   'eruption':    { label: 'Eruption',    desc: 'Sessizlik sonrası patlama' },
   'convergence': { label: 'Convergence', desc: 'Beklenmedik birlikte hareket' },
   'echo':        { label: 'Echo',        desc: 'Geçmiş desenin tekrarı' },
-  'anomaly':     { label: 'Anomaly',     desc: 'Sınıflandırılamayan' },
+	'anomaly':     { label: 'Anomaly',     desc: 'Sınıflandırılamayan' },
+	'baseline_drift': { label: 'Baseline', desc: 'Koşulsuz piyasa drifti' },
 };
-const HORIZON_LABELS = { '4': '1 saat', '16': '4 saat', '96': '24 saat' };
+const HORIZON_LABELS = { '4': '1 saat', '16': '4 saat', '48': '12 saat', '96': '24 saat', '192': '48 saat' };
 
 function scoreVerdict(avg, n) {
-  if (n < 20) return `<span style="color:var(--text-dim)">⏳ veri birikiyor (${n})</span>`;
-  if (avg >= 0.15) return '<span style="color:var(--accent-green)">✅ sinyal adayı</span>';
-  if (avg <= -0.15) return '<span style="color:var(--accent-amber)">🔄 ters sinyal adayı</span>';
-  return '<span style="color:var(--text-dim)">❌ gürültü</span>';
+	if (n < 20) return `<span style="color:var(--text-dim)">⏳ veri birikiyor (${n})</span>`;
+	if (avg >= 0.45) return '<span style="color:var(--accent-green)">✅ sinyal adayı</span>';
+	if (avg <= -0.45) return '<span style="color:var(--accent-amber)">🔄 ters sinyal adayı</span>';
+	return '<span style="color:var(--text-dim)">❌ gürültü</span>';
 }
 
 function renderScoreboard(sb) {

@@ -213,14 +213,19 @@ function buildInsights(ctx: {
 
 	// 6) Karne bulguları
 	if (sb?.scores) {
+		const baselineScores = sb.scores['baseline_drift'] || {};
 		const mature = Object.entries(sb.scores as Record<string, any>)
+			.filter(([type]) => type !== 'baseline_drift')
 			.map(([type, horizons]) => {
 				let bestAvg = 0;
 				let maxN = 0;
-				for (const h of Object.values(horizons) as any[]) {
+				for (const [horizonKey, h] of Object.entries(horizons) as [string, any][]) {
 					if (h && h.n >= 20) {
 						maxN = Math.max(maxN, h.n);
-						const avg = h.sumRet / h.n;
+						const rawAvg = h.sumRet / h.n;
+						const bCell = baselineScores[horizonKey];
+						const bAvg = bCell && bCell.n >= 5 ? bCell.sumRet / bCell.n : 0;
+						const avg = rawAvg - bAvg;
 						if (Math.abs(avg) > Math.abs(bestAvg)) bestAvg = avg;
 					}
 				}
@@ -247,7 +252,7 @@ function buildInsights(ctx: {
 		const best = ranked[0];
 		const worst = ranked[ranked.length - 1];
 		out.push(
-			`Sıralama: en iyi <b>${esc(best.name)}</b> ${pct(best.stats.totalPnlPercent)} — en kötü <b>${esc(worst.name)}</b> ${pct(worst.stats.totalPnlPercent)}. Terfi eşiği: 15+ işlem, %52+ kazanma, pozitif PnL.`,
+			`Sıralama: en iyi <b>${esc(best.name)}</b> ${pct(best.stats.totalPnlPercent)} — en kötü <b>${esc(worst.name)}</b> ${pct(worst.stats.totalPnlPercent)}. Terfi eşiği: 20+ işlem, >0.15 ortalama işlem getirisi.`,
 		);
 	}
 
@@ -338,6 +343,7 @@ export function buildReportHtml(data: {
 	// ── Gözlem karnesi ──
 	let sbRows = '';
 	if (sb?.scores) {
+		const baselineScores = sb.scores['baseline_drift'] || {};
 		for (const [type, horizons] of Object.entries(sb.scores as Record<string, any>)) {
 			const cells = SB_HORIZONS.map(([h]) => {
 				const c = horizons[h];
@@ -347,10 +353,20 @@ export function buildReportHtml(data: {
 			}).join('');
 			let bestAvg = 0;
 			let maxN = 0;
-			for (const h of Object.values(horizons) as any[]) {
+			
+			if (type === 'baseline_drift') {
+				// baseline_drift gets no verdict since it's the baseline itself
+				sbRows += `<tr><td style="font-weight:600">${esc(type)}</td>${cells}<td style="color:#888;font-weight:600">—</td></tr>`;
+				continue;
+			}
+			
+			for (const [horizonKey, h] of Object.entries(horizons) as [string, any][]) {
 				if (h && h.n >= 20) {
 					maxN = Math.max(maxN, h.n);
-					const avg = h.sumRet / h.n;
+					const rawAvg = h.sumRet / h.n;
+					const bCell = baselineScores[horizonKey];
+					const bAvg = bCell && bCell.n >= 5 ? bCell.sumRet / bCell.n : 0;
+					const avg = rawAvg - bAvg;
 					if (Math.abs(avg) > Math.abs(bestAvg)) bestAvg = avg;
 				}
 			}
