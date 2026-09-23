@@ -31,6 +31,34 @@ const EXPERIMENTS_FILE = join(STATE_DIR, 'experiments.json');
 // maliyetsiz simülasyonda pozitif görünen her hızlı strateji gerçekte eksiydi.
 const ROUND_TRIP_COST_PCT = 0.3;
 
+/**
+ * ATR (Average True Range) — her coinin kendi volatilite ölçü birimi.
+ * BTC'nin %1'i ile DOGE'un %1'i aynı şey değildir; ATR bu farkı standardize eder.
+ * Kullanım: giriş eşiği = dipMultiplier × ATR, stop = stopMultiplier × ATR.
+ */
+function calcATR(candles: MarketTick[], period: number = 14): number {
+	if (candles.length < period + 1) return 0;
+	const recent = candles.slice(-(period + 1));
+	let sum = 0;
+	for (let i = 1; i < recent.length; i++) {
+		const tr = Math.max(
+			recent[i].high - recent[i].low,
+			Math.abs(recent[i].high - recent[i - 1].close),
+			Math.abs(recent[i].low - recent[i - 1].close),
+		);
+		sum += tr;
+	}
+	return sum / period;
+}
+
+/** ATR'yi yüzde cinsinden döndür (fiyata göre normalize). */
+function calcATRPercent(candles: MarketTick[], period: number = 14): number {
+	const atr = calcATR(candles, period);
+	if (atr === 0 || candles.length === 0) return 0;
+	const price = candles[candles.length - 1].close;
+	return (atr / price) * 100;
+}
+
 /** Saf random kontrol grupları — ölümsüzdür, süre dolunca yeniden doğarlar. */
 export function isControlExperiment(name: string): boolean {
 	return (name || '').startsWith('Random ');
@@ -47,6 +75,7 @@ export type EntryRule =
 	| { type: 'price_cross_sma'; period: number }     // Enter on SMA cross (upward)
 	| { type: 'price_cross_sma_down'; period: number } // Enter on SMA cross (downward — short girişleri için)
 	| { type: 'dip_from_high'; lookback: number; dipPercent: number }   // Tepeden %X düşüş ANINDA gir (kesişim — swing dip)
+	| { type: 'dip_from_high_atr'; lookback: number; dipMultiplier: number } // Tepeden ATR×N düşüş — her coinin kendi volatilitesine göre
 	| { type: 'rally_from_low'; lookback: number; rallyPercent: number } // Dipten %X yükseliş ANINDA gir (kesişim — rally fade short)
 	| { type: 'anti_breakout'; thresholdPercent: number } // Büyük yeşil mumlarda (hacimli kırılım) TERSİNE gir (Tuzak avcısı)
 	| { type: 'random_in_hours'; probability: number; startHourUtc: number; endHourUtc: number } // Sadece belirli UTC saat aralığında rastgele gir
@@ -57,7 +86,8 @@ export type ExitRule =
 	| { type: 'stop_loss'; percent: number }           // Exit on % loss
 	| { type: 'take_profit'; percent: number }         // Exit on % gain
 	| { type: 'trailing_stop'; percent: number }       // Trailing stop
-	| { type: 'stop_and_target'; stopPercent: number; targetPercent: number }; // Both
+	| { type: 'stop_and_target'; stopPercent: number; targetPercent: number } // Both
+	| { type: 'stop_and_target_atr'; stopMultiplier: number; targetMultiplier: number }; // ATR bazlı stop/target
 
 export interface PaperPosition {
 	id: string;
@@ -66,6 +96,8 @@ export interface PaperPosition {
 	side: 'long' | 'short';
 	entryPrice: number;
 	entryTime: number;
+	entryATR?: number; // Pozisyon açılırken kaydedilen ATR (yüzde cinsinden) — ATR bazlı stop/target için
+	clusterId?: string; // Aynı 15dk periyodunda açılan pozisyonlar aynı clusterId'yi paylaşır
 	exitPrice?: number;
 	exitTime?: number;
 	exitReason?: string;
@@ -136,32 +168,32 @@ export function createDefaultExperiments(): Experiment[] {
 		{
 			...base(),
 			id: randomUUID(),
-			name: 'Random + Stop/Target (1%/2%)',
-			hypothesis: '1:2 risk/ödül oranı rastgele girişle bile pozitif olabilir mi?',
+			name: 'Random + ATR Stop/Target (1:2)',
+			hypothesis: '1:2 risk/ödül oranı (0.5×ATR stop, 1×ATR hedef) rastgele girişle bile pozitif olabilir mi?',
 			sourceAssumption: 'exit-beats-entry',
 			entryRule: { type: 'random', probability: 0.05 },
-			exitRule: { type: 'stop_and_target', stopPercent: 1, targetPercent: 2 },
+			exitRule: { type: 'stop_and_target_atr', stopMultiplier: 0.5, targetMultiplier: 1.0 },
 			coins,
 		},
 		{
 			...base(),
 			id: randomUUID(),
-			name: 'Altın Saat Swing (Rejim Yönlü, 3%/6%)',
-			hypothesis: '06-12 UTC altın saatlerinde rejim yönünde geniş ufuklu (3% stop / 6% hedef) dalga yakalamak, dar scalptan daha iyidir',
+			name: 'Altın Saat Swing (ATR, 1.5:3)',
+			hypothesis: '06-12 UTC altın saatlerinde rejim yönünde ATR bazlı (1.5× stop / 3× hedef) dalga yakalamak',
 			sourceAssumption: 'exit-beats-entry',
 			entryRule: { type: 'random_in_hours', startHourUtc: 6, endHourUtc: 12, probability: 0.1 },
-			exitRule: { type: 'stop_and_target', stopPercent: 3.0, targetPercent: 6.0 },
+			exitRule: { type: 'stop_and_target_atr', stopMultiplier: 1.5, targetMultiplier: 3.0 },
 			side: 'regime' as const,
 			coins,
 		},
 		{
 			...base(),
 			id: randomUUID(),
-			name: 'Swing Dip %5 → Hedef +%6 (Erdem ölçeği)',
-			hypothesis: '48s tepesinden %5 düşeni almak, büyük hedefle maliyeti önemsizleştirir',
+			name: 'Swing Dip ATR → Hedef 3×ATR (Erdem ölçeği v2)',
+			hypothesis: '48s tepesinden 2.5×ATR düşeni almak, her coinin kendi volatilitesine göre ölçülen gerçek dip',
 			sourceAssumption: 'entry-signal-matters',
-			entryRule: { type: 'dip_from_high', lookback: 192, dipPercent: 5 },
-			exitRule: { type: 'stop_and_target', stopPercent: 6, targetPercent: 6 },
+			entryRule: { type: 'dip_from_high_atr', lookback: 192, dipMultiplier: 2.5 },
+			exitRule: { type: 'stop_and_target_atr', stopMultiplier: 3.0, targetMultiplier: 3.0 },
 			coins,
 		},
 		{
@@ -247,7 +279,7 @@ export class ExperimentRunner {
 
 				if (!exp.positions.find(p => p.coin === coin && !p.exitPrice)) {
 					if (this.shouldEnter(exp, coin, candles, observations)) {
-						this.openPosition(exp, coin, latest);
+						this.openPosition(exp, coin, latest, candles);
 					}
 				}
 			}
@@ -307,6 +339,21 @@ export class ExperimentRunner {
 				const window = candles.slice(-(rule.lookback + 1), -1);
 				const rollHigh = Math.max(...window.map(c => c.high));
 				const dipLine = rollHigh * (1 - rule.dipPercent / 100);
+				const prev = candles[candles.length - 2].close;
+				const curr = candles[candles.length - 1].close;
+				return prev > dipLine && curr <= dipLine;
+			}
+
+			case 'dip_from_high_atr': {
+				// ATR bazlı dip tespiti: sabit %5 yerine her coinin kendi volatilitesine göre.
+				// BTC için ~%3, DOGE için ~%7 gibi dinamik eşik.
+				if (candles.length < rule.lookback + 2) return false;
+				const atrPct = calcATRPercent(candles);
+				if (atrPct === 0) return false;
+				const dipPercent = atrPct * rule.dipMultiplier;
+				const window = candles.slice(-(rule.lookback + 1), -1);
+				const rollHigh = Math.max(...window.map(c => c.high));
+				const dipLine = rollHigh * (1 - dipPercent / 100);
 				const prev = candles[candles.length - 2].close;
 				const curr = candles[candles.length - 1].close;
 				return prev > dipLine && curr <= dipLine;
@@ -394,6 +441,21 @@ export class ExperimentRunner {
 				return `${rule.lookback} mumluk tepeden -${pct(rule.dipPercent)} düşüş bekliyor${near}`;
 			}
 
+			case 'dip_from_high_atr': {
+				const gap = closest((candles) => {
+					if (candles.length < rule.lookback + 2) return null;
+					const atrPct = calcATRPercent(candles);
+					if (atrPct === 0) return null;
+					const dipPct = atrPct * rule.dipMultiplier;
+					const window = candles.slice(-(rule.lookback + 1), -1);
+					const line = Math.max(...window.map(c => c.high)) * (1 - dipPct / 100);
+					const curr = candles[candles.length - 1].close;
+					return ((curr - line) / line) * 100;
+				});
+				const near = gap === null ? '' : ` — en yakın coin giriş çizgisinin ${pct(Math.abs(gap))} ${gap > 0 ? 'üstünde' : 'altında'}`;
+				return `${rule.lookback} mumluk tepeden -${rule.dipMultiplier}×ATR düşüş bekliyor${near}`;
+			}
+
 			case 'rally_from_low': {
 				const gap = closest((candles) => {
 					if (candles.length < rule.lookback + 2) return null;
@@ -454,7 +516,7 @@ export class ExperimentRunner {
 
 	// ─── Position Management ──────────────────────────────────────────
 
-	private openPosition(exp: Experiment, coin: string, tick: MarketTick): void {
+	private openPosition(exp: Experiment, coin: string, tick: MarketTick, candles?: MarketTick[]): void {
 		let side: 'long' | 'short';
 		if (exp.side === 'regime') {
 			// Yönü rejim seçer; CHOP/UNKNOWN'da nakit — pozisyon açılmaz.
@@ -465,6 +527,13 @@ export class ExperimentRunner {
 		} else {
 			side = exp.side ?? 'long';
 		}
+
+		// ATR'yi pozisyon açılırken kaydet — çıkış kuralında kullanılacak
+		const atrPct = candles ? calcATRPercent(candles) : 0;
+		// Kümelenme takibi: aynı 15dk periyodunda aynı deneyde açılan pozisyonlar
+		const period = Math.floor(tick.timestamp / 900_000);
+		const clusterId = `${exp.id.slice(0, 8)}:${period}`;
+
 		const pos: PaperPosition = {
 			id: randomUUID(),
 			experimentId: exp.id,
@@ -472,6 +541,8 @@ export class ExperimentRunner {
 			side,
 			entryPrice: tick.close,
 			entryTime: tick.timestamp,
+			entryATR: atrPct || undefined,
+			clusterId,
 			candlesSinceEntry: 0,
 			highSinceEntry: tick.close,
 			lowSinceEntry: tick.close,
@@ -573,6 +644,19 @@ export class ExperimentRunner {
 				const s = off(-rule.stopPercent);
 				const t = off(rule.targetPercent);
 				// Sıra bilinmiyor → kötü senaryo: stop önce
+				if (hitStop(s)) return { reason: 'stop_loss', price: fillStop(s) };
+				if (hitTarget(t)) return { reason: 'take_profit', price: t };
+				return null;
+			}
+
+			case 'stop_and_target_atr': {
+				// ATR bazlı stop/target: pozisyon açılırken kaydedilen entryATR kullanılır.
+				// Pozisyon süresince ATR değişse bile stop/target sabit kalır (çapa etkisi).
+				const atrPct = pos.entryATR || 1; // fallback: %1 (eski pozisyonlar için)
+				const stopPct = atrPct * rule.stopMultiplier;
+				const targetPct = atrPct * rule.targetMultiplier;
+				const s = off(-stopPct);
+				const t = off(targetPct);
 				if (hitStop(s)) return { reason: 'stop_loss', price: fillStop(s) };
 				if (hitTarget(t)) return { reason: 'take_profit', price: t };
 				return null;

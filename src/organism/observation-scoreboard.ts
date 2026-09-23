@@ -39,12 +39,15 @@ interface ScoreCell {
 
 interface ScoreboardState {
 	pending: PendingEntry[];
-	// scores[type][horizon] = ScoreCell
+	// scores[type][horizon] = ScoreCell — ana karar mekanizması
 	scores: Record<string, Record<string, ScoreCell>>;
+	// coinBreakdown[type][coin][horizon] = ScoreCell — sadece raporlama (karar vermez)
+	// Hangi coinin hangi sinyalde ne katkı yaptığını şeffaflaştırır.
+	coinBreakdown?: Record<string, Record<string, Record<string, ScoreCell>>>;
 }
 
 export class ObservationScoreboard {
-	private state: ScoreboardState = { pending: [], scores: {} };
+	private state: ScoreboardState = { pending: [], scores: {}, coinBreakdown: {} };
 	private dirty = false;
 
 	constructor() {
@@ -106,6 +109,16 @@ export class ObservationScoreboard {
 				cell.n++;
 				cell.sumRet += retPct;
 				if (retPct > 0) cell.pos++;
+
+				// Coin bazlı dağılım (raporlama amaçlı — karar mekanizmasına girmez)
+				const cb = (this.state.coinBreakdown ??= {});
+				const cbType = (cb[p.type] ??= {});
+				const cbCoin = (cbType[p.coin] ??= {});
+				const cbCell = (cbCoin[String(h)] ??= { n: 0, sumRet: 0, pos: 0 });
+				cbCell.n++;
+				cbCell.sumRet += retPct;
+				if (retPct > 0) cbCell.pos++;
+
 				p.doneHorizons.push(h);
 				this.dirty = true;
 			}
