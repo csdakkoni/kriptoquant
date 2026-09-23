@@ -55,6 +55,12 @@ export class AssumptionKiller {
 	private running = false;
 	// Gözlemciler 15dk'lık period başına BİR kez çalışır (10 coinin her kapanışında değil)
 	private lastObservationPeriod = 0;
+	// KRİTİK: Gözlemleri period boyunca hafızada tut. Eskiden her handleKline
+	// çağrısında yerel `observations` değişkeni kullanılıyordu ve ilk gelen coin
+	// (genellikle BNB) gözlemleri alıyor, sonrakiler boş listeyle karşılaşıyordu.
+	// Bu race condition tüm on_observation deneylerinin tek bir coinde
+	// yoğunlaşmasına neden oluyordu.
+	private currentPeriodObservations: Observation[] = [];
 	// Aynı gözlemin (tip+coin seti) 2 saat içinde tekrar yayınlanmasını engeller
 	private obsCooldown = new Map<string, number>();
 
@@ -219,28 +225,25 @@ export class AssumptionKiller {
 
 	private runObservationCycle(candleTs: number): void {
 		// Step 1: Observers produce observations — period başına BİR kez.
-		// (handleKline 10 coinin her kapanışında tetiklenir; gözlemciler durum
-		// bazlı olduğundan her çağrıda aynı gözlemi yeniden üretip akışı
-		// spamlıyordu.)
-		let observations: Observation[] = [];
+		// Gözlemler this.currentPeriodObservations'da saklanır ve o periyodun
+		// TÜM coin kapanışlarında experiment runner'a iletilir. Böylece
+		// WebSocket'ten ilk gelen coin (ör. BNB) gözlemleri tekelleştirmez.
 		const period = Math.floor(candleTs / 900_000); // 15dk period indeksi
 		if (period !== this.lastObservationPeriod) {
 			this.lastObservationPeriod = period;
+			this.currentPeriodObservations = []; // Yeni periyotta sıfırla
 
 			for (const observer of this.observers) {
 				try {
 					const obs = observer.observe(this.candleBuffers);
-					observations.push(...obs);
+					this.currentPeriodObservations.push(...obs);
 				} catch (err) {
 					logError(`[Organism] Observer ${observer.name} error: ${err}`);
 				}
 			}
 
-			// Drift Baseline (Koşulsuz Getiri Ölçümü): 
-			// Her 15m kapanışında bir "baseline" gözlemi atılır. Scoreboard'daki COOLDOWN_CANDLES
-			// sayesinde her coin için saatte bir ölçülür. Bu sayede observer'ların gerçekten 
-			// mi çalıştığı yoksa piyasa driftine mi bindiği (baseline ile kıyaslanarak) ölçülür.
-			observations.push({
+			// Drift Baseline (Koşulsuz Getiri Ölçümü)
+			this.currentPeriodObservations.push({
 				id: crypto.randomUUID(),
 				timestamp: Date.now(),
 				type: 'baseline_drift',
@@ -252,36 +255,46 @@ export class AssumptionKiller {
 
 			// Tekrar filtresi: aynı tip+coin seti gözlem 8 period (2 saat) içinde
 			// yeniden yayınlanmaz — koşul sürüyor diye akış dolmasın.
-			observations = observations.filter((obs) => {
+			this.currentPeriodObservations = this.currentPeriodObservations.filter((obs) => {
 				const key = `${obs.type}:${[...(obs.coins || [])].sort().slice(0, 3).join(',')}`;
 				const lastPeriod = this.obsCooldown.get(key) ?? -Infinity;
 				if (period - lastPeriod < 8) return false;
 				this.obsCooldown.set(key, period);
 				return true;
 			});
-		}
 
-		// Log observations
-		for (const obs of observations) {
-			this.observationCount++;
-			this.graph.addObservation(obs);
-			log(`[${obs.type.toUpperCase()}] ${obs.description}`);
+			// Log observations — sadece yeni periyodun ilk çağrısında
+			for (const obs of this.currentPeriodObservations) {
+				this.observationCount++;
+				this.graph.addObservation(obs);
+				log(`[${obs.type.toUpperCase()}] ${obs.description}`);
+			}
+
+			// Gözlem Karnesi: yeni gözlemleri kuyruğa al
+			try {
+				if (this.currentPeriodObservations.length > 0) {
+					this.scoreboard.record(this.currentPeriodObservations, this.candleBuffers);
+				}
+			} catch (err) {
+				logError(`[Organism] Scoreboard error: ${err}`);
+			}
 		}
 
 		// Rejim dedektörünü canlı tut (bayatsa arka planda tazelenir)
 		this.regime.getRegime();
 
-		// Gözlem Karnesi: yeni gözlemleri kuyruğa al, olgunlaşan ufukları ölç
+		// Gözlem Karnesi: olgunlaşan ufukları ölç (her coin kapanışında)
 		try {
-			if (observations.length > 0) this.scoreboard.record(observations, this.candleBuffers);
 			this.scoreboard.update(this.candleBuffers);
 		} catch (err) {
-			logError(`[Organism] Scoreboard error: ${err}`);
+			logError(`[Organism] Scoreboard update error: ${err}`);
 		}
 
-		// Deneyleri yürüt (kağıt üstünde)
+		// Deneyleri yürüt — KRİTİK: currentPeriodObservations kullanılır,
+		// böylece BNB'den 50ms sonra gelen BTC/ETH/SOL de aynı herd
+		// sinyalini görür ve işleme girebilir.
 		try {
-			this.experimentRunner.processTick(this.candleBuffers, observations);
+			this.experimentRunner.processTick(this.candleBuffers, this.currentPeriodObservations);
 		} catch (err) {
 			logError(`[Organism] Experiment runner error: ${err}`);
 		}
