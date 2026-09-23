@@ -116,7 +116,13 @@ export interface ExperimentStats {
 // ─── Default Experiments ─────────────────────────────────────────────────────
 
 export function createDefaultExperiments(): Experiment[] {
-	const coins = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT'];
+	const coins = [
+		'BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT',
+		'ADAUSDT', 'AVAXUSDT', 'DOGEUSDT', 'LINKUSDT', 'DOTUSDT',
+		'MATICUSDT', 'NEARUSDT', 'SUIUSDT', 'APTUSDT', 'AAVEUSDT',
+		'UNIUSDT', 'ARBUSDT', 'OPUSDT', 'FILUSDT', 'ATOMUSDT',
+		'INJUSDT', 'RENDERUSDT', 'LTCUSDT', 'TRXUSDT', 'ICPUSDT',
+	];
 	const base = () => ({
 		status: 'running' as ExperimentStatus,
 		startedAt: Date.now(),

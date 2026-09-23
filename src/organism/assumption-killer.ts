@@ -30,8 +30,14 @@ import { join } from 'node:path';
 const STATE_DIR = process.env.ORGANISM_DATA_DIR || join(process.cwd(), 'organism-data');
 
 const COINS = [
+	// Tier 1 — Majörler (mevcut)
 	'BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT',
+	// Tier 2 — Büyük Altcoinler (mevcut)
 	'ADAUSDT', 'AVAXUSDT', 'DOGEUSDT', 'LINKUSDT', 'DOTUSDT',
+	// Tier 3 — Yüksek Hacimli Altcoinler (yeni)
+	'MATICUSDT', 'NEARUSDT', 'SUIUSDT', 'APTUSDT', 'AAVEUSDT',
+	'UNIUSDT', 'ARBUSDT', 'OPUSDT', 'FILUSDT', 'ATOMUSDT',
+	'INJUSDT', 'RENDERUSDT', 'LTCUSDT', 'TRXUSDT', 'ICPUSDT',
 ];
 const INTERVAL = '15m';
 
