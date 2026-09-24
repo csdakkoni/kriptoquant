@@ -128,26 +128,48 @@ export function startDashboardServer(port: number = 3000): any {
 
 		// ─── Report Page ────────────────────────────────────────────
 		if (url === '/rapor') {
-			try {
-				const readJ = (f: string) => {
-					const p = join(ORGANISM_DIR, f);
-					if (!existsSync(p)) return null;
-					try { return JSON.parse(readFileSync(p, 'utf-8')); } catch { return null; }
-				};
-				const html = buildReportHtml({
-					experiments: readJ('experiments.json') || [],
-					scoreboard: readJ('observation-scoreboard.json'),
-					regime: readJ('regime.json'),
-				});
-				res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-				res.end(html);
-				return;
-			} catch (e) {
-				logError(`[Dashboard] Rapor oluşturulamadı: ${e}`);
-				res.writeHead(500);
-				res.end('Rapor oluşturulamadı: ' + e);
-				return;
-			}
+			getPrices().then((prices) => {
+				try {
+					const readJ = (f: string) => {
+						const p = join(ORGANISM_DIR, f);
+						if (!existsSync(p)) return null;
+						try { return JSON.parse(readFileSync(p, 'utf-8')); } catch { return null; }
+					};
+					const html = buildReportHtml({
+						experiments: readJ('experiments.json') || [],
+						scoreboard: readJ('observation-scoreboard.json'),
+						regime: readJ('regime.json'),
+						prices,
+					});
+					res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+					res.end(html);
+				} catch (e) {
+					logError(`[Dashboard] Rapor oluşturulamadı: ${e}`);
+					res.writeHead(500);
+					res.end('Rapor oluşturulamadı: ' + e);
+				}
+			}).catch((err) => {
+				logError(`[Dashboard] Fiyat çekme hatası (fiyatsız rapor üretilecek): ${err}`);
+				try {
+					const readJ = (f: string) => {
+						const p = join(ORGANISM_DIR, f);
+						if (!existsSync(p)) return null;
+						try { return JSON.parse(readFileSync(p, 'utf-8')); } catch { return null; }
+					};
+					const html = buildReportHtml({
+						experiments: readJ('experiments.json') || [],
+						scoreboard: readJ('observation-scoreboard.json'),
+						regime: readJ('regime.json'),
+						prices: {},
+					});
+					res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+					res.end(html);
+				} catch (e) {
+					res.writeHead(500);
+					res.end('Rapor oluşturulamadı: ' + e);
+				}
+			});
+			return;
 		}
 
 		// ─── HTML Dashboard ──────────────────────────────────────────

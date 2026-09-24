@@ -25,6 +25,27 @@ interface Trade {
 const pct = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
 const col = (v: number) => (v > 0 ? '#10b981' : v < 0 ? '#ef4444' : '#666');
 const esc = (s: unknown) => String(s ?? '').replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c] || c);
+const fmtP = (p?: number) => (p == null ? '—' : p >= 100 ? p.toFixed(2) : p >= 1 ? p.toFixed(3) : p.toFixed(4));
+
+function fmtDuration(candlesSinceEntry?: number, entryTime?: number): string {
+	if (entryTime) {
+		const ms = Date.now() - entryTime;
+		const mins = Math.floor(ms / 60000);
+		if (mins < 60) return `${mins} dk`;
+		const hours = Math.floor(mins / 60);
+		const remMins = mins % 60;
+		if (hours < 24) return `${hours} sa ${remMins} dk`;
+		const days = Math.floor(hours / 24);
+		const remHours = hours % 24;
+		return `${days}g ${remHours}sa`;
+	}
+	if (candlesSinceEntry != null) {
+		const hours = Math.floor(candlesSinceEntry / 4);
+		if (hours < 24) return `${hours} sa`;
+		return `${Math.floor(hours / 24)}g ${hours % 24}sa`;
+	}
+	return '—';
+}
 
 const EXIT_LABELS: Record<string, string> = {
 	take_profit: 'Kâr Al',
@@ -280,8 +301,9 @@ export function buildReportHtml(data: {
 	experiments: any[];
 	scoreboard: any;
 	regime: any;
+	prices?: Record<string, number>;
 }): string {
-	const { experiments, scoreboard: sb, regime } = data;
+	const { experiments, scoreboard: sb, regime, prices } = data;
 	const now = new Date().toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' });
 
 	// Tüm kapanan işlemler (deney adı ve yönüyle zenginleştirilmiş)
@@ -375,10 +397,45 @@ export function buildReportHtml(data: {
 		}
 	}
 
-	// ── İşlem listesi ──
-	const tradeRows = trades.slice(0, 100).map((t) => {
+	// ── Açık işlemler (rapor anındaki) ──
+	const openTrades = experiments.flatMap((e: any) =>
+		(e.positions || [])
+			.filter((p: any) => !p.exitPrice)
+			.map((p: any) => {
+				const coin = (p.coin || '').replace('USDT', '');
+				const symbolUSDT = coin + 'USDT';
+				const currentPrice = prices ? (prices[symbolUSDT] ?? prices[coin] ?? prices[p.coin]) : undefined;
+				let livePnl: number | undefined = undefined;
+				if (currentPrice && p.entryPrice) {
+					const sign = p.side === 'short' ? -1 : 1;
+					livePnl = sign * ((currentPrice - p.entryPrice) / p.entryPrice) * 100 - 0.3; // %0.3 net maliyet
+				}
+				return {
+					...p,
+					cleanCoin: coin,
+					expName: e.name,
+					currentPrice,
+					livePnl,
+				};
+			}),
+	);
+	openTrades.sort((a, b) => (b.entryTime || 0) - (a.entryTime || 0));
+
+	const openRows = openTrades.map((p: any) => {
+		const pv = p.livePnl;
+		const pnlHtml = pv != null
+			? `<span style="font-weight:700;color:${col(pv)}">${pct(pv)}</span><div style="font-size:10px;color:#888">anlık net</div>`
+			: '<span style="color:#888">—</span>';
+		const curPriceHtml = p.currentPrice != null
+			? `<b>${fmtP(p.currentPrice)}</b><div style="font-size:10px;color:#10b981">● canlı</div>`
+			: '<span style="color:#888">—</span>';
+		const atrInfo = p.entryATR ? `<div style="font-size:10px;color:#888">ATR: %${p.entryATR.toFixed(2)}</div>` : '';
+		return `<tr><td style="font-weight:600">${esc(p.cleanCoin)}${atrInfo}</td><td style="text-align:center">${p.side === 'short' ? '🔻' : '🔺'}</td><td style="text-align:right">${fmtP(p.entryPrice)}</td><td style="text-align:right">${curPriceHtml}</td><td style="text-align:center">${pnlHtml}</td><td>${esc(fmtDuration(p.candlesSinceEntry, p.entryTime))}</td><td style="font-size:11px;color:#888">${esc(p.expName || '—')}</td><td style="font-size:11px;color:#888;white-space:nowrap">${p.entryTime ? new Date(p.entryTime).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}</td></tr>`;
+	}).join('');
+
+	// ── Kapanan İşlem listesi (tümü — 100 sınırı kaldırıldı) ──
+	const tradeRows = trades.map((t) => {
 		const pv = t.pnlPercent || 0;
-		const fmtP = (p?: number) => (p == null ? '—' : p >= 100 ? p.toFixed(2) : p >= 1 ? p.toFixed(3) : p.toFixed(4));
 		return `<tr><td style="font-weight:600">${esc((t.coin || '').replace('USDT', ''))}</td><td style="text-align:center">${t.side === 'short' ? '🔻' : '🔺'}</td><td style="text-align:right">${fmtP(t.entryPrice)}</td><td style="text-align:right">${fmtP(t.exitPrice)}</td><td style="text-align:center;font-weight:600;color:${col(pv)}">${pct(pv)}</td><td>${esc(EXIT_LABELS[t.exitReason || ''] || t.exitReason || '?')}</td><td style="font-size:11px;color:#888">${esc(t.expName || '—')}</td><td style="font-size:11px;color:#888;white-space:nowrap">${t.exitTime ? new Date(t.exitTime).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}</td></tr>`;
 	}).join('');
 
@@ -458,8 +515,12 @@ ${finishedRows ? `<h3>Tamamlananlar / Öldürülenler</h3><table><thead><tr><th>
 <table><thead><tr><th>Tip</th>${SB_HORIZONS.map(([, label]) => `<th style="text-align:center">${label} sonra</th>`).join('')}<th>Değerlendirme</th></tr></thead><tbody>${sbRows || `<tr><td colspan="${SB_HORIZONS.length + 2}" style="color:#888">Henüz skor yok</td></tr>`}</tbody></table>
 <p class="note">Verdikt en kârlı zaman ufkuna göre verilir ve en az 20 ölçüm gerektirir. Referans: %0.3 gidiş-dönüş işlem maliyeti.</p>
 
-<h2>💹 Kapanan İşlemler (son 100)</h2>
-<table><thead><tr><th>Coin</th><th style="text-align:center">Yön</th><th style="text-align:right">Giriş</th><th style="text-align:right">Çıkış</th><th style="text-align:center">Net PnL</th><th>Sebep</th><th>Deney</th><th>Tarih</th></tr></thead><tbody>${tradeRows || '<tr><td colspan="8" style="color:#888">Henüz kapanan işlem yok</td></tr>'}</tbody></table>
+<h2>⏳ Rapor Anındaki Açık İşlemler (${openTrades.length} pozisyon)</h2>
+<table><thead><tr><th>Coin</th><th style="text-align:center">Yön</th><th style="text-align:right">Giriş Fiyatı</th><th style="text-align:right">Şu Anki Fiyat</th><th style="text-align:center">Anlık PnL</th><th>Açık Kalma Süresi</th><th>Deney</th><th>Giriş Tarihi</th></tr></thead><tbody>${openRows || '<tr><td colspan="8" style="color:#888;text-align:center;padding:12px">Şu anda açık pozisyon bulunmuyor.</td></tr>'}</tbody></table>
+<p class="note">Anlık PnL, pozisyon rapor oluşturulduğu anda kapansaydı gerçekleşecek %0.3 gidiş-dönüş işlem maliyeti düşülmüş net değerdir.</p>
+
+<h2>💹 Kapanan İşlemler (${trades.length} işlem)</h2>
+<table><thead><tr><th>Coin</th><th style="text-align:center">Yön</th><th style="text-align:right">Giriş</th><th style="text-align:right">Çıkış</th><th style="text-align:center">Net PnL</th><th>Sebep</th><th>Deney</th><th>Tarih</th></tr></thead><tbody>${tradeRows || '<tr><td colspan="8" style="color:#888;text-align:center;padding:12px">Henüz kapanan işlem yok</td></tr>'}</tbody></table>
 <p class="note">Tüm PnL değerleri %0.3 gidiş-dönüş işlem maliyeti düşülmüş nettir. İşlemler sanaldır (paper trading).</p>
 
 <div class="ft">KriptoQuant — Otonom Yanlışlama Motoru • ${now} • Bu rapor otomatik üretilmiştir</div>
