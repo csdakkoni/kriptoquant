@@ -15,6 +15,7 @@ const allowedNames = [
 	'Random + Stop/Target (1%/2%)',
 	'Altın Saat Swing (Rejim Yönlü, 3%/6%)',
 	'Swing Dip %5 → Hedef +%6 (Erdem ölçeği)',
+	'Swing Dip ATR → Hedef 3×ATR (Erdem ölçeği v2)',
 	'Gözlem Tetikli Giriş (Herd 24h Takibi)'
 ];
 

@@ -439,6 +439,8 @@ export function buildReportHtml(data: {
 		return `<tr><td style="font-weight:600">${esc((t.coin || '').replace('USDT', ''))}</td><td style="text-align:center">${t.side === 'short' ? '🔻' : '🔺'}</td><td style="text-align:right">${fmtP(t.entryPrice)}</td><td style="text-align:right">${fmtP(t.exitPrice)}</td><td style="text-align:center;font-weight:600;color:${col(pv)}">${pct(pv)}</td><td>${esc(EXIT_LABELS[t.exitReason || ''] || t.exitReason || '?')}</td><td style="font-size:11px;color:#888">${esc(t.expName || '—')}</td><td style="font-size:11px;color:#888;white-space:nowrap">${t.exitTime ? new Date(t.exitTime).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}</td></tr>`;
 	}).join('');
 
+	const openLivePnlSum = openTrades.reduce((s, p) => s + (p.livePnl || 0), 0);
+
 	const regimeMeta: Record<string, { label: string; color: string }> = {
 		BULL: { label: '🐂 BOĞA', color: '#10b981' },
 		BEAR: { label: '🐻 AYI', color: '#ef4444' },
@@ -486,11 +488,11 @@ tr:hover{background:#fafaff}
 
 <div class="stats">
   <div class="sb"><div class="v" style="color:${rm.color};font-size:17px">${rm.label}</div><div class="l">Piyasa Rejimi</div></div>
-  <div class="sb"><div class="v" style="color:${col(cand.sum)}">${pct(cand.sum)}</div><div class="l">Aday PnL (${cand.n})</div></div>
+  <div class="sb"><div class="v" style="color:${col(cand.sum)}">${pct(cand.sum)}</div><div class="l">Aday Realized (${cand.n})</div></div>
+  <div class="sb"><div class="v" style="color:${col(openLivePnlSum)}">${pct(openLivePnlSum)}</div><div class="l">Açık Anlık (${openTrades.length})</div></div>
   <div class="sb"><div class="v" style="color:#999">${pct(ctrl.sum)}</div><div class="l">Kontrol PnL (${ctrl.n})</div></div>
-  <div class="sb"><div class="v" style="color:${col(today.sum)}">${pct(today.sum)}</div><div class="l">Bugün (${today.n})</div></div>
-  <div class="sb"><div class="v">${all.n}</div><div class="l">Kapanan İşlem</div></div>
-  <div class="sb"><div class="v">%${all.winRate.toFixed(0)}</div><div class="l">Kazanma Oranı</div></div>
+  <div class="sb"><div class="v" style="color:${col(today.sum)}">${pct(today.sum)}</div><div class="l">Bugün Realized (${today.n})</div></div>
+  <div class="sb"><div class="v">%${all.winRate.toFixed(0)}</div><div class="l">Kazanma Oranı (${all.n})</div></div>
 </div>
 
 <h2>🧠 Yönetici Özeti — Verinin Söyledikleri</h2>

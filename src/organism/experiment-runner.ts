@@ -128,6 +128,7 @@ export interface Experiment {
 	positions: PaperPosition[];
 	closedPositions: PaperPosition[];
 	stats: ExperimentStats;
+	maxConcurrentPositions?: number; // Maksimum eşzamanlı açık pozisyon (varsayılan: 3)
 	// "0 işlem" opak bir sayı olmasın: giriş koşulu neden tetiklenmedi, insan
 	// diliyle ve mesafe ölçüsüyle yazılır. Pozisyon açıkken tanımsızdır.
 	waiting?: string;
@@ -159,6 +160,7 @@ export function createDefaultExperiments(): Experiment[] {
 		status: 'running' as ExperimentStatus,
 		startedAt: Date.now(),
 		maxDurationHours: 720, // 30 days
+		maxConcurrentPositions: 3, // Maksimum 3 eşzamanlı pozisyon (portföy korelasyon koruması)
 		positions: [] as PaperPosition[],
 		closedPositions: [] as PaperPosition[],
 		stats: emptyStats(),
@@ -168,22 +170,32 @@ export function createDefaultExperiments(): Experiment[] {
 		{
 			...base(),
 			id: randomUUID(),
-			name: 'Random + ATR Stop/Target (1:2)',
-			hypothesis: '1:2 risk/ödül oranı (0.5×ATR stop, 1×ATR hedef) rastgele girişle bile pozitif olabilir mi?',
+			name: 'Random + Stop/Target (1%/2%)',
+			hypothesis: '1:2 risk/ödül oranı rastgele girişle bile pozitif olabilir mi?',
 			sourceAssumption: 'exit-beats-entry',
 			entryRule: { type: 'random', probability: 0.05 },
-			exitRule: { type: 'stop_and_target_atr', stopMultiplier: 0.5, targetMultiplier: 1.0 },
+			exitRule: { type: 'stop_and_target', stopPercent: 1, targetPercent: 2 },
 			coins,
 		},
 		{
 			...base(),
 			id: randomUUID(),
-			name: 'Altın Saat Swing (ATR, 1.5:3)',
-			hypothesis: '06-12 UTC altın saatlerinde rejim yönünde ATR bazlı (1.5× stop / 3× hedef) dalga yakalamak',
+			name: 'Altın Saat Swing (Rejim Yönlü, 3%/6%)',
+			hypothesis: '06-12 UTC altın saatlerinde rejim yönünde geniş ufuklu (3% stop / 6% hedef) dalga yakalamak, dar scalptan daha iyidir',
 			sourceAssumption: 'exit-beats-entry',
 			entryRule: { type: 'random_in_hours', startHourUtc: 6, endHourUtc: 12, probability: 0.1 },
-			exitRule: { type: 'stop_and_target_atr', stopMultiplier: 1.5, targetMultiplier: 3.0 },
+			exitRule: { type: 'stop_and_target', stopPercent: 3.0, targetPercent: 6.0 },
 			side: 'regime' as const,
+			coins,
+		},
+		{
+			...base(),
+			id: randomUUID(),
+			name: 'Swing Dip %5 → Hedef +%6 (Erdem ölçeği)',
+			hypothesis: '48s tepesinden %5 düşeni almak, büyük hedefle maliyeti önemsizleştirir',
+			sourceAssumption: 'entry-signal-matters',
+			entryRule: { type: 'dip_from_high', lookback: 192, dipPercent: 5 },
+			exitRule: { type: 'stop_and_target', stopPercent: 6, targetPercent: 6 },
 			coins,
 		},
 		{
@@ -263,23 +275,54 @@ export class ExperimentRunner {
 				continue;
 			}
 
+			// 1. Önce tüm coinlerin açık pozisyonlarını güncelle (çıkış kontrolü idempotent — her çağrıda güvenli)
 			for (const coin of exp.coins) {
 				const candles = ticks.get(coin);
 				if (!candles || candles.length < 2) continue;
-
 				const latest = candles[candles.length - 1];
-
-				// Update open positions (çıkış kontrolü idempotent — her çağrıda güvenli)
 				this.updatePositions(exp, coin, latest);
+			}
 
-				// Giriş değerlendirmesi: coin başına YENİ mumda yalnızca BİR kez
-				const entryKey = `${exp.id}:${coin}`;
-				if (this.lastEntryCandle.get(entryKey) === latest.timestamp) continue;
-				this.lastEntryCandle.set(entryKey, latest.timestamp);
+			// 2. Açık pozisyon kotasını hesapla (Korelasyon Koruması)
+			const openPositions = exp.positions.filter(p => !p.exitPrice);
+			const maxConcurrent = exp.maxConcurrentPositions ?? 3;
+			const availableSlots = maxConcurrent - openPositions.length;
 
-				if (!exp.positions.find(p => p.coin === coin && !p.exitPrice)) {
+			// 3. Eğer boş kontenjan varsa adayları topla ve puanla
+			if (availableSlots > 0) {
+				interface EntryCandidate {
+					coin: string;
+					latest: MarketTick;
+					candles: MarketTick[];
+					score: number;
+				}
+				const candidates: EntryCandidate[] = [];
+
+				for (const coin of exp.coins) {
+					// Coinde zaten açık pozisyon varsa ikinci pozisyonu açma
+					if (openPositions.some(p => p.coin === coin)) continue;
+
+					const candles = ticks.get(coin);
+					if (!candles || candles.length < 2) continue;
+					const latest = candles[candles.length - 1];
+
+					// Giriş değerlendirmesi: coin başına YENİ mumda yalnızca BİR kez
+					const entryKey = `${exp.id}:${coin}`;
+					if (this.lastEntryCandle.get(entryKey) === latest.timestamp) continue;
+					this.lastEntryCandle.set(entryKey, latest.timestamp);
+
 					if (this.shouldEnter(exp, coin, candles, observations)) {
-						this.openPosition(exp, coin, latest, candles);
+						const score = this.calculateEntryScore(exp, coin, candles, latest);
+						candidates.push({ coin, latest, candles, score });
+					}
+				}
+
+				// 4. En yüksek kaliteli adayları seç (en iyi 'availableSlots' tanesi)
+				if (candidates.length > 0) {
+					candidates.sort((a, b) => b.score - a.score);
+					const toOpen = candidates.slice(0, availableSlots);
+					for (const cand of toOpen) {
+						this.openPosition(exp, cand.coin, cand.latest, cand.candles);
 					}
 				}
 			}
@@ -293,6 +336,56 @@ export class ExperimentRunner {
 		// Popülasyonu canlı tut: süresi dolan/öldürülen deneylerin yerine
 		// yeni nesil doğsun (~her 100 tikte bir kontrol, ucuz işlem).
 		if (this.tickCount % 100 === 0) this.ensureCorePopulation();
+	}
+
+	/**
+	 * Birden fazla coinde aynı anda sinyal geldiğinde en iyi pozisyonları
+	 * seçmek için öncelik skoru hesaplar (Eşzamanlı pozisyon sıralaması).
+	 */
+	private calculateEntryScore(exp: Experiment, coin: string, candles: MarketTick[], latest: MarketTick): number {
+		const rule = exp.entryRule;
+		switch (rule.type) {
+			case 'dip_from_high': {
+				// Zirveden en derin düşmüş olan (en ucuzlamış) ilk sırayı alır
+				if (candles.length < rule.lookback + 2) return 0;
+				const window = candles.slice(-(rule.lookback + 1), -1);
+				const rollHigh = Math.max(...window.map(c => c.high));
+				return ((rollHigh - latest.close) / rollHigh) * 100;
+			}
+
+			case 'dip_from_high_atr': {
+				// ATR'sine oranla en derin tasfiye yemiş olan ilk sırayı alır
+				if (candles.length < rule.lookback + 2) return 0;
+				const atrPct = calcATRPercent(candles);
+				const window = candles.slice(-(rule.lookback + 1), -1);
+				const rollHigh = Math.max(...window.map(c => c.high));
+				const dipPct = ((rollHigh - latest.close) / rollHigh) * 100;
+				return atrPct > 0 ? dipPct / atrPct : dipPct;
+			}
+
+			case 'random_in_hours': {
+				// Altın Saat: Son 20 mumluk ortalamaya göre en yüksek hacim patlaması (RVOL)
+				const vol = latest.volume || 1;
+				const recent = candles.slice(-20);
+				const avgVol = recent.reduce((s, c) => s + (c.volume || 0), 0) / recent.length || 1;
+				return vol / avgVol;
+			}
+
+			case 'on_observation': {
+				// Hacim artış katsayısı
+				const vol = latest.volume || 1;
+				const recent = candles.slice(-20);
+				const avgVol = recent.reduce((s, c) => s + (c.volume || 0), 0) / recent.length || 1;
+				return vol / avgVol;
+			}
+
+			default: {
+				const vol = latest.volume || 1;
+				const recent = candles.slice(-20);
+				const avgVol = recent.reduce((s, c) => s + (c.volume || 0), 0) / recent.length || 1;
+				return vol / avgVol;
+			}
+		}
 	}
 
 	// ─── Entry Logic ──────────────────────────────────────────────────
@@ -404,7 +497,12 @@ export class ExperimentRunner {
 	 * Sadece açıklayıcıdır — hiçbir giriş/çıkış kararını etkilemez.
 	 */
 	private describeWaiting(exp: Experiment, ticks: Map<string, MarketTick[]>): string | undefined {
-		if (exp.positions.some(p => !p.exitPrice)) return undefined; // pozisyonda, beklemiyor
+		const openPositions = exp.positions.filter(p => !p.exitPrice);
+		const maxConcurrent = exp.maxConcurrentPositions ?? 3;
+		if (openPositions.length >= maxConcurrent) {
+			return `Eşzamanlı pozisyon kotası dolu (${openPositions.length}/${maxConcurrent} açık) — yeni giriş için pozisyon kapanışı bekleniyor`;
+		}
+		if (openPositions.length > 0) return undefined; // pozisyonda, beklemiyor
 
 		// Rejim anahtarlı deneyler yatay piyasada TASARIM GEREĞİ nakittedir
 		if (exp.side === 'regime') {
@@ -870,20 +968,30 @@ export class ExperimentRunner {
 	private migrate(): void {
 		let changed = false;
 
-		// Mükerrer isim temizliği
-		const byName = new Map<string, Experiment>();
+		// Mükerrer isim temizliği — KRİTİK DÜZELTME: Sadece AYNI statüdeki (status) deneyler tekilleştirilir.
+		// Asla tamamlanmış bir arşiv kaydı, çalışan aktif bir nesli silemez (10 işlemin silinme bug'ı önlendi).
+		const byKey = new Map<string, Experiment>();
 		for (const e of this.experiments) {
-			const prev = byName.get(e.name);
+			const key = `${e.name}:${e.status}`;
+			const prev = byKey.get(key);
 			if (!prev) {
-				byName.set(e.name, e);
+				byKey.set(key, e);
 			} else {
 				const keep = e.stats.totalTrades >= prev.stats.totalTrades ? e : prev;
-				byName.set(e.name, keep);
-				log(`[EXPERIMENT] 🧹 Mükerrer deney temizlendi: "${e.name}"`);
+				byKey.set(key, keep);
+				log(`[EXPERIMENT] 🧹 Mükerrer deney temizlendi: "${e.name}" (${e.status})`);
 				changed = true;
 			}
 		}
-		if (changed) this.experiments = [...byName.values()];
+		if (changed) this.experiments = [...byKey.values()];
+
+		// Mevcut deneylere maxConcurrentPositions = 3 kotasını uygula
+		for (const e of this.experiments) {
+			if (!e.maxConcurrentPositions) {
+				e.maxConcurrentPositions = 3;
+				changed = true;
+			}
+		}
 
 		// ── Öksüz kontrol dirilişi ──
 		// Ölümsüzlük düzeltmesinden ÖNCE ölmüş kontroller donmuş kalıyordu.

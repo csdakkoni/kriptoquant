@@ -24,7 +24,13 @@ import { ObservationScoreboard } from './observation-scoreboard.js';
 import { ExperimentRunner, isControlExperiment, type Experiment, type EntryRule, type ExitRule } from './experiment-runner.js';
 import { randomUUID } from 'node:crypto';
 
-const COINS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT'];
+const COINS = [
+	'BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT',
+	'ADAUSDT', 'AVAXUSDT', 'DOGEUSDT', 'LINKUSDT', 'DOTUSDT',
+	'MATICUSDT', 'NEARUSDT', 'SUIUSDT', 'APTUSDT', 'AAVEUSDT',
+	'UNIUSDT', 'ARBUSDT', 'OPUSDT', 'FILUSDT', 'ATOMUSDT',
+	'INJUSDT', 'RENDERUSDT', 'LTCUSDT', 'TRXUSDT', 'ICPUSDT',
+];
 
 // ─── Experiment Performance Thresholds ───────────────────────────────────────
 
