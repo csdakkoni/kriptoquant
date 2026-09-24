@@ -12,11 +12,13 @@ const initialCount = experiments.length;
 
 // Sadece bu isimlere sahip olan deneyleri sakla (Gelecekte doğacak olanlar ve geçmiş verileri)
 const allowedNames = [
-	'Random + Stop/Target (1%/2%)',
 	'Altın Saat Swing (Rejim Yönlü, 3%/6%)',
+	'Swing Dip %5 → Hedef +%6 (Erdem ölçeği v1)',
 	'Swing Dip %5 → Hedef +%6 (Erdem ölçeği)',
 	'Swing Dip ATR → Hedef 3×ATR (Erdem ölçeği v2)',
-	'Gözlem Tetikli Giriş (Herd 24h Takibi)'
+	'Gözlem Tetikli Giriş (Herd 24h Takibi)',
+	'Gözlem Tetikli Giriş (Silence Sıkışma Patlaması)',
+	'Gözlem Tetikli Giriş (Divergence RSI Uyumsuzluğu)'
 ];
 
 // Ayiklama mantigi: Ismi allowedNames icinde olanlari tut, veya KANIT/CROSS olup hala is yapanlari tut

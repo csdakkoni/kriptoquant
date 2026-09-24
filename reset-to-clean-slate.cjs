@@ -1,0 +1,137 @@
+// ============================================================================
+// KRIPTOQUANT — Reset to Clean Slate Script
+// ============================================================================
+// 1. Mevcut tüm deney geçmişini ve skorları organism-data/arsiv_... klasörüne yedekler.
+// 2. Sistemi 6 ÇEKİRDEK STRATEJİ ile 0 işlemden tertemiz başlatır.
+// 3. Eşzamanlı maksimum 3 pozisyon kuralı ve 25 coinlik evren devrede olur.
+// ============================================================================
+
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+
+const dataDir = path.join(__dirname, 'organism-data');
+if (!fs.existsSync(dataDir)) {
+	fs.mkdirSync(dataDir, { recursive: true });
+}
+
+// 1. Yedekleme klasörü oluştur
+const ts = new Date().toISOString().replace(/[:.]/g, '-');
+const archiveDir = path.join(dataDir, `arsiv_${ts}`);
+fs.mkdirSync(archiveDir, { recursive: true });
+
+const filesToBackup = ['experiments.json', 'observation-scoreboard.json', 'knowledge-graph.json'];
+for (const f of filesToBackup) {
+	const src = path.join(dataDir, f);
+	if (fs.existsSync(src)) {
+		fs.copyFileSync(src, path.join(archiveDir, f));
+		console.log(`📦 Yedeklendi: ${f} → ${archiveDir}`);
+	}
+}
+
+// 2. 25 Coinlik Evren
+const coins = [
+	'BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT',
+	'ADAUSDT', 'AVAXUSDT', 'DOGEUSDT', 'LINKUSDT', 'DOTUSDT',
+	'MATICUSDT', 'NEARUSDT', 'SUIUSDT', 'APTUSDT', 'AAVEUSDT',
+	'UNIUSDT', 'ARBUSDT', 'OPUSDT', 'FILUSDT', 'ATOMUSDT',
+	'INJUSDT', 'RENDERUSDT', 'LTCUSDT', 'TRXUSDT', 'ICPUSDT',
+];
+
+const emptyStats = () => ({
+	totalTrades: 0,
+	wins: 0,
+	losses: 0,
+	totalPnlPercent: 0,
+	avgPnlPercent: 0,
+	winRate: 0,
+	avgWinPercent: 0,
+	avgLossPercent: 0,
+	maxDrawdownPercent: 0,
+});
+
+const base = () => ({
+	status: 'running',
+	startedAt: Date.now(),
+	maxDurationHours: 720,
+	maxConcurrentPositions: 3,
+	positions: [],
+	closedPositions: [],
+	stats: emptyStats(),
+	coins,
+});
+
+// 3. 6 Çekirdek Strateji (0 İşlem, Temiz Başlangıç)
+const cleanExperiments = [
+	{
+		...base(),
+		id: crypto.randomUUID(),
+		name: 'Altın Saat Swing (Rejim Yönlü, 3%/6%)',
+		hypothesis: '06-12 UTC altın saatlerinde rejim yönünde geniş ufuklu (3% stop / 6% hedef) dalga yakalamak',
+		sourceAssumption: 'exit-beats-entry',
+		entryRule: { type: 'random_in_hours', startHourUtc: 6, endHourUtc: 12, probability: 0.1 },
+		exitRule: { type: 'stop_and_target', stopPercent: 3.0, targetPercent: 6.0 },
+		side: 'regime',
+	},
+	{
+		...base(),
+		id: crypto.randomUUID(),
+		name: 'Swing Dip %5 → Hedef +%6 (Erdem ölçeği v1)',
+		hypothesis: '48s tepesinden %5 düşeni almak, büyük hedefle maliyeti önemsizleştirir',
+		sourceAssumption: 'entry-signal-matters',
+		entryRule: { type: 'dip_from_high', lookback: 192, dipPercent: 5 },
+		exitRule: { type: 'stop_and_target', stopPercent: 6, targetPercent: 6 },
+	},
+	{
+		...base(),
+		id: crypto.randomUUID(),
+		name: 'Swing Dip ATR → Hedef 3×ATR (Erdem ölçeği v2)',
+		hypothesis: '48s tepesinden 2.5×ATR düşeni almak, her coinin kendi volatilitesine göre ölçülen gerçek dip',
+		sourceAssumption: 'entry-signal-matters',
+		entryRule: { type: 'dip_from_high_atr', lookback: 192, dipMultiplier: 2.5 },
+		exitRule: { type: 'stop_and_target_atr', stopMultiplier: 3.0, targetMultiplier: 3.0 },
+	},
+	{
+		...base(),
+		id: crypto.randomUUID(),
+		name: 'Gözlem Tetikli Giriş (Herd 24h Takibi)',
+		hypothesis: 'Sürü psikolojisi (herd) gözlemi 24 saat süren yapısal bir trend (drift) yaratır',
+		sourceAssumption: 'trend-exists',
+		entryRule: { type: 'on_observation', observationType: 'herd' },
+		exitRule: { type: 'fixed_candles', n: 96 },
+	},
+	{
+		...base(),
+		id: crypto.randomUUID(),
+		name: 'Gözlem Tetikli Giriş (Silence Sıkışma Patlaması)',
+		hypothesis: 'Aşırı volatilite sıkışması ve sessizlik (silence) sonrası başlayan kırılım yönünde 3%/6% dalga yakalamak',
+		sourceAssumption: 'trend-exists',
+		entryRule: { type: 'on_observation', observationType: 'silence' },
+		exitRule: { type: 'stop_and_target', stopPercent: 3.0, targetPercent: 6.0 },
+		side: 'regime',
+	},
+	{
+		...base(),
+		id: crypto.randomUUID(),
+		name: 'Gözlem Tetikli Giriş (Divergence RSI Uyumsuzluğu)',
+		hypothesis: 'Fiyat ile momentum uyumsuzluğu (divergence) satıcıların tükendiğini ve dipten dönüşün başladığını gösterir',
+		sourceAssumption: 'entry-signal-matters',
+		entryRule: { type: 'on_observation', observationType: 'divergence' },
+		exitRule: { type: 'stop_and_target', stopPercent: 3.0, targetPercent: 6.0 },
+	}
+];
+
+// 4. Temiz dosyaları yaz
+fs.writeFileSync(path.join(dataDir, 'experiments.json'), JSON.stringify(cleanExperiments, null, 2));
+fs.writeFileSync(path.join(dataDir, 'observation-scoreboard.json'), JSON.stringify({ pending: [], scores: {}, coinBreakdown: {} }, null, 2));
+fs.writeFileSync(path.join(dataDir, 'knowledge-graph.json'), JSON.stringify({ nodes: [], edges: [] }, null, 2));
+
+console.log('------------------------------------------------------------');
+console.log('✅ SIFIRLAMA BAŞARILI!');
+console.log(`📁 Eski veriler şu klasöre güvenle arşivlendi:`);
+console.log(`   ${archiveDir}`);
+console.log('🚀 Yeni sistem 6 ÇEKİRDEK STRATEJİ ile 0 kilometreden hazırlandı.');
+console.log('🛡️  Her strateji için MAX 3 EŞZAMANLI POZİSYON sınırı devrede.');
+console.log('------------------------------------------------------------');
+console.log('Şimdi sunucuda şu komutu çalıştırın:');
+console.log('pm2 restart organism');
