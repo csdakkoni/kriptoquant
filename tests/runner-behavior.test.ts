@@ -142,7 +142,7 @@ describe('Maliyet düşümü — her kapanan işlemde', () => {
 
 		expect(exp.closedPositions.length, 'işlem kapanmadı').toBeGreaterThan(0);
 		for (const p of exp.closedPositions) {
-			expect(p.pnlPercent, 'maliyet düşülmemiş').toBeCloseTo(-0.3, 6);
+			expect(p.pnlPercent, 'maliyet düşülmemiş').toBeCloseTo(-0.10, 6);
 		}
 	});
 
@@ -154,7 +154,7 @@ describe('Maliyet düşümü — her kapanan işlemde', () => {
 		const first = exp.closedPositions[0];
 		expect(first).toBeTruthy();
 		const gross = ((first.exitPrice! - first.entryPrice) / first.entryPrice) * 100;
-		expect(first.pnlPercent!).toBeCloseTo(gross - 0.3, 6);
+		expect(first.pnlPercent!).toBeCloseTo(gross - 0.10, 6);
 	});
 });
 
@@ -337,7 +337,7 @@ function ohlc(rows: Array<[number, number, number, number]>, startTs = 1_700_000
 }
 
 describe('Mum içi çıkış', () => {
-	const NET = -0.3; // gidiş-dönüş maliyeti
+	const NET = -0.10; // gidiş-dönüş maliyeti
 
 	it('hedefe İĞNEYLE dokunup geri dönen mum, pozisyonu hedeften kapatmalı', () => {
 		const exp = mkExperiment({ exitRule: { type: 'stop_and_target', stopPercent: 1, targetPercent: 2 } });

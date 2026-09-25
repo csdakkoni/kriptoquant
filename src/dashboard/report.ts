@@ -409,7 +409,7 @@ export function buildReportHtml(data: {
 				let livePnl: number | undefined = undefined;
 				if (currentPrice && p.entryPrice) {
 					const sign = p.side === 'short' ? -1 : 1;
-					livePnl = sign * ((currentPrice - p.entryPrice) / p.entryPrice) * 100 - 0.3; // %0.3 net maliyet
+					livePnl = sign * ((currentPrice - p.entryPrice) / p.entryPrice) * 100 - 0.10; // %0.10 net maliyet
 				}
 				return {
 					...p,
@@ -516,15 +516,15 @@ ${finishedRows ? `<h3>Tamamlananlar / Öldürülenler</h3><table><thead><tr><th>
 
 <h2>📊 Gözlem Karnesi</h2>
 <table><thead><tr><th>Tip</th>${SB_HORIZONS.map(([, label]) => `<th style="text-align:center">${label} sonra</th>`).join('')}<th>Değerlendirme</th></tr></thead><tbody>${sbRows || `<tr><td colspan="${SB_HORIZONS.length + 2}" style="color:#888">Henüz skor yok</td></tr>`}</tbody></table>
-<p class="note">Verdikt en kârlı zaman ufkuna göre verilir ve en az 20 ölçüm gerektirir. Referans: %0.3 gidiş-dönüş işlem maliyeti.</p>
+<p class="note">Verdikt en kârlı zaman ufkuna göre verilir ve en az 20 ölçüm gerektirir. Referans: %0.10 gidiş-dönüş işlem maliyeti.</p>
 
 <h2>⏳ Rapor Anındaki Açık İşlemler (${openTrades.length} pozisyon)</h2>
 <table><thead><tr><th>Coin</th><th style="text-align:center">Yön</th><th style="text-align:right">Giriş Fiyatı</th><th style="text-align:right">Şu Anki Fiyat</th><th style="text-align:center">Anlık PnL</th><th>Açık Kalma Süresi</th><th>Deney</th><th>Giriş Tarihi</th></tr></thead><tbody>${openRows || '<tr><td colspan="8" style="color:#888;text-align:center;padding:12px">Şu anda açık pozisyon bulunmuyor.</td></tr>'}</tbody></table>
-<p class="note">Anlık PnL, pozisyon rapor oluşturulduğu anda kapansaydı gerçekleşecek %0.3 gidiş-dönüş işlem maliyeti düşülmüş net değerdir.</p>
+<p class="note">Anlık PnL, pozisyon rapor oluşturulduğu anda kapansaydı gerçekleşecek %0.10 gidiş-dönüş işlem maliyeti düşülmüş net değerdir.</p>
 
 <h2>💹 Kapanan İşlemler (${trades.length} işlem)</h2>
 <table><thead><tr><th>Coin</th><th style="text-align:center">Yön</th><th style="text-align:right">Giriş</th><th style="text-align:right">Çıkış</th><th style="text-align:center">Net PnL</th><th>Sebep</th><th>Deney</th><th>Tarih</th></tr></thead><tbody>${tradeRows || '<tr><td colspan="8" style="color:#888;text-align:center;padding:12px">Henüz kapanan işlem yok</td></tr>'}</tbody></table>
-<p class="note">Tüm PnL değerleri %0.3 gidiş-dönüş işlem maliyeti düşülmüş nettir. İşlemler sanaldır (paper trading).</p>
+<p class="note">Tüm PnL değerleri %0.10 gidiş-dönüş işlem maliyeti düşülmüş nettir. İşlemler sanaldır (paper trading).</p>
 
 <div class="ft">KriptoQuant — Otonom Yanlışlama Motoru • ${now} • Bu rapor otomatik üretilmiştir</div>
 </body></html>`;

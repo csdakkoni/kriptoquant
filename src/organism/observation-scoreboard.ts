@@ -154,7 +154,7 @@ export class ObservationScoreboard {
 	 */
 	getProvenEdges(): Array<{ type: string; horizon: number; avgRet: number; hitRate: number; n: number; side: 'long' | 'short' }> {
 		const MIN_SAMPLE = 20;
-		const MIN_ABS_RET = 0.45; // %0.3 maliyet + anlamlılık payı
+		const MIN_ABS_RET = 0.25; // %0.10 maliyet + anlamlılık payı
 		const MIN_HIT_RATE = 0.55;
 
 		const out = [];

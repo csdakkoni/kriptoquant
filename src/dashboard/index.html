@@ -766,7 +766,7 @@ function renderExperiments(experiments) {
 
 // ─── Render Trade Log ──────────────────────────────────────────────────────
 
-const ROUND_TRIP_COST_PCT = 0.3; // Motordakiyle aynı gidiş-dönüş maliyeti
+const ROUND_TRIP_COST_PCT = 0.10; // Binance Futures Taker: %0.05 × 2 yön = %0.10
 
 // Fiyata göre uygun ondalık: BTC 62.412,50 | XRP 0,4213 | PEPE 0,00000812
 function fmtPrice(p) {
@@ -882,7 +882,7 @@ function renderTradeLog(experiments, prices) {
       </div>
     </div>
     <div class="trade-hint">
-      💡 Her satır bir deneyin <b>sanal (paper)</b> işlemi — gerçek para kullanılmaz. PnL değerleri %0.3 işlem maliyeti düşülmüş <b>net</b> değerlerdir.
+      💡 Her satır bir deneyin <b>sanal (paper)</b> işlemi — gerçek para kullanılmaz. PnL değerleri %0.10 işlem maliyeti düşülmüş <b>net</b> değerlerdir.
       🔺 LONG = yükseliş beklentisiyle alım · 🔻 SHORT = düşüş beklentisiyle satış.
     </div>`;
 
@@ -1068,7 +1068,7 @@ function renderScoreboard(sb) {
       <tbody>${rows}</tbody>
     </table>
     <div class="trade-hint" style="margin-top:10px">
-      ⏳ Ölçüm bekleyen gözlem: <b>${(sb.pending || []).length}</b> · Verdikt için en az 20 ölçüm gerekir · Referans: %0.3 işlem maliyetini aşmayan ortalama, tek başına işlem sinyali olamaz.
+      ⏳ Ölçüm bekleyen gözlem: <b>${(sb.pending || []).length}</b> · Verdikt için en az 20 ölçüm gerekir · Referans: %0.10 işlem maliyetini aşmayan ortalama, tek başına işlem sinyali olamaz.
     </div>`;
 }
 

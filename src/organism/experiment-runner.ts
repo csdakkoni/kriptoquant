@@ -25,11 +25,9 @@ import { randomUUID } from 'node:crypto';
 const STATE_DIR = process.env.ORGANISM_DATA_DIR || join(process.cwd(), 'organism-data');
 const EXPERIMENTS_FILE = join(STATE_DIR, 'experiments.json');
 
-// Gerçekçi işlem maliyeti: %0.10 komisyon + %0.05 slipaj her yönde ≈ %0.3 tur.
-// KRİTİK: Bu olmadan organizma "ücret illüzyonu" bilgiler üretir — 100+
-// konfigürasyonluk lab arşivi (legacy-two-wing branch) bunu kanıtladı:
-// maliyetsiz simülasyonda pozitif görünen her hızlı strateji gerçekte eksiydi.
-const ROUND_TRIP_COST_PCT = 0.3;
+// Binance Futures gerçek komisyon: Taker %0.050 × 2 yön = %0.10 gidiş-dönüş.
+// Canlı emirlerde gerçek fee emir yanıtından alınabilir; bu sabit paper trade PnL'i içindir.
+const ROUND_TRIP_COST_PCT = 0.10;
 
 /**
  * ATR (Average True Range) — her coinin kendi volatilite ölçü birimi.
