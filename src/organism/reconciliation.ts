@@ -34,11 +34,11 @@ export async function reconcilePositions(experiments: Experiment[], liveBroker: 
 		let totalActiveLivePositions = 0;
 
 		for (const exp of experiments) {
-			if (!exp.isLiveTradingEnabled && !config.liveAllExperiments && !exp.positions.some(p => p.isLive)) continue;
+			if (!exp.positions.some(p => p.isLive)) continue;
 
 			const openPositions = [...exp.positions];
 			for (const pos of openPositions) {
-				if (!pos.isLive && !exp.isLiveTradingEnabled && !config.liveAllExperiments) continue;
+				if (!pos.isLive) continue;
 
 				const exPos = exchangePositionsByCoin.get(pos.coin);
 				if (!exPos || Math.abs(Number(exPos.contracts || 0)) === 0) {
