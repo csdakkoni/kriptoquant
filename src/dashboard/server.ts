@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
 import { log, logError } from '../core/utils.js';
 import { buildReportHtml } from './report.js';
+import { ExchangeReader } from './exchange-reader.js';
 
 // Testlerin gerçek durumu ezmemesi için dizin ORGANISM_DATA_DIR ile değiştirilebilir
 const ORGANISM_DIR = process.env.ORGANISM_DATA_DIR || join(process.cwd(), 'organism-data');
@@ -47,6 +48,7 @@ async function getPrices(): Promise<Record<string, number>> {
 export function startDashboardServer(port: number = 3000): any {
 	const wss = new WebSocketServer({ noServer: true });
 	const connectedClients = new Set<WebSocket>();
+	const exchangeReader = new ExchangeReader();
 
 	wss.on('connection', (ws) => {
 		connectedClients.add(ws);
@@ -55,6 +57,15 @@ export function startDashboardServer(port: number = 3000): any {
 
 	const server = createServer((req: IncomingMessage, res: ServerResponse) => {
 		const url = req.url ?? '/';
+
+		// ─── Binance Exchange API (Canlı borsa durumu) ───────────────
+
+		if (url === '/api/binance/state') {
+			exchangeReader.getFullState()
+				.then((state) => json(res, state))
+				.catch(() => json(res, { enabled: false, balance: null, positions: [], orders: [] }, 500));
+			return;
+		}
 
 		// ─── API Routes ──────────────────────────────────────────────
 

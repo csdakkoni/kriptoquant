@@ -629,6 +629,29 @@ a.report-btn { text-decoration: none; }
       </div>
     </div>
 
+    <!-- Borsa Durumu (Exchange State) -->
+    <div class="card grid-full" id="exchangeCard" style="display:none">
+      <div class="card-header">
+        <span class="card-title">Borsa Durumu</span>
+        <span class="card-icon" id="exchangeBadge">🔗</span>
+      </div>
+
+      <!-- Cüzdan Özeti -->
+      <div id="walletSummary" class="trade-summary" style="margin-bottom: 12px;"></div>
+
+      <!-- Açık Pozisyonlar -->
+      <div style="margin-bottom: 8px; font-weight: 600; color: var(--text-main); font-size: 13px;">📊 Borsadaki Açık Pozisyonlar</div>
+      <div style="max-height: 250px; overflow-y: auto;" id="exchangePositions">
+        <div class="empty"><div class="empty-text">Yükleniyor...</div></div>
+      </div>
+
+      <!-- Bekleyen Emirler -->
+      <div style="margin: 12px 0 8px; font-weight: 600; color: var(--text-main); font-size: 13px;">🛡️ Bekleyen Emirler (Stop / Take-Profit)</div>
+      <div style="max-height: 200px; overflow-y: auto;" id="exchangeOrders">
+        <div class="empty"><div class="empty-text">Yükleniyor...</div></div>
+      </div>
+    </div>
+
   <!-- Philosophy Footer -->
   <div class="philosophy">
     "Biz piyasayı tahmin etmeye çalışan bir sistem değiliz.<br>
@@ -1070,6 +1093,111 @@ function renderRegime(rg) {
   el.style.color = meta.color;
 }
 
+// ─── Borsa Durumu Render ──────────────────────────────────────────────────────
+
+function renderExchangeState(state) {
+  const card = document.getElementById('exchangeCard');
+  if (!state || !state.enabled) {
+    if (card) card.style.display = 'none';
+    return;
+  }
+  if (card) card.style.display = '';
+
+  const badge = document.getElementById('exchangeBadge');
+  if (badge) badge.textContent = state.isTestnet ? '🟡 TESTNET' : '🔴 MAINNET';
+
+  // Cüzdan
+  const ws = document.getElementById('walletSummary');
+  if (ws && state.balance) {
+    const b = state.balance;
+    const pnlColor = b.unrealizedPnl >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+    ws.innerHTML = `
+      <div class="trade-summary-item">
+        <div class="trade-summary-val" style="color:var(--accent-cyan)">\$${b.totalBalance.toFixed(2)}</div>
+        <div class="trade-summary-label">Toplam Bakiye</div>
+      </div>
+      <div class="trade-summary-item">
+        <div class="trade-summary-val">\$${b.freeBalance.toFixed(2)}</div>
+        <div class="trade-summary-label">Serbest Teminat</div>
+      </div>
+      <div class="trade-summary-item">
+        <div class="trade-summary-val">\$${b.usedBalance.toFixed(2)}</div>
+        <div class="trade-summary-label">Kullanılan Teminat</div>
+      </div>
+      <div class="trade-summary-item">
+        <div class="trade-summary-val" style="color:${pnlColor}">${b.unrealizedPnl >= 0 ? '+' : ''}\$${b.unrealizedPnl.toFixed(4)}</div>
+        <div class="trade-summary-label">Gerçekleşmemiş PnL</div>
+      </div>
+      <div class="trade-summary-item">
+        <div class="trade-summary-val" style="color:var(--accent-cyan)">${state.positions.length}</div>
+        <div class="trade-summary-label">Açık Pozisyon</div>
+      </div>
+    `;
+  }
+
+  // Pozisyonlar
+  const posEl = document.getElementById('exchangePositions');
+  if (posEl) {
+    if (state.positions.length === 0) {
+      posEl.innerHTML = '<div class="empty"><div class="empty-text">Borsada açık pozisyon yok.</div></div>';
+    } else {
+      let html = '<table class="trade-table" style="width:100%"><thead><tr>';
+      html += '<th>Coin</th><th>Yön</th><th>Miktar</th><th style="text-align:right">Giriş</th><th style="text-align:right">Mark</th><th style="text-align:right">PnL</th><th>Marjin</th>';
+      html += '</tr></thead><tbody>';
+      for (const p of state.positions) {
+        const pnlClass = p.unrealizedPnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+        const sideTag = p.side === 'LONG'
+          ? '<span class="trade-tag long">🔺 LONG</span>'
+          : '<span class="trade-tag short">🔻 SHORT</span>';
+        const coinName = p.coin.replace('USDT', '');
+        html += `<tr>
+          <td><a class="coin-link" href="https://www.binance.com/en/trade/${coinName}_USDT" target="_blank">${coinName}</a></td>
+          <td>${sideTag}</td>
+          <td>\$${p.notional.toFixed(2)}</td>
+          <td style="text-align:right">${fmtPrice(p.entryPrice)}</td>
+          <td style="text-align:right">${fmtPrice(p.markPrice)}</td>
+          <td style="text-align:right" class="${pnlClass}">${p.unrealizedPnl >= 0 ? '+' : ''}\$${p.unrealizedPnl.toFixed(4)} (${p.percentage >= 0 ? '+' : ''}${p.percentage.toFixed(2)}%)</td>
+          <td>${p.marginMode.toUpperCase()} ${p.leverage}x</td>
+        </tr>`;
+      }
+      html += '</tbody></table>';
+      posEl.innerHTML = html;
+    }
+  }
+
+  // Emirler
+  const ordEl = document.getElementById('exchangeOrders');
+  if (ordEl) {
+    if (state.orders.length === 0) {
+      ordEl.innerHTML = '<div class="empty"><div class="empty-text">Bekleyen emir yok.</div></div>';
+    } else {
+      let html = '<table class="trade-table" style="width:100%"><thead><tr>';
+      html += '<th>Coin</th><th>Tip</th><th>Yön</th><th style="text-align:right">Tetik Fiyatı</th><th style="text-align:right">Miktar</th><th>Durum</th>';
+      html += '</tr></thead><tbody>';
+      for (const o of state.orders) {
+        const coinName = o.coin.replace('USDT', '');
+        const typeMap = {
+          'STOP_MARKET': '<span class="trade-tag sl">❌ Stop</span>',
+          'TAKE_PROFIT_MARKET': '<span class="trade-tag tp">✅ Take Profit</span>',
+          'stop_market': '<span class="trade-tag sl">❌ Stop</span>',
+          'take_profit_market': '<span class="trade-tag tp">✅ Take Profit</span>',
+        };
+        const typeTag = typeMap[o.type] || `<span class="trade-tag">${o.type}</span>`;
+        html += `<tr>
+          <td>${coinName}</td>
+          <td>${typeTag}</td>
+          <td>${o.side}</td>
+          <td style="text-align:right">${fmtPrice(o.triggerPrice)}</td>
+          <td style="text-align:right">${o.amount}</td>
+          <td>${o.reduceOnly ? '🔒 reduceOnly' : ''}</td>
+        </tr>`;
+      }
+      html += '</tbody></table>';
+      ordEl.innerHTML = html;
+    }
+  }
+}
+
 async function refresh() {
   const [observations, knowledge, experiments, prices, scoreboard, regime] = await Promise.all([
     fetchJSON('/api/organism/observations'),
@@ -1088,11 +1216,21 @@ async function refresh() {
   renderRegime(regime);
 }
 
+// Borsa durumunu ayrı fetch et (30 sn'de bir, organism verisiyle karıştırmamak için)
+async function refreshExchange() {
+  try {
+    const state = await fetchJSON('/api/binance/state');
+    renderExchangeState(state);
+  } catch (e) {}
+}
+
 // Initial load
 refresh();
+refreshExchange();
 
 // Auto-refresh
 setInterval(refresh, POLL_INTERVAL);
+setInterval(refreshExchange, 30000); // 30 saniyede bir borsa durumunu güncelle
 
 // ─── PDF Report Generator ──────────────────────────────────────────────────
 
