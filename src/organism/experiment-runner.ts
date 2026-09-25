@@ -707,7 +707,7 @@ export class ExperimentRunner {
 			lastTickTs: tick.timestamp, // giriş mumu sayaca dahil edilmez
 		};
 		
-		if (exp.isLiveTradingEnabled) {
+		if (exp.isLiveTradingEnabled || config.liveAllExperiments) {
 			const bracket = calculateBracketPrices(exp.exitRule, tick.close, side, atrPct);
 			this.liveBroker.executeEntry(coin, side, tick.close, bracket.stopPrice, bracket.targetPrice).then(res => {
 				if (res.success) {
@@ -853,7 +853,7 @@ export class ExperimentRunner {
 		const emoji = pnl >= 0 ? '🟢' : '🔴';
 		log(`[EXPERIMENT] ${emoji} ${exp.name} | ${pos.coin} CLOSE @ ${exitPrice.toFixed(2)} | PnL: ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}% | Reason: ${reason}`);
 
-		if (exp.isLiveTradingEnabled || pos.isLive) {
+		if (exp.isLiveTradingEnabled || config.liveAllExperiments || pos.isLive) {
 			const estimatedPnlUsd = (pnl / 100) * config.risk.maxTradeSizeUsd;
 			this.liveBroker
 				.executeExit(pos.coin, pos.side, exitPrice, estimatedPnlUsd, pos.stopOrderId, pos.takeProfitOrderId)

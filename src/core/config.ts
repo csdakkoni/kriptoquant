@@ -24,4 +24,5 @@ export const config = {
 		marginMode: (process.env.MARGIN_MODE || 'ISOLATED').toUpperCase() as 'ISOLATED' | 'CROSSED',
 	},
 	isLiveTradingEnabled: process.env.LIVE_TRADING_ENABLED === 'true',
+	liveAllExperiments: process.env.LIVE_ALL_EXPERIMENTS === 'true',
 };
