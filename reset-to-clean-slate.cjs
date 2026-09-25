@@ -20,7 +20,7 @@ const ts = new Date().toISOString().replace(/[:.]/g, '-');
 const archiveDir = path.join(dataDir, `arsiv_${ts}`);
 fs.mkdirSync(archiveDir, { recursive: true });
 
-const filesToBackup = ['experiments.json', 'observation-scoreboard.json', 'knowledge-graph.json'];
+const filesToBackup = ['experiments.json', 'observation-scoreboard.json', 'knowledge-graph.json', 'risk-state.json'];
 for (const f of filesToBackup) {
 	const src = path.join(dataDir, f);
 	if (fs.existsSync(src)) {
@@ -125,6 +125,10 @@ const cleanExperiments = [
 fs.writeFileSync(path.join(dataDir, 'experiments.json'), JSON.stringify(cleanExperiments, null, 2));
 fs.writeFileSync(path.join(dataDir, 'observation-scoreboard.json'), JSON.stringify({ pending: [], scores: {}, coinBreakdown: {} }, null, 2));
 fs.writeFileSync(path.join(dataDir, 'knowledge-graph.json'), JSON.stringify({ nodes: [], edges: [] }, null, 2));
+const riskFile = path.join(dataDir, 'risk-state.json');
+if (fs.existsSync(riskFile)) {
+	fs.unlinkSync(riskFile);
+}
 
 console.log('------------------------------------------------------------');
 console.log('✅ SIFIRLAMA BAŞARILI!');
