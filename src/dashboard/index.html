@@ -887,6 +887,7 @@ function renderTradeLog(experiments, prices) {
       'trailing_stop': '<span class="trade-tag ts">↘ İz Süren Stop</span>',
       'fixed_exit': '<span class="trade-tag fixed">⏱ Süre Doldu</span>',
       'experiment_end': '<span class="trade-tag fixed">🏁 Deney Bitti</span>',
+      'exchange_bracket_trigger': '<span class="trade-tag tp" style="background:#2563eb;color:#fff">🛡️ Borsa Emri</span>',
     };
     return map[reason] || `<span class="trade-tag">${reason || '?'}</span>`;
   }
@@ -1137,7 +1138,7 @@ async function generateReport() {
     for (const t of allClosed.slice(0, 100)) {
       const pnlVal = t.pnlPercent || 0;
       const pnlColor = pnlVal > 0 ? '#10b981' : pnlVal < 0 ? '#ef4444' : '#666';
-      const exitMap = { take_profit:'Kâr Al', stop_loss:'Zarar Kes', trailing_stop:'İz Süren', fixed_exit:'Süre Doldu', experiment_end:'Deney Bitti' };
+      const exitMap = { take_profit:'Kâr Al', stop_loss:'Zarar Kes', trailing_stop:'İz Süren', fixed_exit:'Süre Doldu', experiment_end:'Deney Bitti', exchange_bracket_trigger:'🛡️ Borsa Emri' };
       tradeRows += `<tr>
         <td>${t.coin?.replace('USDT','')}</td>
         <td>${t.side || 'long'}</td>

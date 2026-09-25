@@ -53,6 +53,7 @@ const EXIT_LABELS: Record<string, string> = {
 	trailing_stop: 'İz Süren',
 	fixed_exit: 'Süre Doldu',
 	experiment_end: 'Deney Bitti',
+	exchange_bracket_trigger: 'Borsa Emri (Stop/TP)',
 };
 
 const CONTROL_PREFIX = 'Random '; // saf kontrol grupları
