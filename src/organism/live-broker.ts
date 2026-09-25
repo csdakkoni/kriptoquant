@@ -29,6 +29,7 @@ export class LiveBroker {
 			enableRateLimit: true,
 			options: {
 				defaultType: 'future', // Binance USDT-M Perpetual Futures
+				disableFuturesSandboxWarning: true,
 			},
 		});
 
