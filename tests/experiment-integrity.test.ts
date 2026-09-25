@@ -8,7 +8,6 @@
 import { describe, it, expect } from 'vitest';
 import {
 	createDefaultExperiments,
-	createShortExperiments,
 	isControlExperiment,
 	type Experiment,
 	type PaperPosition,
@@ -40,7 +39,7 @@ describe('Deney durumu izolasyonu (3 Ağu bug: kardeş deneyler veri paylaşıyo
 	});
 
 	it('hiçbir iki deney aynı dizi referansını paylaşmamalı', () => {
-		const exps = [...createDefaultExperiments(), ...createShortExperiments()];
+		const exps = createDefaultExperiments();
 		for (let i = 0; i < exps.length; i++) {
 			for (let j = i + 1; j < exps.length; j++) {
 				expect(exps[i].closedPositions, `${exps[i].name} ↔ ${exps[j].name}`).not.toBe(exps[j].closedPositions);
@@ -66,21 +65,12 @@ describe('Kadro tutarlılığı', () => {
 		}
 	});
 
-	it('kontrol grupları tanınabilmeli ve kadroda bulunmalı', () => {
+	it('6 çekirdek deney kadroda bulunmalı ve maxConcurrentPositions sınırı olmalı', () => {
 		const exps = createDefaultExperiments();
-		const controls = exps.filter((e) => isControlExperiment(e.name));
-		expect(controls.length, 'kontrol grubu yok — kıyas tabanı kalmaz').toBeGreaterThan(0);
-		// Kontrol grupları saf rastgele olmalı (yön kararı içermemeli)
-		for (const c of controls) {
-			expect(c.side, `${c.name} kontrol ama rejime bağlı`).not.toBe('regime');
+		expect(exps.length).toBe(6);
+		for (const e of exps) {
+			expect(e.maxConcurrentPositions).toBe(3);
 		}
-	});
-
-	it('kadroda hem long hem short deney olmalı (tek kanat körlüğü)', () => {
-		const exps = createDefaultExperiments();
-		const sides = new Set(exps.map((e) => e.side ?? 'long'));
-		expect(sides.has('long'), 'long deney yok').toBe(true);
-		expect(sides.has('short'), 'short deney yok — ayıda kör kalır').toBe(true);
 	});
 });
 

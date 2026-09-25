@@ -103,6 +103,9 @@ export class AssumptionKiller {
 		// 10-30, varsayım testleri 50, swing girişleri 192 mum ister).
 		await this.bootstrapHistory();
 
+		// Borsa ile pozisyon mutabakatı (Reconciliation)
+		await this.experimentRunner.reconcile();
+
 		// Rejim dedektörünü uyandır (ilk fetch'i tetikler; 15dk'da bir tazelenir)
 		this.regime.getRegime();
 
@@ -278,6 +281,9 @@ export class AssumptionKiller {
 			} catch (err) {
 				logError(`[Organism] Scoreboard error: ${err}`);
 			}
+
+			// Periyodik borsa mutabakatı (15 dakikada bir, dry-run ise sessizce atlar)
+			this.experimentRunner.reconcile().catch(err => logError(String(err)));
 		}
 
 		// Rejim dedektörünü canlı tut (bayatsa arka planda tazelenir)

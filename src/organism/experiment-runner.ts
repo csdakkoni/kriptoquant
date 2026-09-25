@@ -106,6 +106,45 @@ export interface PaperPosition {
 	highSinceEntry: number;
 	lowSinceEntry: number;
 	lastTickTs?: number; // Son işlenen mumun zaman damgası — çift sayımı önler
+	liveOrderId?: string;
+	stopOrderId?: string;
+	takeProfitOrderId?: string;
+	isLive?: boolean;
+}
+
+/** Pozisyon kuralına ve ATR'ye göre borsa tarafına iletilecek Stop-Loss ve Take-Profit tetik fiyatlarını hesaplar */
+export function calculateBracketPrices(
+	rule: ExitRule,
+	entryPrice: number,
+	side: 'long' | 'short',
+	entryATR?: number,
+): { stopPrice?: number; targetPrice?: number } {
+	const isLong = side !== 'short';
+	const off = (pct: number) => entryPrice * (1 + (isLong ? pct : -pct) / 100);
+
+	switch (rule.type) {
+		case 'stop_loss':
+			return { stopPrice: off(-rule.percent) };
+		case 'take_profit':
+			return { targetPrice: off(rule.percent) };
+		case 'stop_and_target':
+			return {
+				stopPrice: off(-rule.stopPercent),
+				targetPrice: off(rule.targetPercent),
+			};
+		case 'stop_and_target_atr': {
+			const atrPct = entryATR || 1;
+			return {
+				stopPrice: off(-(atrPct * rule.stopMultiplier)),
+				targetPrice: off(atrPct * rule.targetMultiplier),
+			};
+		}
+		case 'trailing_stop':
+			// Trailing stop için başlangıç güvenlik stopu
+			return { stopPrice: off(-rule.percent) };
+		default:
+			return {};
+	}
 }
 
 export interface Experiment {
@@ -270,6 +309,16 @@ export class ExperimentRunner {
 
 	getExperiments(): Experiment[] {
 		return this.experiments;
+	}
+
+	getLiveBroker(): LiveBroker {
+		return this.liveBroker;
+	}
+
+	async reconcile(): Promise<void> {
+		const { reconcilePositions } = await import('./reconciliation.js');
+		await reconcilePositions(this.experiments, this.liveBroker);
+		this.save();
 	}
 
 	// ─── Process Tick ─────────────────────────────────────────────────
@@ -659,10 +708,19 @@ export class ExperimentRunner {
 		};
 		
 		if (exp.isLiveTradingEnabled) {
-			// Ateşle ve unut (fire-and-forget). Risk yöneticisi redderse false döner ama
-			// kağıt üzerinde pozisyon açılmaya devam eder (paper trading'i bozmamak için).
-			// İleride gerçek gerçekleşme fiyatını pos.entryPrice'a eşitleyebiliriz.
-			this.liveBroker.executeEntry(coin, side, tick.close).catch(err => logError(String(err)));
+			const bracket = calculateBracketPrices(exp.exitRule, tick.close, side, atrPct);
+			this.liveBroker.executeEntry(coin, side, tick.close, bracket.stopPrice, bracket.targetPrice).then(res => {
+				if (res.success) {
+					pos.isLive = true;
+					pos.liveOrderId = res.orderId;
+					pos.stopOrderId = res.stopOrderId;
+					pos.takeProfitOrderId = res.takeProfitOrderId;
+					if (res.filledPrice) {
+						pos.entryPrice = res.filledPrice;
+					}
+					this.save();
+				}
+			}).catch(err => logError(String(err)));
 		}
 
 		exp.positions.push(pos);
@@ -795,9 +853,11 @@ export class ExperimentRunner {
 		const emoji = pnl >= 0 ? '🟢' : '🔴';
 		log(`[EXPERIMENT] ${emoji} ${exp.name} | ${pos.coin} CLOSE @ ${exitPrice.toFixed(2)} | PnL: ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}% | Reason: ${reason}`);
 
-		if (exp.isLiveTradingEnabled) {
+		if (exp.isLiveTradingEnabled || pos.isLive) {
 			const estimatedPnlUsd = (pnl / 100) * config.risk.maxTradeSizeUsd;
-			this.liveBroker.executeExit(pos.coin, pos.side, exitPrice, estimatedPnlUsd).catch(err => logError(String(err)));
+			this.liveBroker
+				.executeExit(pos.coin, pos.side, exitPrice, estimatedPnlUsd, pos.stopOrderId, pos.takeProfitOrderId)
+				.catch(err => logError(String(err)));
 		}
 
 		// Move to closed
