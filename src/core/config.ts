@@ -1,13 +1,19 @@
 import * as dotenv from 'dotenv';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
-// Load .env from root if it exists
-const envPath = join(process.cwd(), '.env');
+// Root .env dosyasını kesin olarak bul ve override: true ile yükle (PM2 ortam önbelleğini aşar)
+const currentDir = dirname(fileURLToPath(import.meta.url));
+const rootDir = join(currentDir, '../..');
+const envPath = existsSync(join(rootDir, '.env'))
+	? join(rootDir, '.env')
+	: join(process.cwd(), '.env');
+
 if (existsSync(envPath)) {
-	dotenv.config({ path: envPath });
+	dotenv.config({ path: envPath, override: true });
 } else {
-	dotenv.config();
+	dotenv.config({ override: true });
 }
 
 export const config = {

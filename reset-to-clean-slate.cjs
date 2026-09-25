@@ -55,6 +55,7 @@ const base = () => ({
 	startedAt: Date.now(),
 	maxDurationHours: 720,
 	maxConcurrentPositions: 3,
+	isLiveTradingEnabled: true,
 	positions: [],
 	closedPositions: [],
 	stats: emptyStats(),

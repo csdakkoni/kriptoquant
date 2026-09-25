@@ -200,6 +200,7 @@ export function createDefaultExperiments(): Experiment[] {
 		startedAt: Date.now(),
 		maxDurationHours: 720, // 30 days
 		maxConcurrentPositions: 3, // Maksimum 3 eşzamanlı pozisyon (portföy korelasyon koruması)
+		isLiveTradingEnabled: true,
 		positions: [] as PaperPosition[],
 		closedPositions: [] as PaperPosition[],
 		stats: emptyStats(),
@@ -710,7 +711,7 @@ export class ExperimentRunner {
 		if (exp.isLiveTradingEnabled || config.liveAllExperiments) {
 			const bracket = calculateBracketPrices(exp.exitRule, tick.close, side, atrPct);
 			this.liveBroker.executeEntry(coin, side, tick.close, bracket.stopPrice, bracket.targetPrice).then(res => {
-				if (res.success) {
+				if (res.success && this.liveBroker.isLive()) {
 					pos.isLive = true;
 					pos.liveOrderId = res.orderId;
 					pos.stopOrderId = res.stopOrderId;
