@@ -33,13 +33,13 @@ describe('Live Trading Altyapı Testleri', () => {
 			expect(rm.isKillSwitchActive()).toBe(false);
 
 			// Küçük zarar
-			rm.onTradeClosed(-2);
-			expect(rm.getDailyLoss()).toBe(2);
+			rm.onTradeClosed(-8);
+			expect(rm.getDailyLoss()).toBe(8);
 			expect(rm.isKillSwitchActive()).toBe(false);
 
-			// Limiti aşan zarar (Varsayılan maxDailyLossUsd: 5)
-			rm.onTradeClosed(-4);
-			expect(rm.getDailyLoss()).toBe(6);
+			// Limiti aşan zarar (Varsayılan maxDailyLossUsd: 20)
+			rm.onTradeClosed(-15);
+			expect(rm.getDailyLoss()).toBe(23);
 			expect(rm.isKillSwitchActive()).toBe(true);
 
 			// Kill-switch devredeyken yeni işlem reddedilmeli
@@ -49,16 +49,16 @@ describe('Live Trading Altyapı Testleri', () => {
 
 		it('diskten durum yükleyebilmeli (restart koruması)', () => {
 			const rm1 = new RiskManager();
-			rm1.onTradeClosed(-3);
-			expect(rm1.getDailyLoss()).toBe(3);
+			rm1.onTradeClosed(-12);
+			expect(rm1.getDailyLoss()).toBe(12);
 
 			// Simüle edilen restart: yeni bir RiskManager oluşturulur
 			const rm2 = new RiskManager();
-			expect(rm2.getDailyLoss()).toBe(3);
+			expect(rm2.getDailyLoss()).toBe(12);
 			expect(rm2.isKillSwitchActive()).toBe(false);
 
-			// Zarar devam edip limiti aşarsa
-			rm2.onTradeClosed(-3);
+			// Zarar devam edip limiti aşarsa ($12 + $10 = $22 > $20)
+			rm2.onTradeClosed(-10);
 			expect(rm2.isKillSwitchActive()).toBe(true);
 
 			// Başka bir restart sonrasında bile kill-switch aktif kalmalı

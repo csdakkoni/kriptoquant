@@ -110,6 +110,7 @@ export interface PaperPosition {
 	stopOrderId?: string;
 	takeProfitOrderId?: string;
 	isLive?: boolean;
+	livePending?: boolean; // Canlı emir gönderildi ama henüz yanıt alınmadı (race condition koruması)
 }
 
 /** Pozisyon kuralına ve ATR'ye göre borsa tarafına iletilecek Stop-Loss ve Take-Profit tetik fiyatlarını hesaplar */
@@ -709,8 +710,13 @@ export class ExperimentRunner {
 		};
 		
 		if (exp.isLiveTradingEnabled || config.liveAllExperiments) {
+			// BUG #1 FIX: Async yanıt beklerken çıkışın borsaya gitmesini engelle
+			if (this.liveBroker.isLive()) {
+				pos.livePending = true;
+			}
 			const bracket = calculateBracketPrices(exp.exitRule, tick.close, side, atrPct);
 			this.liveBroker.executeEntry(coin, side, tick.close, bracket.stopPrice, bracket.targetPrice).then(res => {
+				pos.livePending = false;
 				if (res.success && this.liveBroker.isLive()) {
 					pos.isLive = true;
 					pos.liveOrderId = res.orderId;
@@ -721,13 +727,12 @@ export class ExperimentRunner {
 					}
 					this.save();
 				} else if (this.liveBroker.isLive()) {
-					// LIVE MODE AÇIK AMA EMİR BAŞARISIZ OLDU!
-					// Arayüzde paper trade (⏳ AÇIK) olarak kalmaması için pozisyonu tamamen siliyoruz.
 					logError(`[EXPERIMENT] ❌ ${coin} canlı emir başarısız oldu (Hata: ${res.error}). Pozisyon listeden siliniyor.`);
 					exp.positions = exp.positions.filter(p => p.id !== pos.id);
 					this.save();
 				}
 			}).catch(err => {
+				pos.livePending = false;
 				logError(`[EXPERIMENT] ❌ ${coin} canlı emir hata fırlattı: ${String(err)}. Pozisyon listeden siliniyor.`);
 				exp.positions = exp.positions.filter(p => p.id !== pos.id);
 				this.save();
@@ -748,6 +753,10 @@ export class ExperimentRunner {
 				(pos as any).lastTickTs = tick.timestamp;
 				pos.candlesSinceEntry++;
 			}
+
+			// BUG #1 FIX: Canlı giriş emri henüz yanıt almadıysa çıkış kontrolü yapma.
+			// Aksi halde entry tamamlanmadan çıkış tetiklenir ve borsada pozisyon asılı kalır.
+			if (pos.livePending) continue;
 
 			const exit = this.checkExit(exp.exitRule, pos, tick);
 			if (exit) {
@@ -864,7 +873,11 @@ export class ExperimentRunner {
 		const emoji = pnl >= 0 ? '🟢' : '🔴';
 		log(`[EXPERIMENT] ${emoji} ${exp.name} | ${pos.coin} CLOSE @ ${exitPrice.toFixed(2)} | PnL: ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}% | Reason: ${reason}`);
 
-		if (exp.isLiveTradingEnabled || config.liveAllExperiments || pos.isLive) {
+		// BUG #1 FIX + BULGU #6 FIX: Çıkış emrini YALNIZCA borsada gerçekten
+		// açılmış pozisyonlara gönder (pos.isLive === true).
+		// Eski koşul (exp.isLiveTradingEnabled || config.liveAllExperiments || pos.isLive)
+		// paper trade'ler için de borsaya gereksiz/tehlikeli çıkış emri gönderiyordu.
+		if (pos.isLive) {
 			const estimatedPnlUsd = (pnl / 100) * config.risk.maxTradeSizeUsd;
 			this.liveBroker
 				.executeExit(pos.coin, pos.side, exitPrice, estimatedPnlUsd, pos.stopOrderId, pos.takeProfitOrderId)

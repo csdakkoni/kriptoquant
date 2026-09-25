@@ -39,13 +39,40 @@ export async function reconcilePositions(experiments: Experiment[], liveBroker: 
 			const openPositions = [...exp.positions];
 			for (const pos of openPositions) {
 				if (!pos.isLive) continue;
+				// livePending pozisyonları atla — entry henüz tamamlanmadı
+				if ((pos as any).livePending) continue;
 
 				const exPos = exchangePositionsByCoin.get(pos.coin);
 				if (!exPos || Math.abs(Number(exPos.contracts || 0)) === 0) {
 					// Pozisyon borsada KAPANMIŞ (Stop-loss veya Take-profit çalışmış)
-					log(`[RECONCILIATION] ⚠️ ${exp.name} | ${pos.coin} pozisyonu borsada kapanmış. Veritabanına işleniyor...`);
+					log(`[RECONCILIATION] ⚠️ ${exp.name} | ${pos.coin} pozisyonu borsada kapanmış. Gerçek kapanış fiyatı aranıyor...`);
 
-					const exitPrice = Number(pos.exitPrice || pos.entryPrice);
+					// BUG #2 FIX: Gerçek kapanış fiyatını borsanın işlem geçmişinden çek.
+					// Eski kod pos.entryPrice'a düşüyordu → tüm reconcile işlemleri -%0.30 görünüyordu.
+					let exitPrice = pos.entryPrice; // Son çare: giriş fiyatı (flat PnL)
+					try {
+						const trades = await liveBroker.fetchRecentTrades(pos.coin);
+						if (trades.length > 0) {
+							// En son kapanış işlemini bul (reduceOnly olan)
+							const closingTrade = trades
+								.filter((t: any) => t.info?.reduceOnly === true || t.info?.reduceOnly === 'true')
+								.sort((a: any, b: any) => (b.timestamp || 0) - (a.timestamp || 0))[0];
+							if (closingTrade) {
+								exitPrice = Number(closingTrade.price);
+								log(`[RECONCILIATION] 💰 ${pos.coin} gerçek kapanış fiyatı bulundu: $${exitPrice} (İşlem ID: ${closingTrade.id})`);
+							} else {
+								// reduceOnly filtresi bulamadıysa en son işlemi al
+								const lastTrade = trades.sort((a: any, b: any) => (b.timestamp || 0) - (a.timestamp || 0))[0];
+								if (lastTrade) {
+									exitPrice = Number(lastTrade.price);
+									log(`[RECONCILIATION] 💰 ${pos.coin} son işlem fiyatı kullanılıyor: $${exitPrice}`);
+								}
+							}
+						}
+					} catch (tradeErr: any) {
+						logError(`[RECONCILIATION] ⚠️ ${pos.coin} işlem geçmişi çekilemedi (giriş fiyatı kullanılacak): ${tradeErr?.message || tradeErr}`);
+					}
+
 					const sign = pos.side === 'short' ? -1 : 1;
 					const pnlPct = sign * ((exitPrice - pos.entryPrice) / pos.entryPrice) * 100 - 0.3;
 
@@ -71,7 +98,7 @@ export async function reconcilePositions(experiments: Experiment[], liveBroker: 
 		const trackedCoins = new Set<string>();
 		for (const exp of experiments) {
 			for (const pos of exp.positions) {
-				trackedCoins.add(pos.coin);
+				if (pos.isLive) trackedCoins.add(pos.coin);
 			}
 		}
 

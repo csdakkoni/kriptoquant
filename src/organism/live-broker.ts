@@ -42,6 +42,9 @@ export class LiveBroker {
 
 		if (this.liveEnabled) {
 			log('🟢 [BROKER] Live Trading AKTİF. Emirler borsaya iletilecek.');
+			if (config.binance.useTestnet) {
+				log('⚠️  [BROKER] DİKKAT: Sinyaller Mainnet fiyatından üretilir, emirler Testnet\'e gider. Stop/TP fiyatları testnet\'te farklı tetiklenebilir.');
+			}
 		} else {
 			log('🛡️ [BROKER] Live Trading KAPALI (Dry-run mode). Borsaya gerçek emir gönderilmeyecek.');
 		}
@@ -303,12 +306,9 @@ export class LiveBroker {
 				}
 			}
 
-			// Güvenlik amacıyla semboldeki tüm kalan açık emirleri temizle
-			try {
-				await this.exchange.cancelAllOrders(symbol);
-			} catch (e) {
-				// Bazı durumlarda açık emir yoksa hata verebilir, yut
-			}
+			// BULGU #5 FIX: cancelAllOrders KALDIRILDI.
+			// Eski kod tüm deneylerin bracket emirlerini siliyordu.
+			// Artık sadece bu pozisyonun bilinen stop/TP emirleri iptal ediliyor (yukarıda).
 
 			// Pozisyon büyüklüğünü kontrol et
 			let contracts = 0;
@@ -389,6 +389,18 @@ export class LiveBroker {
 		} catch (err: any) {
 			logError(`[BROKER] Tüm emirler iptal edilemedi (${symbol}): ${err?.message || err}`);
 			return false;
+		}
+	}
+
+	/** Bir sembole ait son işlem geçmişini çeker (reconciliation kapanış fiyatı için) */
+	public async fetchRecentTrades(coin: string, limit: number = 10): Promise<any[]> {
+		if (!this.liveEnabled) return [];
+		try {
+			const sym = this.toSymbol(coin);
+			return await this.exchange.fetchMyTrades(sym, undefined, limit);
+		} catch (err: any) {
+			logError(`[BROKER] İşlem geçmişi getirilemedi (${coin}): ${err?.message || err}`);
+			return [];
 		}
 	}
 }
