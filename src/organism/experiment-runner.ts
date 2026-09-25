@@ -109,6 +109,8 @@ export interface PaperPosition {
 	takeProfitOrderId?: string;
 	isLive?: boolean;
 	livePending?: boolean; // Canlı emir gönderildi ama henüz yanıt alınmadı (race condition koruması)
+	entryFeeRate?: number; // Binance'ın giriş emri için kestiği gerçek komisyon oranı (%)
+	exitFeeRate?: number;  // Binance'ın çıkış emri için kestiği gerçek komisyon oranı (%)
 }
 
 /** Pozisyon kuralına ve ATR'ye göre borsa tarafına iletilecek Stop-Loss ve Take-Profit tetik fiyatlarını hesaplar */
@@ -723,6 +725,9 @@ export class ExperimentRunner {
 					if (res.filledPrice) {
 						pos.entryPrice = res.filledPrice;
 					}
+					if (res.feeRate) {
+						pos.entryFeeRate = res.feeRate;
+					}
 					this.save();
 				} else if (this.liveBroker.isLive()) {
 					logError(`[EXPERIMENT] ❌ ${coin} canlı emir başarısız oldu (Hata: ${res.error}). Pozisyon listeden siliniyor.`);
@@ -865,7 +870,11 @@ export class ExperimentRunner {
 		(pos as any).exitTime = tick.timestamp;
 		(pos as any).exitReason = reason;
 		// Net PnL = yönlü brüt getiri - gidiş/dönüş işlem maliyeti
-		(pos as any).pnlPercent = sign * ((exitPrice - pos.entryPrice) / pos.entryPrice) * 100 - ROUND_TRIP_COST_PCT;
+		// Canlı işlemlerde Binance'ın gerçek komisyonunu kullan, paper trade'lerde sabit %0.10
+		const actualRoundTripFee = pos.entryFeeRate
+			? pos.entryFeeRate * 2 // Giriş fee × 2 (giriş + çıkış aynı oran varsayımı)
+			: ROUND_TRIP_COST_PCT;
+		(pos as any).pnlPercent = sign * ((exitPrice - pos.entryPrice) / pos.entryPrice) * 100 - actualRoundTripFee;
 
 		const pnl = pos.pnlPercent!;
 		const emoji = pnl >= 0 ? '🟢' : '🔴';

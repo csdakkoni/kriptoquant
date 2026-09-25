@@ -10,6 +10,7 @@ export interface LiveOrderResult {
 	takeProfitOrderId?: string;
 	filledPrice?: number;
 	filledAmount?: number;
+	feeRate?: number; // Binance'ın kestiği gerçek komisyon oranı (% cinsinden, ör: 0.05)
 	error?: string;
 }
 
@@ -266,6 +267,21 @@ export class LiveBroker {
 
 			this.riskManager.onTradeOpened();
 
+			// Gerçek komisyon oranını emir yanıtından çıkar
+			// CCXT fee.rate ondalık (0.0005 = %0.05), biz yüzde olarak saklıyoruz
+			let feeRate: number | undefined;
+			if (entryOrder.fee?.rate) {
+				feeRate = Number(entryOrder.fee.rate) * 100; // 0.0005 → 0.05
+			} else if (entryOrder.fee?.cost && filledPrice && filledAmount) {
+				// rate yoksa: fee.cost / (filledPrice × filledAmount) × 100
+				feeRate = (Number(entryOrder.fee.cost) / (filledPrice * filledAmount)) * 100;
+			} else if (entryOrder.info?.commission && filledPrice && filledAmount) {
+				feeRate = (Number(entryOrder.info.commission) / (filledPrice * filledAmount)) * 100;
+			}
+			if (feeRate) {
+				log(`[BROKER] 💰 Gerçek giriş komisyonu: %${feeRate.toFixed(4)}`);
+			}
+
 			return {
 				success: true,
 				orderId: entryOrder.id,
@@ -273,6 +289,7 @@ export class LiveBroker {
 				takeProfitOrderId,
 				filledPrice,
 				filledAmount,
+				feeRate,
 			};
 		} catch (error: any) {
 			logError(`[BROKER] Live Entry yürütme hatası (${symbol}): ${error?.message || error}`);
