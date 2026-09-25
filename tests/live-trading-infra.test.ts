@@ -154,6 +154,8 @@ describe('Live Trading Altyapı Testleri', () => {
 			// Test için broker'ı geçici olarak canlı gibi mock'layalım
 			(broker as any).liveEnabled = true;
 			(broker as any).fetchOpenPositions = async () => []; // Borsada pozisyon kalmamış (tetiklenmiş kapanmış)
+			(broker as any).fetchRecentTrades = async () => [{ price: 49000, timestamp: Date.now(), id: 'mock-trade-1', info: { reduceOnly: true } }]; // Mock: stop-loss $49k'da tetiklenmiş
+			(broker as any).getRiskManager = () => rm;
 
 			const exp: Experiment = {
 				id: 'exp-live-1',

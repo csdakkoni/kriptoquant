@@ -195,7 +195,25 @@ export class LiveBroker {
 			log(`[BROKER] 🚀 LIVE ENTRY gönderiliyor: ${side.toUpperCase()} ${preciseAmount} ${symbol} (~$${amountUsd})`);
 			const entryOrder = await this.exchange.createMarketOrder(symbol, ccxtOrderSide, preciseAmount);
 
-			const filledPrice = Number(entryOrder.average || entryOrder.price || currentPrice);
+			// Testnet çoğu zaman average/price'ı 0 döndürür → Binance'a özel info.avgPrice dene,
+			// o da yoksa son işlem geçmişinden gerçek dolum fiyatını çek.
+			let filledPrice =
+				Number(entryOrder.average) ||
+				Number(entryOrder.price) ||
+				Number(entryOrder.info?.avgPrice) ||
+				Number(entryOrder.info?.price) ||
+				0;
+
+			if (!filledPrice) {
+				// Testnet order response'u boşsa, fetchMyTrades ile gerçek fiyatı al
+				try {
+					const trades = await this.exchange.fetchMyTrades(symbol, undefined, 5);
+					const lastTrade = trades.sort((a: any, b: any) => (b.timestamp || 0) - (a.timestamp || 0))[0];
+					if (lastTrade) filledPrice = Number(lastTrade.price);
+				} catch {}
+			}
+			if (!filledPrice) filledPrice = currentPrice; // Son çare: sinyal fiyatı
+
 			const filledAmount = Number(entryOrder.filled || preciseAmount);
 
 			log(`[BROKER] ✅ LIVE ENTRY DOLDU: ${symbol} @ $${filledPrice} (Miktar: ${filledAmount})`);
