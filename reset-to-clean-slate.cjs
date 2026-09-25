@@ -131,12 +131,90 @@ if (fs.existsSync(riskFile)) {
 	fs.unlinkSync(riskFile);
 }
 
-console.log('------------------------------------------------------------');
-console.log('✅ SIFIRLAMA BAŞARILI!');
-console.log(`📁 Eski veriler şu klasöre güvenle arşivlendi:`);
-console.log(`   ${archiveDir}`);
-console.log('🚀 Yeni sistem 6 ÇEKİRDEK STRATEJİ ile 0 kilometreden hazırlandı.');
-console.log('🛡️  Her strateji için MAX 3 EŞZAMANLI POZİSYON sınırı devrede.');
-console.log('------------------------------------------------------------');
-console.log('Şimdi sunucuda şu komutu çalıştırın:');
-console.log('pm2 restart organism');
+// 5. Borsa tarafını da temizle (öksüz pozisyon bırakma!)
+async function cleanExchange() {
+	const dotenv = require('dotenv');
+	const envPath = path.join(__dirname, '.env');
+	if (fs.existsSync(envPath)) {
+		dotenv.config({ path: envPath });
+	}
+
+	const apiKey = process.env.BINANCE_API_KEY;
+	const secret = process.env.BINANCE_SECRET;
+	const isTestnet = process.env.BINANCE_USE_TESTNET === 'true';
+	const isLive = process.env.LIVE_TRADING_ENABLED === 'true';
+
+	if (!apiKey || !secret || !isLive) {
+		console.log('ℹ️  Borsa temizliği atlandı (API anahtarı yok veya Live Trading kapalı).');
+		return;
+	}
+
+	try {
+		const ccxt = require('ccxt');
+		const exchange = new ccxt.binance({
+			apiKey,
+			secret,
+			enableRateLimit: true,
+			options: { defaultType: 'future', disableFuturesSandboxWarning: true },
+		});
+		if (isTestnet) exchange.setSandboxMode(true);
+
+		await exchange.loadMarkets();
+		console.log(`🔄 Borsa ${isTestnet ? 'TESTNET' : 'MAINNET'} temizleniyor...`);
+
+		// Tüm açık pozisyonları kapat
+		const positions = await exchange.fetchPositions();
+		const openPositions = positions.filter(p => Math.abs(Number(p.contracts || 0)) > 0);
+
+		for (const pos of openPositions) {
+			const symbol = pos.symbol;
+			const contracts = Math.abs(Number(pos.contracts));
+			const side = Number(pos.contracts) > 0 ? 'sell' : 'buy';
+
+			try {
+				// Önce bekleyen emirleri iptal et
+				try { await exchange.cancelAllOrders(symbol); } catch (e) {}
+				// Pozisyonu kapat
+				await exchange.createMarketOrder(symbol, side, contracts, undefined, { reduceOnly: true });
+				console.log(`   ✅ ${symbol} kapatıldı (${contracts} kontrat)`);
+			} catch (err) {
+				console.error(`   ❌ ${symbol} kapatılamadı: ${err.message}`);
+			}
+		}
+
+		if (openPositions.length === 0) {
+			console.log('   ✓ Borsada açık pozisyon yoktu.');
+		}
+
+		// Kalan bekleyen emirleri temizle
+		try {
+			const openOrders = await exchange.fetchOpenOrders();
+			for (const order of openOrders) {
+				try {
+					await exchange.cancelOrder(order.id, order.symbol);
+				} catch (e) {}
+			}
+			if (openOrders.length > 0) {
+				console.log(`   ✅ ${openOrders.length} bekleyen emir iptal edildi.`);
+			}
+		} catch (e) {}
+
+		console.log('🧹 Borsa temizliği tamamlandı.');
+	} catch (err) {
+		console.error(`⚠️  Borsa temizliği sırasında hata: ${err.message}`);
+		console.error('   Pozisyonları manuel kapatmanız gerekebilir.');
+	}
+}
+
+cleanExchange().then(() => {
+	console.log('------------------------------------------------------------');
+	console.log('✅ SIFIRLAMA BAŞARILI!');
+	console.log(`📁 Eski veriler şu klasöre güvenle arşivlendi:`);
+	console.log(`   ${archiveDir}`);
+	console.log('🚀 Yeni sistem 6 ÇEKİRDEK STRATEJİ ile 0 kilometreden hazırlandı.');
+	console.log('🛡️  Her strateji için MAX 3 EŞZAMANLI POZİSYON sınırı devrede.');
+	console.log('🧹 Borsa tarafı da temizlendi (öksüz pozisyon kalmadı).');
+	console.log('------------------------------------------------------------');
+	console.log('Şimdi sunucuda şu komutu çalıştırın:');
+	console.log('pm2 restart organism --update-env');
+}).catch(console.error);

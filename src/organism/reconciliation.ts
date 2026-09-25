@@ -94,7 +94,7 @@ export async function reconcilePositions(experiments: Experiment[], liveBroker: 
 			}
 		}
 
-		// Öksüz işlem kontrolü
+		// Öksüz işlem kontrolü — borsada açık ama organizmada kayıtsız pozisyonları OTOMATİK KAPAT
 		const trackedCoins = new Set<string>();
 		for (const exp of experiments) {
 			for (const pos of exp.positions) {
@@ -104,10 +104,21 @@ export async function reconcilePositions(experiments: Experiment[], liveBroker: 
 
 		for (const [coin, exPos] of exchangePositionsByCoin.entries()) {
 			if (!trackedCoins.has(coin)) {
+				const contracts = Math.abs(Number(exPos.contracts || 0));
+				const side = Number(exPos.contracts) > 0 ? 'long' : 'short';
+				const exitSide = side === 'long' ? 'sell' : 'buy';
 				logError(
-					`[RECONCILIATION] 🚨 DİKKAT: Borsada ${coin} pozisyonu açık (${exPos.contracts} kontrat), ` +
-					`fakat organizmada kayıtlı değil! (Öksüz pozisyon)`,
+					`[RECONCILIATION] 🚨 ÖKSÜZ POZİSYON TESPİT EDİLDİ: ${coin} (${contracts} kontrat, ${side}). Otomatik kapatılıyor...`,
 				);
+				try {
+					// Önce bu sembolün bekleyen emirlerini iptal et
+					await liveBroker.cancelAllOrders(coin);
+					// Sonra pozisyonu reduceOnly market emriyle kapat
+					await liveBroker.executeExit(coin, side as 'long' | 'short', 0, 0);
+					log(`[RECONCILIATION] ✅ Öksüz ${coin} pozisyonu başarıyla kapatıldı.`);
+				} catch (closeErr: any) {
+					logError(`[RECONCILIATION] ❌ Öksüz ${coin} kapatılamadı: ${closeErr?.message || closeErr}. Manuel müdahale gerekli!`);
+				}
 			}
 		}
 
