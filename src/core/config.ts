@@ -23,8 +23,8 @@ export const config = {
 		useTestnet: process.env.BINANCE_USE_TESTNET === 'true',
 	},
 	risk: {
-		maxTradeSizeUsd: Number(process.env.MAX_TRADE_SIZE_USD) || 10,
-		maxDailyLossUsd: Number(process.env.MAX_DAILY_LOSS_USD) || 5,
+		maxTradeSizeUsd: Number(process.env.MAX_TRADE_SIZE_USD) || 50,
+		maxDailyLossUsd: Number(process.env.MAX_DAILY_LOSS_USD) || 20,
 		maxOpenTrades: Number(process.env.MAX_OPEN_TRADES) || 3,
 		leverage: Number(process.env.LEVERAGE) || 1,
 		marginMode: (process.env.MARGIN_MODE || 'ISOLATED').toUpperCase() as 'ISOLATED' | 'CROSSED',

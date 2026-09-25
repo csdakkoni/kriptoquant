@@ -720,8 +720,18 @@ export class ExperimentRunner {
 						pos.entryPrice = res.filledPrice;
 					}
 					this.save();
+				} else if (this.liveBroker.isLive()) {
+					// LIVE MODE AÇIK AMA EMİR BAŞARISIZ OLDU!
+					// Arayüzde paper trade (⏳ AÇIK) olarak kalmaması için pozisyonu tamamen siliyoruz.
+					logError(`[EXPERIMENT] ❌ ${coin} canlı emir başarısız oldu (Hata: ${res.error}). Pozisyon listeden siliniyor.`);
+					exp.positions = exp.positions.filter(p => p.id !== pos.id);
+					this.save();
 				}
-			}).catch(err => logError(String(err)));
+			}).catch(err => {
+				logError(`[EXPERIMENT] ❌ ${coin} canlı emir hata fırlattı: ${String(err)}. Pozisyon listeden siliniyor.`);
+				exp.positions = exp.positions.filter(p => p.id !== pos.id);
+				this.save();
+			});
 		}
 
 		exp.positions.push(pos);
