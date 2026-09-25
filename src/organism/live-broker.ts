@@ -196,8 +196,7 @@ export class LiveBroker {
 			log(`[BROKER] 🚀 LIVE ENTRY gönderiliyor: ${side.toUpperCase()} ${preciseAmount} ${symbol} (~$${amountUsd})`);
 			const entryOrder = await this.exchange.createMarketOrder(symbol, ccxtOrderSide, preciseAmount);
 
-			// Testnet çoğu zaman average/price'ı 0 döndürür → Binance'a özel info.avgPrice dene,
-			// o da yoksa son işlem geçmişinden gerçek dolum fiyatını çek.
+			// Testnet çoğu zaman average/price'ı 0 döndürür → birden fazla kaynaktan dene
 			let filledPrice =
 				Number(entryOrder.average) ||
 				Number(entryOrder.price) ||
@@ -206,14 +205,35 @@ export class LiveBroker {
 				0;
 
 			if (!filledPrice) {
-				// Testnet order response'u boşsa, fetchMyTrades ile gerçek fiyatı al
+				// Yöntem 1: fetchMyTrades ile gerçek dolum fiyatını al
 				try {
 					const trades = await this.exchange.fetchMyTrades(symbol, undefined, 5);
 					const lastTrade = trades.sort((a: any, b: any) => (b.timestamp || 0) - (a.timestamp || 0))[0];
-					if (lastTrade) filledPrice = Number(lastTrade.price);
+					if (lastTrade && Number(lastTrade.price)) filledPrice = Number(lastTrade.price);
 				} catch {}
 			}
-			if (!filledPrice) filledPrice = currentPrice; // Son çare: sinyal fiyatı
+
+			if (!filledPrice && entryOrder.id) {
+				// Yöntem 2: Emri ID ile tekrar sorgula (bazen dolum bilgisi gecikmeli gelir)
+				try {
+					const refreshed = await this.exchange.fetchOrder(entryOrder.id, symbol);
+					filledPrice = Number(refreshed?.average) || Number(refreshed?.price) || Number(refreshed?.info?.avgPrice) || 0;
+				} catch {}
+			}
+
+			if (!filledPrice) {
+				// Yöntem 3: Pozisyon bilgisinden giriş fiyatını al (en güvenilir)
+				try {
+					const positions = await this.exchange.fetchPositions([symbol]);
+					const pos = positions.find((p: any) => Math.abs(Number(p.contracts || 0)) > 0);
+					if (pos) filledPrice = Number(pos.entryPrice) || 0;
+				} catch {}
+			}
+
+			if (!filledPrice) {
+				logError(`[BROKER] ⚠️ ${symbol} gerçek dolum fiyatı hiçbir kaynaktan alınamadı! Sinyal fiyatı ($${currentPrice}) kullanılacak.`);
+				filledPrice = currentPrice;
+			}
 
 			const filledAmount = Number(entryOrder.filled || preciseAmount);
 
