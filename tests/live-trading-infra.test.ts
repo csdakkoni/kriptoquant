@@ -32,56 +32,56 @@ describe('Live Trading Altyapı Testleri', () => {
 			expect(rm.getDailyLoss()).toBe(0);
 			expect(rm.isKillSwitchActive()).toBe(false);
 
-			// Küçük zarar (Varsayılan maxDailyLossUsd: 5)
-			rm.onTradeClosed(-2);
-			expect(rm.getDailyLoss()).toBe(2);
+			// Küçük zarar (Varsayılan maxDailyLossUsd: 10)
+			rm.onTradeClosed(-4);
+			expect(rm.getDailyLoss()).toBe(4);
 			expect(rm.isKillSwitchActive()).toBe(false);
 
-			// Limiti aşan zarar ($2 + $4 = $6 > $5)
-			rm.onTradeClosed(-4);
-			expect(rm.getDailyLoss()).toBe(6);
+			// Limiti aşan zarar ($4 + $7 = $11 > $10)
+			rm.onTradeClosed(-7);
+			expect(rm.getDailyLoss()).toBe(11);
 			expect(rm.isKillSwitchActive()).toBe(true);
 
 			// Kill-switch devredeyken yeni işlem reddedilmeli
-			const valid = rm.validateTrade({ coin: 'BTCUSDT', side: 'long', amountUsd: 10 });
+			const valid = rm.validateTrade({ coin: 'BTCUSDT', side: 'long', amountUsd: 6 });
 			expect(valid).toBe(false);
 		});
 
 		it('diskten durum yükleyebilmeli (restart koruması)', () => {
 			const rm1 = new RiskManager();
-			rm1.onTradeClosed(-3);
-			expect(rm1.getDailyLoss()).toBe(3);
+			rm1.onTradeClosed(-6);
+			expect(rm1.getDailyLoss()).toBe(6);
 
 			// Simüle edilen restart: yeni bir RiskManager oluşturulur
 			const rm2 = new RiskManager();
-			expect(rm2.getDailyLoss()).toBe(3);
+			expect(rm2.getDailyLoss()).toBe(6);
 			expect(rm2.isKillSwitchActive()).toBe(false);
 
-			// Zarar devam edip limiti aşarsa ($3 + $3 = $6 > $5)
-			rm2.onTradeClosed(-3);
+			// Zarar devam edip limiti aşarsa ($6 + $5 = $11 > $10)
+			rm2.onTradeClosed(-5);
 			expect(rm2.isKillSwitchActive()).toBe(true);
 
 			// Başka bir restart sonrasında bile kill-switch aktif kalmalı
 			const rm3 = new RiskManager();
 			expect(rm3.isKillSwitchActive()).toBe(true);
-			expect(rm3.validateTrade({ coin: 'ETHUSDT', side: 'long', amountUsd: 10 })).toBe(false);
+			expect(rm3.validateTrade({ coin: 'ETHUSDT', side: 'long', amountUsd: 6 })).toBe(false);
 		});
 
 		it('serbest teminat yetersizse işlemi reddetmeli', () => {
 			const rm = new RiskManager();
-			// Bakiye $5, istenen tutar $10
-			const allowed = rm.validateTrade({ coin: 'BTCUSDT', side: 'long', amountUsd: 10 }, 5);
+			// Bakiye $2, istenen tutar $6
+			const allowed = rm.validateTrade({ coin: 'BTCUSDT', side: 'long', amountUsd: 6 }, 2);
 			expect(allowed).toBe(false);
 
-			// Bakiye $20, istenen tutar $10
-			const allowedWithSufficientMargin = rm.validateTrade({ coin: 'BTCUSDT', side: 'long', amountUsd: 10 }, 20);
+			// Bakiye $20, istenen tutar $6
+			const allowedWithSufficientMargin = rm.validateTrade({ coin: 'BTCUSDT', side: 'long', amountUsd: 6 }, 20);
 			expect(allowedWithSufficientMargin).toBe(true);
 		});
 
 		it('maksimum açık işlem sayısını aşmamalı', () => {
 			const rm = new RiskManager();
 			rm.syncOpenTradesCount(config.risk.maxOpenTrades);
-			const allowed = rm.validateTrade({ coin: 'BTCUSDT', side: 'long', amountUsd: 10 });
+			const allowed = rm.validateTrade({ coin: 'BTCUSDT', side: 'long', amountUsd: 6 });
 			expect(allowed).toBe(false);
 		});
 	});
