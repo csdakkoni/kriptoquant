@@ -309,7 +309,6 @@ export class LiveBroker {
 				takeProfitOrderId,
 				filledPrice,
 				filledAmount,
-				order: entryOrder,
 				feeRate,
 			};
 		} catch (error: any) {
@@ -331,14 +330,14 @@ export class LiveBroker {
 		estimatedPnlUsd: number,
 		stopOrderId?: string,
 		takeProfitOrderId?: string,
-	): Promise<boolean> {
+	): Promise<{ success: boolean; filledPrice?: number }> {
 		const symbol = this.toSymbol(coin);
 
 		// 1. Dry Run Modu
 		if (!this.liveEnabled) {
 			log(`[DRY-RUN] EXIT: ${side.toUpperCase()} ${symbol} @ $${exitPrice.toFixed(4)} | PnL: $${estimatedPnlUsd.toFixed(2)}`);
 			this.riskManager.onTradeClosed(estimatedPnlUsd);
-			return true;
+			return { success: true, filledPrice: exitPrice };
 		}
 
 		// 2. Canlı Mod Yürütme
@@ -362,10 +361,6 @@ export class LiveBroker {
 				}
 			}
 
-			// BULGU #5 FIX: cancelAllOrders KALDIRILDI.
-			// Eski kod tüm deneylerin bracket emirlerini siliyordu.
-			// Artık sadece bu pozisyonun bilinen stop/TP emirleri iptal ediliyor (yukarıda).
-
 			// Pozisyon büyüklüğünü kontrol et
 			let contracts = 0;
 			try {
@@ -380,21 +375,50 @@ export class LiveBroker {
 				logError(`[BROKER] Pozisyon sorgusu hatası (${symbol}): ${posErr}`);
 			}
 
+			let actualFillPrice: number | undefined;
+
 			if (contracts > 0) {
 				const ccxtExitSide = side === 'long' ? 'sell' : 'buy';
 				log(`[BROKER] 🚪 LIVE EXIT piyasa emri gönderiliyor: ${ccxtExitSide.toUpperCase()} ${contracts} ${symbol} (reduceOnly)`);
-				await this.exchange.createMarketOrder(symbol, ccxtExitSide, contracts, undefined, { reduceOnly: true });
-				log(`[BROKER] ✅ LIVE EXIT kapatıldı: ${symbol}`);
+				const exitOrder = await this.exchange.createMarketOrder(symbol, ccxtExitSide, contracts, undefined, { reduceOnly: true });
+
+				actualFillPrice =
+					Number(exitOrder?.average) ||
+					Number(exitOrder?.price) ||
+					Number(exitOrder?.info?.avgPrice) ||
+					Number(exitOrder?.info?.price) ||
+					0;
+
+				if (!actualFillPrice) {
+					try {
+						const trades = await this.exchange.fetchMyTrades(symbol, undefined, 5);
+						const lastTrade = trades.sort((a: any, b: any) => (b.timestamp || 0) - (a.timestamp || 0))[0];
+						if (lastTrade && Number(lastTrade.price)) actualFillPrice = Number(lastTrade.price);
+					} catch {}
+				}
+
+				log(`[BROKER] ✅ LIVE EXIT kapatıldı: ${symbol} @ $${actualFillPrice || exitPrice}`);
 			} else {
-				log(`[BROKER] ℹ️ ${symbol} pozisyonu borsada zaten kapalı (Stop veya TP tetiklenmiş).`);
+				log(`[BROKER] ℹ️ ${symbol} pozisyonu borsada zaten kapalı (Stop veya TP tetiklenmiş). Gerçek kapanış fiyatı sorgulanıyor...`);
+				try {
+					const trades = await this.exchange.fetchMyTrades(symbol, undefined, 5);
+					const lastTrade = trades.sort((a: any, b: any) => (b.timestamp || 0) - (a.timestamp || 0))[0];
+					if (lastTrade && Number(lastTrade.price)) {
+						actualFillPrice = Number(lastTrade.price);
+						log(`[BROKER] 💰 ${symbol} gerçek dolum fiyatı bulundu: $${actualFillPrice}`);
+					}
+				} catch (e) {
+					logError(`[BROKER] ${symbol} kapanış fiyatı sorgulanamadı: ${e}`);
+				}
 			}
 
+			const finalFill = actualFillPrice && actualFillPrice > 0 ? actualFillPrice : exitPrice;
 			this.riskManager.onTradeClosed(estimatedPnlUsd);
-			return true;
+			return { success: true, filledPrice: finalFill };
 		} catch (error: any) {
 			logError(`[BROKER] Live Exit yürütme hatası (${symbol}): ${error?.message || error}`);
 			this.riskManager.onTradeClosed(estimatedPnlUsd);
-			return false;
+			return { success: false, filledPrice: exitPrice };
 		}
 	}
 

@@ -74,7 +74,8 @@ export async function reconcilePositions(experiments: Experiment[], liveBroker: 
 					}
 
 					const sign = pos.side === 'short' ? -1 : 1;
-					const pnlPct = sign * ((exitPrice - pos.entryPrice) / pos.entryPrice) * 100 - 0.10;
+					const actualRoundTripFee = pos.entryFeeRate ? pos.entryFeeRate * 2 : 0.10;
+					const pnlPct = sign * ((exitPrice - pos.entryPrice) / pos.entryPrice) * 100 - actualRoundTripFee;
 
 					pos.exitPrice = exitPrice;
 					pos.exitTime = Date.now();

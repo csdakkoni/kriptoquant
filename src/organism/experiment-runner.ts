@@ -883,23 +883,36 @@ export class ExperimentRunner {
 		const emoji = pnl >= 0 ? '🟢' : '🔴';
 		log(`[EXPERIMENT] ${emoji} ${exp.name} | ${pos.coin} CLOSE @ ${exitPrice.toFixed(2)} | PnL: ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}% | Reason: ${reason}`);
 
-		// BUG #1 FIX + BULGU #6 FIX: Çıkış emrini YALNIZCA borsada gerçekten
-		// açılmış pozisyonlara gönder (pos.isLive === true).
-		// Eski koşul (exp.isLiveTradingEnabled || config.liveAllExperiments || pos.isLive)
-		// paper trade'ler için de borsaya gereksiz/tehlikeli çıkış emri gönderiyordu.
-		if (pos.isLive) {
-			const estimatedPnlUsd = (pnl / 100) * config.risk.maxTradeSizeUsd;
-			this.liveBroker
-				.executeExit(pos.coin, pos.side, exitPrice, estimatedPnlUsd, pos.stopOrderId, pos.takeProfitOrderId)
-				.catch(err => logError(String(err)));
-		}
-
 		// Move to closed
 		exp.closedPositions.push({ ...pos });
 		exp.positions = exp.positions.filter(p => p.id !== pos.id);
 
 		// Update stats
 		this.recalcStats(exp);
+
+		// BUG #1 FIX + BULGU #6 FIX: Çıkış emrini YALNIZCA borsada gerçekten
+		// açılmış pozisyonlara gönder (pos.isLive === true).
+		if (pos.isLive) {
+			const estimatedPnlUsd = (pnl / 100) * config.risk.maxTradeSizeUsd;
+			this.liveBroker
+				.executeExit(pos.coin, pos.side, exitPrice, estimatedPnlUsd, pos.stopOrderId, pos.takeProfitOrderId)
+				.then(res => {
+					if (res && res.success && res.filledPrice && res.filledPrice > 0) {
+						// GERÇEK BORSA DOLUM FİYATI İLE GÜNCELLE
+						const closedRef = exp.closedPositions.find(p => p.id === pos.id);
+						if (closedRef) {
+							const oldPrice = closedRef.exitPrice;
+							const oldPnl = closedRef.pnlPercent;
+							closedRef.exitPrice = res.filledPrice;
+							closedRef.pnlPercent = sign * ((res.filledPrice - closedRef.entryPrice) / closedRef.entryPrice) * 100 - actualRoundTripFee;
+							log(`[EXPERIMENT] 🎯 ${pos.coin} kapanış fiyatı Binance gerçek dolumuyla güncellendi: $${oldPrice} → $${res.filledPrice} (PnL: %${oldPnl?.toFixed(2)} → %${closedRef.pnlPercent.toFixed(2)})`);
+							this.recalcStats(exp);
+							this.save();
+						}
+					}
+				})
+				.catch(err => logError(String(err)));
+		}
 	}
 
 	// ─── Stats ────────────────────────────────────────────────────────
