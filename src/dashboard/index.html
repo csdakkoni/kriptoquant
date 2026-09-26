@@ -1080,6 +1080,7 @@ function renderExchangeState(state) {
   if (ws && state.balance) {
     const b = state.balance;
     const pnlColor = b.unrealizedPnl >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+    const pnlPct = b.totalBalance > 0 ? (b.unrealizedPnl / b.totalBalance) * 100 : 0;
     ws.innerHTML = `
       <div class="trade-summary-item">
         <div class="trade-summary-val" style="color:var(--accent-cyan)">\$${b.totalBalance.toFixed(2)}</div>
@@ -1094,7 +1095,7 @@ function renderExchangeState(state) {
         <div class="trade-summary-label">Kullanılan Teminat</div>
       </div>
       <div class="trade-summary-item">
-        <div class="trade-summary-val" style="color:${pnlColor}">${b.unrealizedPnl >= 0 ? '+' : ''}\$${b.unrealizedPnl.toFixed(4)}</div>
+        <div class="trade-summary-val" style="color:${pnlColor}">${b.unrealizedPnl >= 0 ? '+' : ''}\$${b.unrealizedPnl.toFixed(4)} <span style="font-size:14px;opacity:0.8">(${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}%)</span></div>
         <div class="trade-summary-label">Gerçekleşmemiş PnL</div>
       </div>
       <div class="trade-summary-item">
@@ -1115,10 +1116,13 @@ function renderExchangeState(state) {
       html += '</tr></thead><tbody>';
       for (const p of state.positions) {
         let expName = '—';
+        let entryTime = null;
         if (window.botExperiments) {
           for (const exp of window.botExperiments) {
-            if (exp.positions && exp.positions.some(pos => pos.coin === p.coin)) {
+            const pos = exp.positions && exp.positions.find(pos => pos.coin === p.coin);
+            if (pos) {
               expName = exp.name;
+              entryTime = pos.entryTime;
               break;
             }
           }
@@ -1129,11 +1133,18 @@ function renderExchangeState(state) {
           ? '<span class="trade-tag long">🔺 LONG</span>'
           : '<span class="trade-tag short">🔻 SHORT</span>';
         const coinName = p.coin.replace('USDT', '');
+
+        let entryTimeHtml = '';
+        if (entryTime) {
+          const d = new Date(entryTime);
+          entryTimeHtml = `<br><span style="color:var(--text-dim);font-size:10px">${d.toLocaleString('tr-TR', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'})}</span>`;
+        }
+
         html += `<tr>
           <td><a class="coin-link" href="https://www.binance.com/en/trade/${coinName}_USDT" target="_blank">${coinName}</a></td>
           <td>${sideTag}</td>
           <td>\$${p.notional.toFixed(2)}</td>
-          <td style="text-align:right">${fmtPrice(p.entryPrice)}</td>
+          <td style="text-align:right">${fmtPrice(p.entryPrice)}${entryTimeHtml}</td>
           <td style="text-align:right">${fmtPrice(p.markPrice)}</td>
           <td style="text-align:right" class="${pnlClass}">${p.unrealizedPnl >= 0 ? '+' : ''}\$${p.unrealizedPnl.toFixed(4)} (${p.percentage >= 0 ? '+' : ''}${p.percentage.toFixed(2)}%)</td>
           <td style="font-family:'Inter',sans-serif;font-weight:500;color:var(--text-main);max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${esc(expName)}">${esc(expName)}</td>
