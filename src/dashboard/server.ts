@@ -183,12 +183,30 @@ export function startDashboardServer(port: number = 3000): any {
 			return;
 		}
 
-		// ─── PWA Manifest & Icons ───────────────────────────────────
+		// ─── PWA Manifest & Icons & Service Worker ──────────────────
 		if (url === '/manifest.json') {
 			const manifestPath = join(import.meta.dirname, 'manifest.json');
 			if (existsSync(manifestPath)) {
 				res.writeHead(200, { 'Content-Type': 'application/manifest+json; charset=utf-8' });
 				res.end(readFileSync(manifestPath, 'utf-8'));
+				return;
+			}
+		}
+
+		if (url === '/sw.js') {
+			const swPath = join(import.meta.dirname, 'sw.js');
+			if (existsSync(swPath)) {
+				res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8' });
+				res.end(readFileSync(swPath, 'utf-8'));
+				return;
+			}
+		}
+
+		if (url === '/icon-192.png' || url === '/icon-512.png') {
+			const pngPath = join(import.meta.dirname, url.slice(1));
+			if (existsSync(pngPath)) {
+				res.writeHead(200, { 'Content-Type': 'image/png' });
+				res.end(readFileSync(pngPath));
 				return;
 			}
 		}

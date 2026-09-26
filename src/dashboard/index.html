@@ -1456,6 +1456,13 @@ ${sbRows ? `<h2>📊 Gözlem Karnesi (4 Saat Sonrası)</h2>
     btn.disabled = false;
   }
 }
+
+// Register Service Worker for PWA
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
 </script>
 </body>
 </html>
