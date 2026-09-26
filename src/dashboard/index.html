@@ -613,26 +613,10 @@ a.report-btn { text-decoration: none; }
       </div>
     </div>
 
-    <!-- Trade Log -->
-    <div class="card grid-full">
-      <div class="card-header">
-        <span class="card-title" id="tradeLogTitle">Son İşlemler</span>
-        <span class="card-icon">💹</span>
-      </div>
-      <div id="tradeFilterBar"></div>
-      <div id="tradeSummaryContainer"></div>
-      <div style="max-height: 400px; overflow-y: auto;" id="tradeLogContainer">
-        <div class="empty">
-          <div class="empty-icon">⏳</div>
-          <div class="empty-text">İşlemler yükleniyor...</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Borsa Durumu (Exchange State) -->
+    <!-- Borsa Durumu & Canlı Pozisyonlar (Exchange State) -->
     <div class="card grid-full" id="exchangeCard" style="display:none">
       <div class="card-header">
-        <span class="card-title">Borsa Durumu</span>
+        <span class="card-title">Canlı Portföy ve Açık İşlemler</span>
         <span class="card-icon" id="exchangeBadge">🔗</span>
       </div>
 
@@ -640,7 +624,7 @@ a.report-btn { text-decoration: none; }
       <div id="walletSummary" class="trade-summary" style="margin-bottom: 12px;"></div>
 
       <!-- Açık Pozisyonlar -->
-      <div style="margin-bottom: 8px; font-weight: 600; color: var(--text-main); font-size: 13px;">📊 Borsadaki Açık Pozisyonlar</div>
+      <div style="margin-bottom: 8px; font-weight: 600; color: var(--text-main); font-size: 13px;">📊 Binance Üzerindeki Açık Pozisyonlar</div>
       <div style="max-height: 250px; overflow-y: auto;" id="exchangePositions">
         <div class="empty"><div class="empty-text">Yükleniyor...</div></div>
       </div>
@@ -652,6 +636,22 @@ a.report-btn { text-decoration: none; }
       </div>
     </div>
 
+    <!-- Trade Log (Geçmiş İşlemler) -->
+    <div class="card grid-full">
+      <div class="card-header">
+        <span class="card-title" id="tradeLogTitle">Geçmiş İşlemler</span>
+        <span class="card-icon">📖</span>
+      </div>
+      <div id="tradeFilterBar"></div>
+      <div id="tradeSummaryContainer"></div>
+      <div style="max-height: 400px; overflow-y: auto;" id="tradeLogContainer">
+        <div class="empty">
+          <div class="empty-icon">⏳</div>
+          <div class="empty-text">İşlemler yükleniyor...</div>
+        </div>
+      </div>
+    </div>
+
 
 
 </main>
@@ -659,6 +659,7 @@ a.report-btn { text-decoration: none; }
 <script>
 const API_BASE = window.location.origin;
 const POLL_INTERVAL = 15000; // 15 seconds
+window.botExperiments = [];
 
 // ─── Fetch Data ──────────────────────────────────────────────────────────────
 
@@ -798,23 +799,18 @@ function renderTradeLog(experiments, prices) {
   const titleEl = document.getElementById('tradeLogTitle');
   const filterBar = document.getElementById('tradeFilterBar');
   if (selectedExperimentId) {
-    if (titleEl) titleEl.textContent = 'Son İşlemler — ' + selectedExperimentName;
+    if (titleEl) titleEl.textContent = 'Geçmiş İşlemler — ' + selectedExperimentName;
     if (filterBar) filterBar.innerHTML = `<span class="filter-chip">📌 ${selectedExperimentName}<button onclick="selectExperiment(null, null)" title="Filtreyi kaldır">✕ tümünü göster</button></span>`;
   } else {
-    if (titleEl) titleEl.textContent = 'Son İşlemler';
+    if (titleEl) titleEl.textContent = 'Geçmiş İşlemler';
     if (filterBar) filterBar.innerHTML = '';
   }
 
-  // Collect all trades (open + closed)
+  // Collect ONLY closed trades
   const allTrades = [];
 
   for (const exp of filtered) {
     const side = exp.side || 'long';
-    for (const pos of (exp.positions || [])) {
-      if (!pos.exitPrice) {
-        allTrades.push({ ...pos, side: pos.side || side, experimentName: exp.name, isOpen: true });
-      }
-    }
     for (const pos of (exp.closedPositions || [])) {
       allTrades.push({ ...pos, side: pos.side || side, experimentName: exp.name, isOpen: false });
     }
@@ -825,48 +821,29 @@ function renderTradeLog(experiments, prices) {
   if (allTrades.length === 0) {
     summaryContainer.innerHTML = '';
     const msg = selectedExperimentId
-      ? 'Bu deneyde henüz işlem açılmadı.'
-      : 'Sistemde henüz işlem bulunmuyor. Piyasanın sinyal üretmesi bekleniyor...';
+      ? 'Bu deneyin geçmiş işlemi bulunmuyor.'
+      : 'Sistemde henüz kapanmış bir işlem bulunmuyor.';
     container.innerHTML = `<div class="empty"><div class="empty-icon">⏳</div><div class="empty-text">${msg}</div></div>`;
     return;
   }
 
-  // Açık pozisyonların canlı PnL'ini hesapla (kapansaydı net: maliyet düşülmüş)
-  for (const t of allTrades) {
-    if (t.isOpen && prices && prices[t.coin]) {
-      const sign = t.side === 'short' ? -1 : 1;
-      t.livePnl = sign * ((prices[t.coin] - t.entryPrice) / t.entryPrice) * 100 - ROUND_TRIP_COST_PCT;
-      t.livePrice = prices[t.coin];
-    }
-  }
-
-  // Sort: open first, then by time descending
-  allTrades.sort((a, b) => {
-    if (a.isOpen && !b.isOpen) return -1;
-    if (!a.isOpen && b.isOpen) return 1;
-    return (b.isOpen ? (b.entryTime || 0) : (b.exitTime || 0)) - (a.isOpen ? (a.entryTime || 0) : (a.exitTime || 0));
-  });
+  // Sort by exit time descending
+  allTrades.sort((a, b) => (b.exitTime || 0) - (a.exitTime || 0));
 
   // ── Özet şeridi ──
-  const open = allTrades.filter(t => t.isOpen);
-  const closed = allTrades.filter(t => !t.isOpen);
+  const closed = allTrades;
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
   const closedToday = closed.filter(t => (t.exitTime || 0) >= todayStart.getTime());
   const todayPnl = closedToday.reduce((s, t) => s + (t.pnlPercent || 0), 0);
   const wins = closed.filter(t => (t.pnlPercent || 0) > 0).length;
   const winRate = closed.length > 0 ? (wins / closed.length) * 100 : 0;
-  const openLivePnl = open.reduce((s, t) => s + (t.livePnl || 0), 0);
-
+  
   const pnlColor = (v) => v > 0 ? 'var(--accent-green)' : v < 0 ? 'var(--accent-red)' : 'var(--text-dim)';
   const summaryHtml = `
     <div class="trade-summary">
       <div class="trade-summary-item">
-        <div class="trade-summary-val" style="color:var(--accent-cyan)">${open.length}</div>
-        <div class="trade-summary-label">Açık Pozisyon</div>
-      </div>
-      <div class="trade-summary-item">
-        <div class="trade-summary-val" style="color:${pnlColor(openLivePnl)}">${openLivePnl >= 0 ? '+' : ''}${openLivePnl.toFixed(2)}%</div>
-        <div class="trade-summary-label">Açıkların Anlık PnL</div>
+        <div class="trade-summary-val">${closed.length}</div>
+        <div class="trade-summary-label">Toplam Kapanan</div>
       </div>
       <div class="trade-summary-item">
         <div class="trade-summary-val">${closedToday.length}</div>
@@ -882,8 +859,7 @@ function renderTradeLog(experiments, prices) {
       </div>
     </div>
     <div class="trade-hint">
-      💡 Her satır bir deneyin <b>sanal (paper)</b> işlemi — gerçek para kullanılmaz. PnL değerleri %0.10 işlem maliyeti düşülmüş <b>net</b> değerlerdir.
-      🔺 LONG = yükseliş beklentisiyle alım · 🔻 SHORT = düşüş beklentisiyle satış.
+      💡 Tüm PnL değerleri işlem komisyonları düşülmüş <b>net</b> değerlerdir.
     </div>`;
 
   function formatTime(ts) {
@@ -930,20 +906,18 @@ function renderTradeLog(experiments, prices) {
       </thead>
       <tbody>
         ${allTrades.slice(0, 50).map(t => {
-          const pnl = t.isOpen ? t.livePnl : t.pnlPercent;
+          const pnl = t.pnlPercent;
           const pnlStr = pnl != null ? `${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%` : '-';
           const pnlClass = pnl != null ? (pnl >= 0 ? 'pnl-positive' : 'pnl-negative') : '';
-          const exitCell = t.isOpen
-            ? (t.livePrice != null ? `${fmtPrice(t.livePrice)}<span class="live-pnl">● canlı fiyat</span>` : '—')
-            : `${fmtPrice(t.exitPrice)}<br><span style="color:var(--text-dim);font-size:10px">${t.exitTime ? formatTime(t.exitTime) : ''}</span>`;
+          const exitCell = `${fmtPrice(t.exitPrice)}<br><span style="color:var(--text-dim);font-size:10px">${t.exitTime ? formatTime(t.exitTime) : ''}</span>`;
           return `
             <tr>
               <td>${sideTag(t.side)}</td>
-              <td>${reasonTag(t.exitReason, t.isOpen, t.isLive)}</td>
+              <td>${reasonTag(t.exitReason, false, t.isLive)}</td>
               <td><a class="coin-link" href="https://www.binance.com/en/trade/${(t.coin || '').replace('USDT', '')}_USDT" target="_blank">${(t.coin || '').replace('USDT', '')}</a></td>
               <td>${fmtPrice(t.entryPrice)}<br><span style="color:var(--text-dim);font-size:10px">${formatTime(t.entryTime)}</span></td>
               <td>${exitCell}</td>
-              <td class="${pnlClass}">${pnlStr}${t.isOpen && pnl != null ? '<span class="live-pnl">şu an kapansa</span>' : ''}</td>
+              <td class="${pnlClass}">${pnlStr}</td>
               <td>${fmtDuration(t.candlesSinceEntry)}</td>
               <td class="trade-exp" title="${t.experimentName || ''}">${t.experimentName || '-'}</td>
             </tr>
@@ -1137,9 +1111,19 @@ function renderExchangeState(state) {
       posEl.innerHTML = '<div class="empty"><div class="empty-text">Borsada açık pozisyon yok.</div></div>';
     } else {
       let html = '<table class="trade-table" style="width:100%"><thead><tr>';
-      html += '<th>Coin</th><th>Yön</th><th>Miktar</th><th style="text-align:right">Giriş</th><th style="text-align:right">Mark</th><th style="text-align:right">PnL</th><th>Marjin</th>';
+      html += '<th>Coin</th><th>Yön</th><th>Miktar</th><th style="text-align:right">Giriş</th><th style="text-align:right">Mark</th><th style="text-align:right">PnL</th><th>Deney</th><th>Marjin</th>';
       html += '</tr></thead><tbody>';
       for (const p of state.positions) {
+        let expName = '—';
+        if (window.botExperiments) {
+          for (const exp of window.botExperiments) {
+            if (exp.positions && exp.positions.some(pos => pos.coin === p.coin)) {
+              expName = exp.name;
+              break;
+            }
+          }
+        }
+
         const pnlClass = p.unrealizedPnl >= 0 ? 'pnl-positive' : 'pnl-negative';
         const sideTag = p.side === 'LONG'
           ? '<span class="trade-tag long">🔺 LONG</span>'
@@ -1152,6 +1136,7 @@ function renderExchangeState(state) {
           <td style="text-align:right">${fmtPrice(p.entryPrice)}</td>
           <td style="text-align:right">${fmtPrice(p.markPrice)}</td>
           <td style="text-align:right" class="${pnlClass}">${p.unrealizedPnl >= 0 ? '+' : ''}\$${p.unrealizedPnl.toFixed(4)} (${p.percentage >= 0 ? '+' : ''}${p.percentage.toFixed(2)}%)</td>
+          <td style="font-family:'Inter',sans-serif;font-weight:500;color:var(--text-main);max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${esc(expName)}">${esc(expName)}</td>
           <td>${p.marginMode.toUpperCase()} ${p.leverage}x</td>
         </tr>`;
       }
@@ -1202,6 +1187,10 @@ async function refresh() {
     fetchJSON('/api/organism/scoreboard'),
     fetchJSON('/api/organism/regime'),
   ]);
+
+  if (experiments) {
+    window.botExperiments = experiments;
+  }
 
   renderObservations(observations);
   renderExperiments(experiments);
