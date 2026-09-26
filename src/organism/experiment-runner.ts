@@ -320,6 +320,9 @@ export class ExperimentRunner {
 	async reconcile(): Promise<void> {
 		const { reconcilePositions } = await import('./reconciliation.js');
 		await reconcilePositions(this.experiments, this.liveBroker);
+		for (const exp of this.experiments) {
+			this.recalcStats(exp);
+		}
 		this.save();
 	}
 
