@@ -309,6 +309,7 @@ export class LiveBroker {
 				takeProfitOrderId,
 				filledPrice,
 				filledAmount,
+				order: entryOrder,
 				feeRate,
 			};
 		} catch (error: any) {
