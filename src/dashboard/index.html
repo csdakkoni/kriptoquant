@@ -1080,7 +1080,9 @@ function renderExchangeState(state) {
   if (ws && state.balance) {
     const b = state.balance;
     const pnlColor = b.unrealizedPnl >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
-    const pnlPct = b.totalBalance > 0 ? (b.unrealizedPnl / b.totalBalance) * 100 : 0;
+    // Cüzdan çok büyük, pnl çok küçük olunca (örn. $5000 kasada $0.30) total balance'a göre %0.00.. çıktığı için sabit görünüyordu.
+    // Bunun yerine borsa mantığındaki gibi ROE (Return on Equity - Kullanılan Teminata Göre Getiri) hesaplıyoruz:
+    const pnlPct = b.usedBalance > 0 ? (b.unrealizedPnl / b.usedBalance) * 100 : 0;
     ws.innerHTML = `
       <div class="trade-summary-item">
         <div class="trade-summary-val" style="color:var(--accent-cyan)">\$${b.totalBalance.toFixed(2)}</div>
