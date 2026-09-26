@@ -183,6 +183,25 @@ export function startDashboardServer(port: number = 3000): any {
 			return;
 		}
 
+		// ─── PWA Manifest & Icons ───────────────────────────────────
+		if (url === '/manifest.json') {
+			const manifestPath = join(import.meta.dirname, 'manifest.json');
+			if (existsSync(manifestPath)) {
+				res.writeHead(200, { 'Content-Type': 'application/manifest+json; charset=utf-8' });
+				res.end(readFileSync(manifestPath, 'utf-8'));
+				return;
+			}
+		}
+
+		if (url === '/icon.svg' || url === '/icon.png') {
+			const iconPath = join(import.meta.dirname, 'icon.svg');
+			if (existsSync(iconPath)) {
+				res.writeHead(200, { 'Content-Type': 'image/svg+xml' });
+				res.end(readFileSync(iconPath));
+				return;
+			}
+		}
+
 		// ─── HTML Dashboard ──────────────────────────────────────────
 		if (url === '/' || url === '/index.html') {
 			const htmlPath = join(import.meta.dirname, 'index.html');

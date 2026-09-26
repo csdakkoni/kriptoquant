@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f0c1b"/>
+      <stop offset="50%" stop-color="#18132d"/>
+      <stop offset="100%" stop-color="#090514"/>
+    </linearGradient>
+    <linearGradient id="qGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#06b6d4"/>
+      <stop offset="50%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#a855f7"/>
+    </linearGradient>
+    <linearGradient id="glowGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#10b981"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="12" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+  
+  <!-- Background with subtle border -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)"/>
+  <rect width="504" height="504" x="4" y="4" rx="108" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="8"/>
+  
+  <!-- Outer Quantum Ring -->
+  <circle cx="256" cy="236" r="140" fill="none" stroke="url(#qGrad)" stroke-width="28" stroke-linecap="round" filter="url(#glow)"/>
+  
+  <!-- Candlesticks in the center -->
+  <!-- Bullish Candle 1 -->
+  <line x1="200" y1="160" x2="200" y2="280" stroke="#10b981" stroke-width="6" stroke-linecap="round"/>
+  <rect x="188" y="180" width="24" height="60" rx="6" fill="#10b981"/>
+  
+  <!-- Bullish Candle 2 (Higher) -->
+  <line x1="256" y1="130" x2="256" y2="270" stroke="url(#qGrad)" stroke-width="8" stroke-linecap="round"/>
+  <rect x="242" y="150" width="28" height="85" rx="7" fill="url(#qGrad)"/>
+  
+  <!-- Bullish Candle 3 -->
+  <line x1="312" y1="110" x2="312" y2="240" stroke="#06b6d4" stroke-width="6" stroke-linecap="round"/>
+  <rect x="300" y="130" width="24" height="65" rx="6" fill="#06b6d4"/>
+  
+  <!-- Quantum Diagonal Stroke (Tail of Q) -->
+  <path d="M330 310 L410 400" stroke="url(#glowGrad)" stroke-width="32" stroke-linecap="round" filter="url(#glow)"/>
+  <circle cx="410" cy="400" r="16" fill="#10b981"/>
+</svg>

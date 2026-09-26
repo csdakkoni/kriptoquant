@@ -2,9 +2,16 @@
 <html lang="tr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KriptoQuant — Ölçüm Organizması</title>
-<meta name="description" content="Gözlemleri ölçen, kanıttan deney doğuran kağıt-ticaret organizması">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>KriptoQuant — Otonom Borsa Organizması</title>
+<meta name="description" content="Gözlemleri ölçen, kanıttan deney doğuran otonom borsa organizması">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="KriptoQuant">
+<meta name="theme-color" content="#18132d">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" type="image/svg+xml" href="/icon.svg">
+<link rel="apple-touch-icon" href="/icon.svg">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -480,13 +487,80 @@ body::before {
   white-space: nowrap;
 }
 
-/* ─── Responsive ─── */
+/* ─── Table Touch Scroll Wrappers ─── */
+.trade-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-bottom: 8px;
+}
+.trade-table-wrap::-webkit-scrollbar {
+  height: 4px;
+}
+.trade-table-wrap::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+/* ─── Mobile First Responsive ─── */
 @media (max-width: 768px) {
-  .header { padding: 16px; }
-  .main { padding: 16px; }
-  .grid { grid-template-columns: 1fr; }
-  .stats-row { grid-template-columns: repeat(2, 1fr); }
-  .hero-statement { font-size: 18px; }
+  body {
+    padding-bottom: 24px;
+  }
+  .header {
+    padding: 12px 14px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    position: relative;
+  }
+  .header-left {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+  }
+  .header-right {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .logo { font-size: 18px; }
+  .subtitle { display: none; }
+  .regime-badge { font-size: 11px; padding: 4px 8px; }
+  .status-badge { font-size: 11px; padding: 4px 10px; }
+  .report-btn { font-size: 11px; padding: 6px 12px; }
+  .main { padding: 10px; }
+  .grid { grid-template-columns: 1fr; gap: 12px; }
+  .card { padding: 14px; border-radius: 12px; }
+  .card-header { margin-bottom: 12px; }
+  .card-title { font-size: 14px; }
+  .stats-row { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .stat-card { padding: 12px; }
+  .stat-val { font-size: 20px; }
+  .trade-summary {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px;
+  }
+  .trade-summary-item {
+    padding: 8px 10px;
+  }
+  .trade-summary-val {
+    font-size: 15px;
+  }
+  .trade-summary-label {
+    font-size: 9px;
+  }
+  .trade-table {
+    min-width: 540px; /* guarantees columns don't compress on small screens */
+  }
+  .trade-table th, .trade-table td {
+    padding: 8px 6px;
+    font-size: 11px;
+  }
 }
 
 /* ─── Report Button ─── */
@@ -729,7 +803,7 @@ function renderExperiments(experiments) {
   setText('statExperiments', experiments.filter(e => e.status === 'running').length);
   setText('statEvidenceBorn', experiments.filter(e => (e.name || '').startsWith('[KANIT]')).length);
 
-  let html = '<table class="trade-table" style="width:100%"><thead><tr>';
+  let html = '<div class="trade-table-wrap"><table class="trade-table" style="width:100%"><thead><tr>';
   html += '<th>Durum</th><th>Deney</th><th>Yön</th><th style="text-align:right">İşlem</th><th style="text-align:right">Kazanma</th><th style="text-align:right">Açık</th><th style="text-align:right">PnL</th>';
   html += '</tr></thead><tbody>';
 
@@ -760,7 +834,7 @@ function renderExperiments(experiments) {
     </tr>`;
   });
 
-  html += '</tbody></table>';
+  html += '</tbody></table></div>';
   const grid = document.getElementById('experimentGrid');
   if (grid) grid.innerHTML = html;
 }
@@ -891,6 +965,7 @@ function renderTradeLog(experiments, prices) {
 
   summaryContainer.innerHTML = summaryHtml;
   container.innerHTML = `
+    <div class="trade-table-wrap">
     <table class="trade-table">
       <thead>
         <tr>
@@ -925,6 +1000,7 @@ function renderTradeLog(experiments, prices) {
         }).join('')}
       </tbody>
     </table>
+    </div>
   `;
 }
 
@@ -1029,6 +1105,7 @@ function renderScoreboard(sb) {
   }).join('');
 
   container.innerHTML = `
+    <div class="trade-table-wrap">
     <table class="trade-table">
       <thead>
         <tr>
@@ -1041,6 +1118,7 @@ function renderScoreboard(sb) {
       </thead>
       <tbody>${rows}</tbody>
     </table>
+    </div>
     <div class="trade-hint" style="margin-top:10px">
       ⏳ Ölçüm bekleyen gözlem: <b>${(sb.pending || []).length}</b> · Verdikt için en az 20 ölçüm gerekir · Referans: %0.10 işlem maliyetini aşmayan ortalama, tek başına işlem sinyali olamaz.
     </div>`;
@@ -1113,7 +1191,7 @@ function renderExchangeState(state) {
     if (state.positions.length === 0) {
       posEl.innerHTML = '<div class="empty"><div class="empty-text">Borsada açık pozisyon yok.</div></div>';
     } else {
-      let html = '<table class="trade-table" style="width:100%"><thead><tr>';
+      let html = '<div class="trade-table-wrap"><table class="trade-table" style="width:100%"><thead><tr>';
       html += '<th>Coin</th><th>Yön</th><th>Miktar</th><th style="text-align:right">Giriş</th><th style="text-align:right">Mark</th><th style="text-align:right">PnL</th><th>Deney</th><th>Marjin</th>';
       html += '</tr></thead><tbody>';
       for (const p of state.positions) {
@@ -1153,7 +1231,7 @@ function renderExchangeState(state) {
           <td>${p.marginMode.toUpperCase()} ${p.leverage}x</td>
         </tr>`;
       }
-      html += '</tbody></table>';
+      html += '</tbody></table></div>';
       posEl.innerHTML = html;
     }
   }
@@ -1164,7 +1242,7 @@ function renderExchangeState(state) {
     if (state.orders.length === 0) {
       ordEl.innerHTML = '<div class="empty"><div class="empty-text">Bekleyen emir yok.</div></div>';
     } else {
-      let html = '<table class="trade-table" style="width:100%"><thead><tr>';
+      let html = '<div class="trade-table-wrap"><table class="trade-table" style="width:100%"><thead><tr>';
       html += '<th>Coin</th><th>Tip</th><th>Yön</th><th style="text-align:right">Tetik Fiyatı</th><th style="text-align:right">Miktar</th><th>Durum</th>';
       html += '</tr></thead><tbody>';
       for (const o of state.orders) {
@@ -1185,7 +1263,7 @@ function renderExchangeState(state) {
           <td>${o.reduceOnly ? '🔒 reduceOnly' : ''}</td>
         </tr>`;
       }
-      html += '</tbody></table>';
+      html += '</tbody></table></div>';
       ordEl.innerHTML = html;
     }
   }
