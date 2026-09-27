@@ -712,7 +712,17 @@ export class ExperimentRunner {
 			lastTickTs: tick.timestamp, // giriş mumu sayaca dahil edilmez
 		};
 		
-		if (exp.isLiveTradingEnabled || config.liveAllExperiments) {
+		// Bir coinde borsada aynı anda yalnızca BİR canlı pozisyon olabilir:
+		// Binance one-way modda aynı sembolün pozisyonları netleşir. İki deney
+		// aynı coine girerse biri diğerinin pozisyonunu kapatır/büyütür.
+		const coinTakenLive = this.experiments.some(e =>
+			e.positions.some(p => p.coin === coin && (p.isLive || p.livePending)),
+		);
+		if (coinTakenLive && (exp.isLiveTradingEnabled || config.liveAllExperiments)) {
+			log(`[EXPERIMENT] ℹ️ ${exp.name} | ${coin}: başka bir deneyin canlı pozisyonu var — bu giriş yalnızca paper.`);
+		}
+
+		if ((exp.isLiveTradingEnabled || config.liveAllExperiments) && !coinTakenLive) {
 			// BUG #1 FIX: Async yanıt beklerken çıkışın borsaya gitmesini engelle
 			if (this.liveBroker.isLive()) {
 				pos.livePending = true;

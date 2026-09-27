@@ -27,6 +27,14 @@ if (!apiKey || !secret) {
 	process.exit(1);
 }
 
+// Bu araç TESTNET içindir. .env mainnet'e ayarlıyken yanlışlıkla çalıştırılırsa
+// gerçek parayla SOL pozisyonu açar ve experiments.json'a sahte kayıt işler.
+if (!isTestnet && !process.argv.includes('--mainnet')) {
+	console.error('❌ BINANCE_USE_TESTNET=true değil. Bu araç gerçek hesapta emir açar.');
+	console.error('   Bilerek mainnet\'te denemek istiyorsan: node test-order.cjs open --mainnet');
+	process.exit(1);
+}
+
 const exchange = new ccxt.binance({
 	apiKey,
 	secret,
@@ -145,6 +153,8 @@ async function closeTestOrder() {
 	console.log('   🧹 Borsa tarafındaki bekleyen tüm Stop/TP emirleri iptal ediliyor...');
 	try {
 		await exchange.cancelAllOrders(symbol);
+		// Stop/TP koşullu (algo) emirlerdir; ayrı iptal gerekir
+		await exchange.cancelAllOrders(symbol, { trigger: true });
 		console.log('   ✓ Açık emirler iptal edildi.');
 	} catch (e) {
 		console.log('   ℹ️ İptal edilecek bekleyen emir yoktu.');

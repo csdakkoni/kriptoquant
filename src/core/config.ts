@@ -28,6 +28,8 @@ export const config = {
 		maxOpenTrades: Number(process.env.MAX_OPEN_TRADES) || 18,
 		leverage: Number(process.env.LEVERAGE) || 1,
 		marginMode: (process.env.MARGIN_MODE || 'ISOLATED').toUpperCase() as 'ISOLATED' | 'CROSSED',
+		// Kuralında stop olmayan canlı pozisyonlara borsada konan felaket stopu (%)
+		emergencyStopPercent: Number(process.env.EMERGENCY_STOP_PERCENT) || 8,
 	},
 	isLiveTradingEnabled: process.env.LIVE_TRADING_ENABLED === 'true',
 	liveAllExperiments: process.env.LIVE_ALL_EXPERIMENTS === 'true',

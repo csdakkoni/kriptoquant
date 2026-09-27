@@ -77,10 +77,13 @@ export class LiveBroker {
 	/**
 	 * İzole marjin ve kaldıraç (1x) yapılandırmasını garantiye alır.
 	 * Bir kere ayarlandıktan sonra sembol hafızaya alınır, tekrar çağrılmaz.
+	 * Ayar DOĞRULANAMAZSA false döner ve giriş yapılmaz: Binance'ın varsayılanı
+	 * 20x kaldıraç + CROSS marjindir; o ayarla açılan pozisyon %6'lık stopa
+	 * ulaşmadan tasfiye olabilir ve zarar tüm hesaba yayılır.
 	 */
-	public async ensureMarketConfig(symbol: string): Promise<void> {
-		if (!this.liveEnabled) return;
-		if (this.configuredSymbols.has(symbol)) return;
+	public async ensureMarketConfig(symbol: string): Promise<boolean> {
+		if (!this.liveEnabled) return true;
+		if (this.configuredSymbols.has(symbol)) return true;
 
 		try {
 			await this.exchange.loadMarkets();
@@ -93,7 +96,8 @@ export class LiveBroker {
 				const msg = String(err?.message || err);
 				// Binance -4046: "No need to change margin type."
 				if (!msg.includes('No need to change margin type') && !msg.includes('-4046')) {
-					logError(`[BROKER] ${symbol} marjin modu ayarlanamadı: ${msg}`);
+					logError(`[BROKER] ❌ ${symbol} marjin modu ayarlanamadı, giriş iptal: ${msg}`);
+					return false;
 				}
 			}
 
@@ -103,12 +107,52 @@ export class LiveBroker {
 				log(`[BROKER] 🛡️ ${symbol} kaldıraç ${config.risk.leverage}x olarak ayarlandı.`);
 			} catch (err: any) {
 				const msg = String(err?.message || err);
-				logError(`[BROKER] ${symbol} kaldıraç ayarlanamadı: ${msg}`);
+				logError(`[BROKER] ❌ ${symbol} kaldıraç ayarlanamadı, giriş iptal: ${msg}`);
+				return false;
 			}
 
 			this.configuredSymbols.add(symbol);
+			return true;
 		} catch (err: any) {
 			logError(`[BROKER] ${symbol} piyasa konfigürasyonu hatası: ${err?.message || err}`);
+			return false;
+		}
+	}
+
+	/**
+	 * Sembolün bekleyen TÜM emirlerini iptal eder: normal emirler VE koşullu
+	 * (STOP_MARKET / TAKE_PROFIT_MARKET) emirler. Binance Aralık 2025'ten beri
+	 * koşullu emirleri ayrı "Algo Order" servisinde tutar; düz cancelAllOrders
+	 * onlara dokunmaz. Geride kalan eski bir stop, aynı coinde sonradan açılan
+	 * yeni pozisyonu yanlış fiyattan kapatır.
+	 */
+	private async cancelAllSymbolOrders(symbol: string): Promise<boolean> {
+		let ok = true;
+		for (const params of [{}, { trigger: true }]) {
+			try {
+				await this.exchange.cancelAllOrders(symbol, params);
+			} catch (err: any) {
+				const msg = String(err?.message || err);
+				// Bekleyen emir yoksa Binance hata dönebilir — sorun değil
+				if (!/-2011|Unknown order|no open orders|not exist/i.test(msg)) {
+					logError(`[BROKER] ${symbol} emirleri iptal edilemedi (${JSON.stringify(params)}): ${msg}`);
+					ok = false;
+				}
+			}
+		}
+		return ok;
+	}
+
+	/** Emergency: pozisyonu reduceOnly market emriyle kapatır (stop konulamadığında) */
+	private async emergencyClose(symbol: string, exitSide: 'buy' | 'sell', amount: number): Promise<boolean> {
+		try {
+			await this.exchange.createMarketOrder(symbol, exitSide, amount, undefined, { reduceOnly: true });
+			log(`[BROKER] 🧯 ${symbol} korumasız pozisyon acil kapatıldı.`);
+			await this.cancelAllSymbolOrders(symbol);
+			return true;
+		} catch (err: any) {
+			logError(`[BROKER] 🚨 ${symbol} ACİL KAPATMA BAŞARISIZ — MANUEL MÜDAHALE GEREKLİ: ${err?.message || err}`);
+			return false;
 		}
 	}
 
@@ -169,8 +213,29 @@ export class LiveBroker {
 				return { success: false, error: 'Risk check failed' };
 			}
 
-			// Marjin ve Kaldıraç Kilidi
-			await this.ensureMarketConfig(symbol);
+			// Marjin ve Kaldıraç Kilidi — doğrulanamazsa GİRİŞ YOK
+			if (!(await this.ensureMarketConfig(symbol))) {
+				return { success: false, error: 'Margin/leverage config failed' };
+			}
+
+			// Borsada bu sembolde zaten pozisyon varsa girme: Binance one-way modda
+			// aynı sembolün pozisyonları NETLEŞİR (long + short = 0). İkinci giriş
+			// ilk pozisyonu büyütür ya da kapatır ve iki deneyin kaydı bozulur.
+			try {
+				const existing = await this.exchange.fetchPositions([symbol]);
+				if (existing.some((p: any) => Math.abs(Number(p.contracts || 0)) > 0)) {
+					logError(`[BROKER] ❌ ${symbol} borsada zaten açık pozisyon var — ikinci giriş reddedildi.`);
+					return { success: false, error: 'Position already open on exchange' };
+				}
+			} catch (posErr: any) {
+				logError(`[BROKER] ❌ ${symbol} pozisyon kontrolü yapılamadı, giriş iptal: ${posErr?.message || posErr}`);
+				return { success: false, error: 'Position check failed' };
+			}
+
+			// Önceki işlemlerden kalmış bayat stop/TP emirlerini temizle
+			if (!(await this.cancelAllSymbolOrders(symbol))) {
+				return { success: false, error: 'Stale order cleanup failed' };
+			}
 
 			// Notional ve Hassasiyet Kontrolleri
 			const market = this.exchange.market(symbol);
@@ -188,6 +253,13 @@ export class LiveBroker {
 			if (preciseAmount <= 0) {
 				logError(`[BROKER] ❌ Geçersiz miktar hesaplandı: ${preciseAmountStr}`);
 				return { success: false, error: 'Invalid amount precision' };
+			}
+
+			// amountToPrecision aşağı yuvarlar → notional minimumun altına düşebilir
+			if (preciseAmount * currentPrice < minCost) {
+				const msg = `Yuvarlanmış tutar ($${(preciseAmount * currentPrice).toFixed(2)}) Binance minimumu ($${minCost}) altında`;
+				logError(`[BROKER] ❌ ${symbol} ${msg}`);
+				return { success: false, error: msg };
 			}
 
 			const ccxtOrderSide = side === 'long' ? 'buy' : 'sell';
@@ -239,27 +311,35 @@ export class LiveBroker {
 
 			log(`[BROKER] ✅ LIVE ENTRY DOLDU: ${symbol} @ $${filledPrice} (Miktar: ${filledAmount})`);
 
-			// Borsa Tarafında STOP_MARKET Emri (reduceOnly)
+			// Borsa Tarafında STOP_MARKET Emri (reduceOnly) — ZORUNLU.
+			// Kuralında stop olmayan deneylere (ör. fixed_candles) de felaket
+			// stopu konur: bot/sunucu çökerse pozisyon borsada korumasız kalmaz.
+			const effectiveStop =
+				stopPrice ??
+				filledPrice * (1 + (side === 'long' ? -1 : 1) * (config.risk.emergencyStopPercent / 100));
 			let stopOrderId: string | undefined;
-			if (stopPrice) {
-				try {
-					const preciseStop = Number(this.exchange.priceToPrecision(symbol, stopPrice));
-					const stopOrder = await this.exchange.createOrder(
-						symbol,
-						'STOP_MARKET',
-						ccxtExitSide,
-						filledAmount,
-						undefined,
-						{
-							stopPrice: preciseStop,
-							reduceOnly: true,
-						},
-					);
-					stopOrderId = stopOrder.id;
-					log(`[BROKER] 🛡️ STOP_MARKET yerleştirildi: ${symbol} @ $${preciseStop} (ID: ${stopOrderId})`);
-				} catch (stopErr: any) {
-					logError(`[BROKER] ⚠️ STOP_MARKET yerleştirilemedi: ${stopErr?.message || stopErr}`);
-				}
+			try {
+				const preciseStop = Number(this.exchange.priceToPrecision(symbol, effectiveStop));
+				const stopOrder = await this.exchange.createOrder(
+					symbol,
+					'STOP_MARKET',
+					ccxtExitSide,
+					filledAmount,
+					undefined,
+					{
+						stopPrice: preciseStop,
+						reduceOnly: true,
+					},
+				);
+				stopOrderId = stopOrder.id;
+				log(`[BROKER] 🛡️ STOP_MARKET yerleştirildi: ${symbol} @ $${preciseStop} (ID: ${stopOrderId})${stopPrice ? '' : ' [felaket stopu]'}`);
+			} catch (stopErr: any) {
+				logError(`[BROKER] 🚨 STOP_MARKET yerleştirilemedi: ${stopErr?.message || stopErr}. Korumasız pozisyon kapatılıyor.`);
+				const closed = await this.emergencyClose(symbol, ccxtExitSide, filledAmount);
+				return {
+					success: false,
+					error: closed ? 'Stop placement failed; position closed' : 'Stop placement failed; EMERGENCY CLOSE FAILED',
+				};
 			}
 
 			// Borsa Tarafında TAKE_PROFIT_MARKET Emri (reduceOnly)
@@ -342,37 +422,41 @@ export class LiveBroker {
 
 		// 2. Canlı Mod Yürütme
 		try {
-			// Açık bracket emirlerini temizle
-			if (stopOrderId) {
+			// Açık bracket emirlerini temizle. Stop/TP koşullu (algo) emirlerdir:
+			// iptal isteği { trigger: true } ile algo servisine gitmeli, yoksa
+			// Binance "Unknown order" döner ve emir borsada asılı kalır.
+			for (const [label, id] of [['Stop', stopOrderId], ['TP', takeProfitOrderId]] as const) {
+				if (!id) continue;
 				try {
-					await this.exchange.cancelOrder(stopOrderId, symbol);
-					log(`[BROKER] 🧹 Stop emri iptal edildi: ${stopOrderId}`);
+					await this.exchange.cancelOrder(id, symbol, { trigger: true });
+					log(`[BROKER] 🧹 ${label} emri iptal edildi: ${id}`);
 				} catch (e) {
 					// Emir zaten tetiklenmiş veya iptal edilmiş olabilir
 				}
 			}
 
-			if (takeProfitOrderId) {
-				try {
-					await this.exchange.cancelOrder(takeProfitOrderId, symbol);
-					log(`[BROKER] 🧹 TP emri iptal edildi: ${takeProfitOrderId}`);
-				} catch (e) {
-					// Emir zaten tetiklenmiş veya iptal edilmiş olabilir
-				}
-			}
-
-			// Pozisyon büyüklüğünü kontrol et
+			// Pozisyon büyüklüğünü kontrol et. Sorgu başarısızsa pozisyonun
+			// kapandığını VARSAYMA — başarısız dön; mutabakat öksüz olarak yakalar.
 			let contracts = 0;
+			let positionSide: 'long' | 'short' = side;
 			try {
 				const positions = await this.exchange.fetchPositions([symbol]);
 				const currentPos = positions.find(
-					p => (p.symbol === symbol || p.id === coin) && Math.abs(Number(p.contracts || 0)) > 0,
+					p => p.symbol === symbol && Math.abs(Number(p.contracts || 0)) > 0,
 				);
 				if (currentPos) {
 					contracts = Math.abs(Number(currentPos.contracts));
+					if (currentPos.side === 'long' || currentPos.side === 'short') positionSide = currentPos.side;
 				}
 			} catch (posErr) {
-				logError(`[BROKER] Pozisyon sorgusu hatası (${symbol}): ${posErr}`);
+				logError(`[BROKER] Pozisyon sorgusu hatası (${symbol}): ${posErr} — çıkış yapılamadı, mutabakat tekrar deneyecek.`);
+				this.riskManager.onTradeClosed(estimatedPnlUsd);
+				return { success: false, filledPrice: exitPrice };
+			}
+
+			if (contracts > 0 && positionSide !== side) {
+				logError(`[BROKER] 🚨 ${symbol} borsadaki pozisyon yönü (${positionSide}) beklenenden (${side}) farklı — kapatma atlandı, manuel kontrol gerekli.`);
+				contracts = 0;
 			}
 
 			let actualFillPrice: number | undefined;
@@ -398,6 +482,7 @@ export class LiveBroker {
 				}
 
 				log(`[BROKER] ✅ LIVE EXIT kapatıldı: ${symbol} @ $${actualFillPrice || exitPrice}`);
+				await this.cancelAllSymbolOrders(symbol);
 			} else {
 				log(`[BROKER] ℹ️ ${symbol} pozisyonu borsada zaten kapalı (Stop veya TP tetiklenmiş). Gerçek kapanış fiyatı sorgulanıyor...`);
 				try {
@@ -422,15 +507,19 @@ export class LiveBroker {
 		}
 	}
 
-	/** Borsa tarafındaki tüm açık pozisyonları listeler */
-	public async fetchOpenPositions(): Promise<any[]> {
+	/**
+	 * Borsa tarafındaki tüm açık pozisyonları listeler.
+	 * Sorgu başarısızsa null döner — boş liste "hiç pozisyon yok" demektir ve
+	 * mutabakat bunu "hepsi kapanmış" diye okur; ikisi asla karıştırılmamalı.
+	 */
+	public async fetchOpenPositions(): Promise<any[] | null> {
 		if (!this.liveEnabled) return [];
 		try {
 			const positions = await this.exchange.fetchPositions();
 			return positions.filter(p => Math.abs(Number(p.contracts || 0)) > 0);
 		} catch (err: any) {
 			logError(`[BROKER] Açık pozisyonlar getirilemedi: ${err?.message || err}`);
-			return [];
+			return null;
 		}
 	}
 
@@ -463,9 +552,7 @@ export class LiveBroker {
 	public async cancelAllOrders(symbol: string): Promise<boolean> {
 		if (!this.liveEnabled) return true;
 		try {
-			const sym = this.toSymbol(symbol);
-			await this.exchange.cancelAllOrders(sym);
-			return true;
+			return await this.cancelAllSymbolOrders(this.toSymbol(symbol));
 		} catch (err: any) {
 			logError(`[BROKER] Tüm emirler iptal edilemedi (${symbol}): ${err?.message || err}`);
 			return false;
