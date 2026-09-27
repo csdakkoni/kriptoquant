@@ -26,6 +26,9 @@ experiments = experiments.filter(e => {
 	// Eger cekirdek kadrodaysa TAVİZ YOK tut.
 	if (allowedNames.includes(e.name)) return true;
 	
+	// Kontrol grupları (yazı-tura kıyas deneyleri) her zaman tutulur
+	if (e.name.startsWith('Random ')) return true;
+
 	// Eger herd sinyali cross'u ise veya herd ise tut
 	if (e.name.includes('herd')) return true;
 

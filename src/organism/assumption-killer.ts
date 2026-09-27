@@ -25,6 +25,12 @@ import * as crypto from 'node:crypto';
 import { RegimeDetector } from './regime.js';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { fundingTracker } from './funding.js';
+
+// Fiyat verisi FUTURES piyasasından alınır: işlemler de orada yapılacağı için
+// paper sonuçları ile canlı sonuçlar aynı fiyatlara dayanmalı (spot ≠ futures).
+const FUTURES_REST = process.env.FUTURES_REST_URL || 'https://fapi.binance.com';
+const FUTURES_WS = process.env.FUTURES_WS_URL || 'wss://fstream.binance.com/stream';
 
 // Testlerin gerçek durumu ezmemesi için dizin ORGANISM_DATA_DIR ile değiştirilebilir
 const STATE_DIR = process.env.ORGANISM_DATA_DIR || join(process.cwd(), 'organism-data');
@@ -35,7 +41,7 @@ const COINS = [
 	// Tier 2 — Büyük Altcoinler (mevcut)
 	'ADAUSDT', 'AVAXUSDT', 'DOGEUSDT', 'LINKUSDT', 'DOTUSDT',
 	// Tier 3 — Yüksek Hacimli Altcoinler (yeni)
-	'MATICUSDT', 'NEARUSDT', 'SUIUSDT', 'APTUSDT', 'AAVEUSDT',
+	'POLUSDT', 'NEARUSDT', 'SUIUSDT', 'APTUSDT', 'AAVEUSDT',
 	'UNIUSDT', 'ARBUSDT', 'OPUSDT', 'FILUSDT', 'ATOMUSDT',
 	'INJUSDT', 'RENDERUSDT', 'LTCUSDT', 'TRXUSDT', 'ICPUSDT',
 ];
@@ -103,6 +109,9 @@ export class AssumptionKiller {
 		// 10-30, varsayım testleri 50, swing girişleri 192 mum ister).
 		await this.bootstrapHistory();
 
+		// Funding geçmişini yükle (paper maliyetleri gerçek oranlarla hesaplanır)
+		await fundingTracker.refresh(COINS);
+
 		// Borsa ile pozisyon mutabakatı (Reconciliation)
 		await this.experimentRunner.reconcile();
 
@@ -133,7 +142,7 @@ export class AssumptionKiller {
 		for (const coin of COINS) {
 			try {
 				const res = await fetch(
-					`https://api.binance.com/api/v3/klines?symbol=${coin}&interval=${INTERVAL}&limit=501`,
+					`${FUTURES_REST}/fapi/v1/klines?symbol=${coin}&interval=${INTERVAL}&limit=501`,
 				);
 				if (!res.ok) throw new Error(`HTTP ${res.status}`);
 				const data = (await res.json()) as any[];
@@ -162,7 +171,7 @@ export class AssumptionKiller {
 
 	private connectWebSocket(): void {
 		const streams = COINS.map(c => `${c.toLowerCase()}@kline_${INTERVAL}`).join('/');
-		const url = `wss://stream.binance.com:9443/stream?streams=${streams}`;
+		const url = `${FUTURES_WS}?streams=${streams}`;
 
 		this.ws = new WebSocket(url);
 
@@ -284,6 +293,9 @@ export class AssumptionKiller {
 
 			// Periyodik borsa mutabakatı (15 dakikada bir, dry-run ise sessizce atlar)
 			this.experimentRunner.reconcile().catch(err => logError(String(err)));
+
+			// Yeni funding kayıtlarını çek (API anahtarı gerekmez)
+			fundingTracker.refresh(COINS).catch(err => logError(String(err)));
 		}
 
 		// Rejim dedektörünü canlı tut (bayatsa arka planda tazelenir)

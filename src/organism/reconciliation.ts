@@ -2,6 +2,8 @@ import { log, logError } from '../core/utils.js';
 import { config } from '../core/config.js';
 import type { Experiment } from './experiment-runner.js';
 import type { LiveBroker } from './live-broker.js';
+import { roundTripCostPct } from './costs.js';
+import { fundingTracker } from './funding.js';
 
 /**
  * Sunucu başlangıcında veya periyodik olarak borsa (Binance) ile
@@ -88,7 +90,8 @@ export async function reconcilePositions(experiments: Experiment[], liveBroker: 
 					}
 
 					const sign = pos.side === 'short' ? -1 : 1;
-					const actualRoundTripFee = pos.entryFeeRate ? pos.entryFeeRate * 2 : 0.10;
+					const actualRoundTripFee =
+						roundTripCostPct(pos) + fundingTracker.fundingCostPct(pos.coin, pos.side, pos.entryTime, Date.now());
 					const pnlPct = sign * ((exitPrice - pos.entryPrice) / pos.entryPrice) * 100 - actualRoundTripFee;
 
 					pos.exitPrice = exitPrice;

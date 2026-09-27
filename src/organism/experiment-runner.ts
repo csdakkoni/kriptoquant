@@ -17,6 +17,8 @@ import type { MarketTick, Observation } from './types.js';
 import type { MarketRegime } from './regime.js';
 import { KnowledgeGraph } from './knowledge-graph.js';
 import { LiveBroker } from './live-broker.js';
+import { roundTripCostPct } from './costs.js';
+import { fundingTracker } from './funding.js';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -25,9 +27,7 @@ import { randomUUID } from 'node:crypto';
 const STATE_DIR = process.env.ORGANISM_DATA_DIR || join(process.cwd(), 'organism-data');
 const EXPERIMENTS_FILE = join(STATE_DIR, 'experiments.json');
 
-// Binance Futures gerçek komisyon: Taker %0.050 × 2 yön = %0.10 gidiş-dönüş.
-// Canlı emirlerde gerçek fee emir yanıtından alınabilir; bu sabit paper trade PnL'i içindir.
-const ROUND_TRIP_COST_PCT = 0.10;
+// İşlem maliyetleri (komisyon + kayma + funding) costs.ts ve funding.ts'te.
 
 /**
  * ATR (Average True Range) — her coinin kendi volatilite ölçü birimi.
@@ -192,7 +192,7 @@ export function createDefaultExperiments(): Experiment[] {
 	const coins = [
 		'BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT',
 		'ADAUSDT', 'AVAXUSDT', 'DOGEUSDT', 'LINKUSDT', 'DOTUSDT',
-		'MATICUSDT', 'NEARUSDT', 'SUIUSDT', 'APTUSDT', 'AAVEUSDT',
+		'POLUSDT', 'NEARUSDT', 'SUIUSDT', 'APTUSDT', 'AAVEUSDT',
 		'UNIUSDT', 'ARBUSDT', 'OPUSDT', 'FILUSDT', 'ATOMUSDT',
 		'INJUSDT', 'RENDERUSDT', 'LTCUSDT', 'TRXUSDT', 'ICPUSDT',
 	];
@@ -269,7 +269,33 @@ export function createDefaultExperiments(): Experiment[] {
 			entryRule: { type: 'on_observation', observationType: 'divergence' },
 			exitRule: { type: 'stop_and_target', stopPercent: 3.0, targetPercent: 6.0 },
 			coins,
-		}
+		},
+		// ── KONTROL GRUPLARI (yazı-tura) ──
+		// Strateji değil, ölçü çubuğu: girişi tamamen rastgele, çıkışı yukarıdaki
+		// deneylerle AYNI. Bir deney aynı dönemde bunları net olarak yenemiyorsa
+		// kazancı giriş sinyalinden değil şanstan/piyasa yönünden gelmiştir.
+		// Asla gerçek parayla işlem yapmazlar (openPosition'da engellenir).
+		{
+			...base(),
+			id: randomUUID(),
+			name: 'Random Kontrol LONG (Yazı-Tura, 3%/6%)',
+			hypothesis: 'Rastgele long giriş + 3%/6% çıkış: long deneylerin yenmesi gereken çıta',
+			entryRule: { type: 'random', probability: 0.005 },
+			exitRule: { type: 'stop_and_target', stopPercent: 3.0, targetPercent: 6.0 },
+			isLiveTradingEnabled: false,
+			coins,
+		},
+		{
+			...base(),
+			id: randomUUID(),
+			name: 'Random Kontrol Rejim (Yazı-Tura, 3%/6%)',
+			hypothesis: 'Rastgele giriş, yön rejimden + 3%/6% çıkış: rejim yönlü deneylerin yenmesi gereken çıta',
+			entryRule: { type: 'random', probability: 0.005 },
+			exitRule: { type: 'stop_and_target', stopPercent: 3.0, targetPercent: 6.0 },
+			side: 'regime' as const,
+			isLiveTradingEnabled: false,
+			coins,
+		},
 	];
 }
 
@@ -718,11 +744,17 @@ export class ExperimentRunner {
 		const coinTakenLive = this.experiments.some(e =>
 			e.positions.some(p => p.coin === coin && (p.isLive || p.livePending)),
 		);
-		if (coinTakenLive && (exp.isLiveTradingEnabled || config.liveAllExperiments)) {
+		// Borsaya yalnızca canlı mod açıkken gidilir; kontrol (random) deneyleri
+		// kıyas içindir ve ASLA gerçek parayla işlem yapmaz.
+		const wantsLive =
+			this.liveBroker.isLive() &&
+			(exp.isLiveTradingEnabled || config.liveAllExperiments) &&
+			!isControlExperiment(exp.name);
+		if (wantsLive && coinTakenLive) {
 			log(`[EXPERIMENT] ℹ️ ${exp.name} | ${coin}: başka bir deneyin canlı pozisyonu var — bu giriş yalnızca paper.`);
 		}
 
-		if ((exp.isLiveTradingEnabled || config.liveAllExperiments) && !coinTakenLive) {
+		if (wantsLive && !coinTakenLive) {
 			// BUG #1 FIX: Async yanıt beklerken çıkışın borsaya gitmesini engelle
 			if (this.liveBroker.isLive()) {
 				pos.livePending = true;
@@ -882,11 +914,9 @@ export class ExperimentRunner {
 		(pos as any).exitPrice = exitPrice;
 		(pos as any).exitTime = tick.timestamp;
 		(pos as any).exitReason = reason;
-		// Net PnL = yönlü brüt getiri - gidiş/dönüş işlem maliyeti
-		// Canlı işlemlerde Binance'ın gerçek komisyonunu kullan, paper trade'lerde sabit %0.10
-		const actualRoundTripFee = pos.entryFeeRate
-			? pos.entryFeeRate * 2 // Giriş fee × 2 (giriş + çıkış aynı oran varsayımı)
-			: ROUND_TRIP_COST_PCT;
+		// Net PnL = yönlü brüt getiri - (komisyon + kayma) - funding ücreti
+		const actualRoundTripFee =
+			roundTripCostPct(pos) + fundingTracker.fundingCostPct(pos.coin, pos.side, pos.entryTime, tick.timestamp);
 		(pos as any).pnlPercent = sign * ((exitPrice - pos.entryPrice) / pos.entryPrice) * 100 - actualRoundTripFee;
 
 		const pnl = pos.pnlPercent!;
@@ -1113,7 +1143,15 @@ export class ExperimentRunner {
 		}
 		if (changed) this.experiments = [...byKey.values()];
 
-		// Mevcut deneylere maxConcurrentPositions = 3 kotasını uygula
+		// MATIC, Binance'te POL olarak yeniden adlandırıldı
+		for (const e of this.experiments) {
+			if (e.status === 'running' && e.coins.includes('MATICUSDT')) {
+				e.coins = e.coins.map((c) => (c === 'MATICUSDT' ? 'POLUSDT' : c));
+				changed = true;
+			}
+		}
+
+				// Mevcut deneylere maxConcurrentPositions = 3 kotasını uygula
 		for (const e of this.experiments) {
 			if (!e.maxConcurrentPositions) {
 				e.maxConcurrentPositions = 3;

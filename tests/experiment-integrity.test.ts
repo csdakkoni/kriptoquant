@@ -65,9 +65,12 @@ describe('Kadro tutarlılığı', () => {
 		}
 	});
 
-	it('6 çekirdek deney kadroda bulunmalı ve maxConcurrentPositions sınırı olmalı', () => {
+	it('6 çekirdek deney + 2 kontrol kadroda bulunmalı ve maxConcurrentPositions sınırı olmalı', () => {
 		const exps = createDefaultExperiments();
-		expect(exps.length).toBe(6);
+		expect(exps.length).toBe(8);
+		const controls = exps.filter((e) => isControlExperiment(e.name));
+		expect(controls).toHaveLength(2);
+		for (const c of controls) expect(c.isLiveTradingEnabled).toBe(false);
 		for (const e of exps) {
 			expect(e.maxConcurrentPositions).toBe(3);
 		}

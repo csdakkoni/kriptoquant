@@ -841,7 +841,7 @@ function renderExperiments(experiments) {
 
 // ─── Render Trade Log ──────────────────────────────────────────────────────
 
-const ROUND_TRIP_COST_PCT = 0.10; // Binance Futures Taker: %0.05 × 2 yön = %0.10
+const ROUND_TRIP_COST_PCT = 0.20; // Komisyon %0.05×2 + kayma %0.05×2 (src/organism/costs.ts)
 
 // Fiyata göre uygun ondalık: BTC 62.412,50 | XRP 0,4213 | PEPE 0,00000812
 function fmtPrice(p) {
@@ -1120,7 +1120,7 @@ function renderScoreboard(sb) {
     </table>
     </div>
     <div class="trade-hint" style="margin-top:10px">
-      ⏳ Ölçüm bekleyen gözlem: <b>${(sb.pending || []).length}</b> · Verdikt için en az 20 ölçüm gerekir · Referans: %0.10 işlem maliyetini aşmayan ortalama, tek başına işlem sinyali olamaz.
+      ⏳ Ölçüm bekleyen gözlem: <b>${(sb.pending || []).length}</b> · Verdikt için en az 20 ölçüm gerekir · Referans: %0.20 işlem maliyetini aşmayan ortalama, tek başına işlem sinyali olamaz.
     </div>`;
 }
 
