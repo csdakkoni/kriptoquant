@@ -37,3 +37,6 @@ organism-data/
 
 # test state
 .test-organism-data/
+
+# Ortam değişkenleri — API anahtarları burada, ASLA commit edilmez
+.env
