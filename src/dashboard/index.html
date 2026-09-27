@@ -880,19 +880,33 @@ function renderTradeLog(experiments, prices) {
     if (filterBar) filterBar.innerHTML = '';
   }
 
-  // Collect ONLY closed trades
+  // Kapanan işlemler + AÇIK paper pozisyonlar (anlık fiyatla). Açıklar en üstte.
+  // Özet şeridi yalnızca kapananlardan hesaplanır.
   const allTrades = [];
+  const openTrades = [];
 
   for (const exp of filtered) {
     const side = exp.side || 'long';
     for (const pos of (exp.closedPositions || [])) {
       allTrades.push({ ...pos, side: pos.side || side, experimentName: exp.name, isOpen: false });
     }
+    for (const pos of (exp.positions || [])) {
+      if (pos.exitPrice) continue;
+      const posSide = pos.side || (side === 'short' ? 'short' : 'long');
+      const now = lastPrices[pos.coin];
+      let pnl = null;
+      if (now && pos.entryPrice) {
+        const sign = posSide === 'short' ? -1 : 1;
+        pnl = sign * ((now - pos.entryPrice) / pos.entryPrice) * 100 - ROUND_TRIP_COST_PCT;
+      }
+      openTrades.push({ ...pos, side: posSide, experimentName: exp.name, isOpen: true, nowPrice: now, pnlPercent: pnl });
+    }
   }
+  openTrades.sort((a, b) => (b.entryTime || 0) - (a.entryTime || 0));
 
   const summaryContainer = document.getElementById('tradeSummaryContainer');
 
-  if (allTrades.length === 0) {
+  if (allTrades.length === 0 && openTrades.length === 0) {
     summaryContainer.innerHTML = '';
     const msg = selectedExperimentId
       ? 'Bu deneyin geçmiş işlemi bulunmuyor.'
@@ -904,8 +918,9 @@ function renderTradeLog(experiments, prices) {
   // Sort by exit time descending
   allTrades.sort((a, b) => (b.exitTime || 0) - (a.exitTime || 0));
 
-  // ── Özet şeridi ──
+  // ── Özet şeridi (yalnızca kapananlar) ──
   const closed = allTrades;
+  const rows = [...openTrades, ...allTrades];
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
   const closedToday = closed.filter(t => (t.exitTime || 0) >= todayStart.getTime());
   const todayPnl = closedToday.reduce((s, t) => s + (t.pnlPercent || 0), 0);
@@ -933,7 +948,7 @@ function renderTradeLog(experiments, prices) {
       </div>
     </div>
     <div class="trade-hint">
-      💡 Tüm PnL değerleri işlem komisyonları düşülmüş <b>net</b> değerlerdir.
+      💡 Tüm PnL değerleri komisyon ve kayma düşülmüş <b>net</b> değerlerdir. ⏳ AÇIK satırlar anlık fiyatla hesaplanır (${openTrades.length} açık pozisyon).
     </div>`;
 
   function formatTime(ts) {
@@ -949,7 +964,7 @@ function renderTradeLog(experiments, prices) {
 
   function reasonTag(reason, isOpen, isLive) {
     if (isOpen) {
-      if (isLive) return '<span class="trade-tag open" style="background:#059669;color:#fff;font-weight:700">🟢 CANLI (Testnet)</span>';
+      if (isLive) return '<span class="trade-tag open" style="background:#059669;color:#fff;font-weight:700">🟢 CANLI</span>';
       return '<span class="trade-tag open">⏳ AÇIK</span>';
     }
     const map = {
@@ -980,15 +995,17 @@ function renderTradeLog(experiments, prices) {
         </tr>
       </thead>
       <tbody>
-        ${allTrades.slice(0, 50).map(t => {
+        ${rows.slice(0, 80).map(t => {
           const pnl = t.pnlPercent;
           const pnlStr = pnl != null ? `${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%` : '-';
           const pnlClass = pnl != null ? (pnl >= 0 ? 'pnl-positive' : 'pnl-negative') : '';
-          const exitCell = `${fmtPrice(t.exitPrice)}<br><span style="color:var(--text-dim);font-size:10px">${t.exitTime ? formatTime(t.exitTime) : ''}</span>`;
+          const exitCell = t.isOpen
+            ? `${fmtPrice(t.nowPrice)}<br><span style="color:var(--text-dim);font-size:10px">şimdi</span>`
+            : `${fmtPrice(t.exitPrice)}<br><span style="color:var(--text-dim);font-size:10px">${t.exitTime ? formatTime(t.exitTime) : ''}</span>`;
           return `
             <tr>
               <td>${sideTag(t.side)}</td>
-              <td>${reasonTag(t.exitReason, false, t.isLive)}</td>
+              <td>${reasonTag(t.exitReason, t.isOpen, t.isLive)}</td>
               <td><a class="coin-link" href="https://www.binance.com/en/trade/${(t.coin || '').replace('USDT', '')}_USDT" target="_blank">${(t.coin || '').replace('USDT', '')}</a></td>
               <td>${fmtPrice(t.entryPrice)}<br><span style="color:var(--text-dim);font-size:10px">${formatTime(t.entryTime)}</span></td>
               <td>${exitCell}</td>
