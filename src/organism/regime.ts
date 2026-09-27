@@ -104,7 +104,7 @@ export class RegimeDetector {
 	}
 
 	private async fetchRegime(): Promise<{ state: MarketRegime; distancePct: number; btcPrice: number; sma200: number; sma50: number }> {
-		const res = await fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=4h&limit=210');
+		const res = await fetch(`${process.env.FUTURES_REST_URL || 'https://fapi.binance.com'}/fapi/v1/klines?symbol=BTCUSDT&interval=4h&limit=210`);
 		if (!res.ok) throw new Error(`HTTP ${res.status}`);
 		const data = (await res.json()) as any[];
 		if (!Array.isArray(data) || data.length < SLOW_PERIOD) {

@@ -33,7 +33,7 @@ for (const f of filesToBackup) {
 const coins = [
 	'BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT',
 	'ADAUSDT', 'AVAXUSDT', 'DOGEUSDT', 'LINKUSDT', 'DOTUSDT',
-	'MATICUSDT', 'NEARUSDT', 'SUIUSDT', 'APTUSDT', 'AAVEUSDT',
+	'POLUSDT', 'NEARUSDT', 'SUIUSDT', 'APTUSDT', 'AAVEUSDT',
 	'UNIUSDT', 'ARBUSDT', 'OPUSDT', 'FILUSDT', 'ATOMUSDT',
 	'INJUSDT', 'RENDERUSDT', 'LTCUSDT', 'TRXUSDT', 'ICPUSDT',
 ];
@@ -169,11 +169,14 @@ async function cleanExchange() {
 		for (const pos of openPositions) {
 			const symbol = pos.symbol;
 			const contracts = Math.abs(Number(pos.contracts));
-			const side = Number(pos.contracts) > 0 ? 'sell' : 'buy';
+			// CCXT'de contracts her zaman pozitiftir; yön pos.side alanındadır
+			const side = pos.side === 'short' ? 'buy' : 'sell';
 
 			try {
 				// Önce bekleyen emirleri iptal et
 				try { await exchange.cancelAllOrders(symbol); } catch (e) {}
+				// Stop/TP koşullu (algo) emirleri ayrı iptal edilir
+				try { await exchange.cancelAllOrders(symbol, { trigger: true }); } catch (e) {}
 				// Pozisyonu kapat
 				await exchange.createMarketOrder(symbol, side, contracts, undefined, { reduceOnly: true });
 				console.log(`   ✅ ${symbol} kapatıldı (${contracts} kontrat)`);

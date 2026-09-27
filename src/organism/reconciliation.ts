@@ -2,6 +2,8 @@ import { log, logError } from '../core/utils.js';
 import { config } from '../core/config.js';
 import type { Experiment } from './experiment-runner.js';
 import type { LiveBroker } from './live-broker.js';
+import { roundTripCostPct } from './costs.js';
+import { fundingTracker } from './funding.js';
 
 /**
  * Sunucu başlangıcında veya periyodik olarak borsa (Binance) ile
@@ -12,15 +14,29 @@ import type { LiveBroker } from './live-broker.js';
  * 2. Risk yöneticisindeki açık işlem sayacını borsadaki gerçek pozisyon sayısına eşitler.
  * 3. Borsada açık olan fakat organizmada bulunmayan "öksüz" (orphan) pozisyonları tespit edip raporlar.
  */
+// Aynı anda iki mutabakat koşmasın (15dk'lık tetik + başlangıç çağrısı çakışabilir)
+let reconcileInFlight = false;
+
 export async function reconcilePositions(experiments: Experiment[], liveBroker: LiveBroker): Promise<void> {
 	if (!liveBroker.isLive()) {
 		log('[RECONCILIATION] ℹ️ Live trading devrede değil (Dry-run). Borsa senkronizasyonu atlandı.');
 		return;
 	}
+	if (reconcileInFlight) {
+		log('[RECONCILIATION] ⏭️ Önceki mutabakat hâlâ sürüyor, bu tur atlandı.');
+		return;
+	}
+	reconcileInFlight = true;
 
 	try {
 		log('[RECONCILIATION] 🔄 Borsa pozisyonları taranıyor ve senkronize ediliyor...');
 		const exchangePositions = await liveBroker.fetchOpenPositions();
+		if (exchangePositions === null) {
+			// Borsa sorgusu başarısız: "pozisyon yok" ile karıştırılırsa tüm canlı
+			// pozisyonlar kapanmış sayılır ve sonraki turda öksüz diye kapatılır.
+			logError('[RECONCILIATION] ⚠️ Borsa pozisyonları alınamadı — mutabakat bu tur atlandı.');
+			return;
+		}
 
 		const exchangePositionsByCoin = new Map<string, any>();
 		for (const p of exchangePositions) {
@@ -74,7 +90,8 @@ export async function reconcilePositions(experiments: Experiment[], liveBroker: 
 					}
 
 					const sign = pos.side === 'short' ? -1 : 1;
-					const actualRoundTripFee = pos.entryFeeRate ? pos.entryFeeRate * 2 : 0.10;
+					const actualRoundTripFee =
+						roundTripCostPct(pos) + fundingTracker.fundingCostPct(pos.coin, pos.side, pos.entryTime, Date.now());
 					const pnlPct = sign * ((exitPrice - pos.entryPrice) / pos.entryPrice) * 100 - actualRoundTripFee;
 
 					pos.exitPrice = exitPrice;
@@ -99,15 +116,17 @@ export async function reconcilePositions(experiments: Experiment[], liveBroker: 
 		const trackedCoins = new Set<string>();
 		for (const exp of experiments) {
 			for (const pos of exp.positions) {
-				if (pos.isLive) trackedCoins.add(pos.coin);
+				// livePending: giriş emri borsada dolmuş ama yanıt henüz işlenmemiş
+				// olabilir — öksüz sanılıp kapatılmamalı.
+				if (pos.isLive || pos.livePending) trackedCoins.add(pos.coin);
 			}
 		}
 
 		for (const [coin, exPos] of exchangePositionsByCoin.entries()) {
 			if (!trackedCoins.has(coin)) {
 				const contracts = Math.abs(Number(exPos.contracts || 0));
-				const side = Number(exPos.contracts) > 0 ? 'long' : 'short';
-				const exitSide = side === 'long' ? 'sell' : 'buy';
+				// CCXT'de contracts her zaman pozitiftir; yön exPos.side alanındadır
+				const side = exPos.side === 'short' ? 'short' : 'long';
 				logError(
 					`[RECONCILIATION] 🚨 ÖKSÜZ POZİSYON TESPİT EDİLDİ: ${coin} (${contracts} kontrat, ${side}). Otomatik kapatılıyor...`,
 				);
@@ -132,5 +151,7 @@ export async function reconcilePositions(experiments: Experiment[], liveBroker: 
 		);
 	} catch (error: any) {
 		logError(`[RECONCILIATION] Mutabakat hatası: ${error?.message || error}`);
+	} finally {
+		reconcileInFlight = false;
 	}
 }

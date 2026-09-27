@@ -31,7 +31,7 @@ async function getPrices(): Promise<Record<string, number>> {
 		return priceCache.data;
 	}
 	try {
-		const res = await fetch('https://api.binance.com/api/v3/ticker/price');
+		const res = await fetch(`${process.env.FUTURES_REST_URL || 'https://fapi.binance.com'}/fapi/v1/ticker/price`);
 		if (!res.ok) throw new Error(`HTTP ${res.status}`);
 		const list = (await res.json()) as { symbol: string; price: string }[];
 		const map: Record<string, number> = {};
