@@ -748,7 +748,8 @@ export class ExperimentRunner {
 		// kıyas içindir ve ASLA gerçek parayla işlem yapmaz.
 		const wantsLive =
 			this.liveBroker.isLive() &&
-			(exp.isLiveTradingEnabled || config.liveAllExperiments) &&
+			// LIVE_ALL_EXPERIMENTS, açıkça false işaretli (paper-only) deneyleri canlıya almaz
+			(exp.isLiveTradingEnabled === true || (config.liveAllExperiments && exp.isLiveTradingEnabled !== false)) &&
 			!isControlExperiment(exp.name);
 		if (wantsLive && coinTakenLive) {
 			log(`[EXPERIMENT] ℹ️ ${exp.name} | ${coin}: başka bir deneyin canlı pozisyonu var — bu giriş yalnızca paper.`);

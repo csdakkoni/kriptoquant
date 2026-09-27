@@ -111,6 +111,9 @@ export class Evolver {
 				entryRule: { type: 'on_observation', observationType: edge.type } as EntryRule,
 				exitRule: { type: 'fixed_candles', n: edge.horizon } as ExitRule,
 				side: edge.side,
+				// Kendi ürettiği deneyler yalnızca paper'da koşar; canlıya
+				// alınması insan kararıdır (isLiveTradingEnabled elle açılır).
+				isLiveTradingEnabled: false,
 				coins: COINS,
 				status: 'running',
 				startedAt: Date.now(),
@@ -223,6 +226,7 @@ export class Evolver {
 			// melez üretti: 6 işlem, %0 kazanma, -8.47%. Giriş kuralı yönünden
 			// bağımsız değildir — SMA aşağı kırılımı long'da tam tersini yapar.
 			side: bestEntry.side ?? 'long',
+			isLiveTradingEnabled: false, // yalnızca paper — canlıya alınması insan kararıdır
 			coins: COINS,
 			status: 'running',
 			startedAt: Date.now(),

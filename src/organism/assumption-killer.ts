@@ -49,6 +49,9 @@ const INTERVAL = '15m';
 
 export class AssumptionKiller {
 	private ws: WebSocket | null = null;
+	private pollTimer: NodeJS.Timeout | null = null;
+	private lastWsKlineAt = 0;
+	private restFallbackLogged = false;
 	private candleBuffers: Map<string, MarketTick[]> = new Map();
 	private observers: Observer[] = [];
 	private graph: KnowledgeGraph;
@@ -121,6 +124,12 @@ export class AssumptionKiller {
 		// Connect to Binance WebSocket for live data
 		this.connectWebSocket();
 
+		// Güvenlik ağı: WebSocket bağlı görünüp veri göndermezse (veya koparken
+		// mum kaçırılırsa) kapanan mumlar REST'ten çekilir. Dakikada bir kontrol.
+		this.pollTimer = setInterval(() => {
+			this.backfillMissedCandles().catch((err) => logError(`[Organism] REST yedek hatası: ${err}`));
+		}, 60_000);
+
 		const expCount = this.experimentRunner.getExperiments().filter(e => e.status === 'running').length;
 		log(`[Organism] Watching ${COINS.length} coins on ${INTERVAL}. ${this.observers.length} observers active.`);
 		log(`[Organism] ${expCount} deney çalışıyor.`);
@@ -128,6 +137,7 @@ export class AssumptionKiller {
 
 	stop(): void {
 		this.running = false;
+		if (this.pollTimer) clearInterval(this.pollTimer);
 		if (this.ws) {
 			this.ws.close();
 			this.ws = null;
@@ -182,7 +192,10 @@ export class AssumptionKiller {
 		this.ws.on('message', (data: Buffer) => {
 			try {
 				const parsed = JSON.parse(data.toString());
-				if (parsed.data?.k) this.handleKline(parsed.data);
+				if (parsed.data?.k) {
+					this.lastWsKlineAt = Date.now();
+					this.handleKline(parsed.data);
+				}
 			} catch {}
 		});
 
@@ -198,13 +211,58 @@ export class AssumptionKiller {
 		});
 	}
 
+	/**
+	 * Son kapanan 15dk mumu bir coinde 30 sn içinde gelmediyse REST'ten çeker.
+	 * WebSocket sağlıklıysa hiçbir şey yapmaz.
+	 */
+	private async backfillMissedCandles(): Promise<void> {
+		const PERIOD = 900_000;
+		const now = Date.now();
+		const lastClosedStart = Math.floor(now / PERIOD) * PERIOD - PERIOD;
+		if (now - (lastClosedStart + PERIOD) < 30_000) return; // WS'e süre tanı
+
+		const missing = COINS.filter((c) => {
+			const buf = this.candleBuffers.get(c);
+			return !buf || buf.length === 0 || buf[buf.length - 1].timestamp < lastClosedStart;
+		});
+		if (missing.length === 0) return;
+
+		if (!this.restFallbackLogged) {
+			const wsAge = this.lastWsKlineAt ? `${Math.round((now - this.lastWsKlineAt) / 1000)} sn önce` : 'hiç';
+			logError(`[Organism] ⚠️ ${missing.length} coinde son mum WebSocket'ten gelmedi (son WS verisi: ${wsAge}). REST yedeği devrede.`);
+			this.restFallbackLogged = true;
+		}
+
+		for (const coin of missing) {
+			try {
+				const res = await fetch(`${FUTURES_REST}/fapi/v1/klines?symbol=${coin}&interval=${INTERVAL}&limit=6`);
+				if (!res.ok) throw new Error(`HTTP ${res.status}`);
+				const data = (await res.json()) as any[];
+				// Son eleman hâlâ açık mumdur — yalnızca kapananlar, eskiden yeniye
+				for (const d of data.slice(0, -1)) {
+					this.ingestClosedCandle({
+						coin,
+						timestamp: Number(d[0]),
+						open: parseFloat(d[1]),
+						high: parseFloat(d[2]),
+						low: parseFloat(d[3]),
+						close: parseFloat(d[4]),
+						volume: parseFloat(d[5]),
+						interval: INTERVAL,
+					});
+				}
+			} catch (err) {
+				logError(`[Organism] ${coin} REST mum yedeği alınamadı: ${err}`);
+			}
+		}
+	}
+
 	private handleKline(data: any): void {
 		const k = data.k;
 		if (!k.x) return; // Only process closed candles
 
-		const coin = k.s as string;
-		const tick: MarketTick = {
-			coin,
+		this.ingestClosedCandle({
+			coin: k.s as string,
 			timestamp: k.t,
 			open: parseFloat(k.o),
 			high: parseFloat(k.h),
@@ -212,17 +270,21 @@ export class AssumptionKiller {
 			close: parseFloat(k.c),
 			volume: parseFloat(k.v),
 			interval: INTERVAL,
-		};
+		});
+	}
 
-		// Add to buffer — bootstrap'la çakışan aynı mum güncellenir, eklenmez
+	/**
+	 * Kapanmış mumu tampona ekler ve analiz döngüsünü çalıştırır.
+	 * Aynı mum iki kaynaktan (WebSocket + REST yedeği) gelebilir: zaten
+	 * işlenmiş mum TEKRAR işlenmez.
+	 */
+	private ingestClosedCandle(tick: MarketTick): void {
+		const coin = tick.coin;
 		if (!this.candleBuffers.has(coin)) this.candleBuffers.set(coin, []);
 		const buffer = this.candleBuffers.get(coin)!;
 		const last = buffer[buffer.length - 1];
-		if (last && last.timestamp === tick.timestamp) {
-			buffer[buffer.length - 1] = tick;
-		} else {
-			buffer.push(tick);
-		}
+		if (last && last.timestamp >= tick.timestamp) return;
+		buffer.push(tick);
 
 		// Keep last 500 candles per coin
 		if (buffer.length > 500) buffer.splice(0, buffer.length - 500);
@@ -320,7 +382,7 @@ export class AssumptionKiller {
 		// Kanıttan yeni deney doğur, terfi/öldürme kararlarını ver
 		if (this.tickCount % 20 === 0) {
 			try {
-				// this.evolver.evolve(this.scoreboard); // KAPALI: 21 Eylul - Tek Strateji Dönemi
+				this.evolver.evolve(this.scoreboard);
 			} catch (err) {
 				logError(`[Organism] Evolver error: ${err}`);
 			}

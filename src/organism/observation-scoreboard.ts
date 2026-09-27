@@ -9,6 +9,7 @@
 // ============================================================================
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { paperRoundTripCostPct } from './costs.js';
 import { join } from 'node:path';
 import type { Observation, MarketTick } from './types.js';
 
@@ -154,7 +155,8 @@ export class ObservationScoreboard {
 	 */
 	getProvenEdges(): Array<{ type: string; horizon: number; avgRet: number; hitRate: number; n: number; side: 'long' | 'short' }> {
 		const MIN_SAMPLE = 20;
-		const MIN_ABS_RET = 0.25; // %0.10 maliyet + anlamlılık payı
+		// Gerçekçi gidiş-dönüş maliyeti (komisyon + kayma) + %0.15 anlamlılık payı
+		const MIN_ABS_RET = paperRoundTripCostPct() + 0.15;
 		const MIN_HIT_RATE = 0.55;
 
 		const out = [];
