@@ -170,6 +170,13 @@ describe('Gözlem karnesi karar veriyor mu', () => {
 		expect(born[0].entryRule).toMatchObject({ type: 'on_observation', observationType: 'divergence' });
 	});
 
+	it('kendi ürettiği deney yalnızca paper olmalı (canlıya gidemez)', () => {
+		const { evolver, runner } = setup([]);
+		evolver.evolve(scoreboardWith('divergence', 4, 1.2, 40));
+		const born = runner.getExperiments().find(e => e.name.startsWith('[KANIT]'))!;
+		expect(born.isLiveTradingEnabled).toBe(false);
+	});
+
 	it('deneyin GİRİŞİ ve TUTMA SÜRESİ kanıtla aynı olmalı (isim-kural uyumsuzluğu olmasın)', () => {
 		const { evolver, runner } = setup([]);
 		evolver.evolve(scoreboardWith('volatility_squeeze', 16, 0.9, 40));

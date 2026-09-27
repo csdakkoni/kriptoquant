@@ -382,7 +382,7 @@ export class AssumptionKiller {
 		// Kanıttan yeni deney doğur, terfi/öldürme kararlarını ver
 		if (this.tickCount % 20 === 0) {
 			try {
-				// this.evolver.evolve(this.scoreboard); // KAPALI: 21 Eylul - Tek Strateji Dönemi
+				this.evolver.evolve(this.scoreboard);
 			} catch (err) {
 				logError(`[Organism] Evolver error: ${err}`);
 			}
