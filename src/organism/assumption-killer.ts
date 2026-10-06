@@ -26,6 +26,7 @@ import { RegimeDetector } from './regime.js';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fundingTracker } from './funding.js';
+import { config } from '../core/config.js';
 
 // Fiyat verisi FUTURES piyasasından alınır: işlemler de orada yapılacağı için
 // paper sonuçları ile canlı sonuçlar aynı fiyatlara dayanmalı (spot ≠ futures).
@@ -379,8 +380,8 @@ export class AssumptionKiller {
 			logError(`[Organism] Experiment runner error: ${err}`);
 		}
 
-		// Kanıttan yeni deney doğur, terfi/öldürme kararlarını ver
-		if (this.tickCount % 20 === 0) {
+		// Kanıttan yeni deney doğur, terfi/öldürme kararlarını ver (EVOLVER_ENABLED=true ise)
+		if (config.evolverEnabled && this.tickCount % 20 === 0) {
 			try {
 				this.evolver.evolve(this.scoreboard);
 			} catch (err) {

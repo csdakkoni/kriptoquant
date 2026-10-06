@@ -70,6 +70,11 @@ export function isControlExperiment(name: string): boolean {
 	return (name || '').startsWith('Random ');
 }
 
+/** Evolver'ın kendi ürettiği deneyler */
+export function isEvolvedExperiment(name: string): boolean {
+	return /^\[(KANIT|CROSS|SYNTH)\]/.test(name || '');
+}
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type ExperimentStatus = 'running' | 'completed' | 'failed';
@@ -1155,6 +1160,20 @@ export class ExperimentRunner {
 			}
 		}
 		if (changed) this.experiments = [...byKey.values()];
+
+		// Evolver kapalıyken onun ürettiği deneyler (ve işlemleri) kaldırılır.
+		// Silmeden önce ayrı bir dosyaya yedeklenir; kullanıcının kendi deneyleri
+		// ve kontroller olduğu gibi kalır.
+		if (!config.evolverEnabled) {
+			const evolved = this.experiments.filter((e) => isEvolvedExperiment(e.name));
+			if (evolved.length > 0) {
+				const backup = join(STATE_DIR, `evolver-deneyleri-yedek-${Date.now()}.json`);
+				writeFileSync(backup, JSON.stringify(evolved, null, 2));
+				this.experiments = this.experiments.filter((e) => !isEvolvedExperiment(e.name));
+				log(`[EXPERIMENT] 🧹 Evolver kapalı: ${evolved.length} otomatik deney kaldırıldı (yedek: ${backup})`);
+				changed = true;
+			}
+		}
 
 		// MATIC, Binance'te POL olarak yeniden adlandırıldı
 		for (const e of this.experiments) {
