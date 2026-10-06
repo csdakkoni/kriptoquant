@@ -8,7 +8,7 @@
 
 import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { rmSync, existsSync } from 'node:fs';
-import { ExperimentRunner, MAX_HOLD_HOURS, type Experiment, type PaperPosition } from '../src/organism/experiment-runner.js';
+import { ExperimentRunner, type Experiment, type PaperPosition } from '../src/organism/experiment-runner.js';
 import { KnowledgeGraph } from '../src/organism/knowledge-graph.js';
 import type { MarketTick } from '../src/organism/types.js';
 import type { MarketRegime } from '../src/organism/regime.js';
@@ -405,17 +405,5 @@ describe('Mum içi çıkış', () => {
 		feed(runner, ohlc([[100, 100, 100, 100], [100, 100, 100, 100], [100, 101.3, 99.5, 100.1]]));
 		expect(exp.closedPositions[0]?.exitReason, 'short stopu yukarı iğneyi görmedi').toBe('stop_loss');
 		expect(exp.closedPositions[0].pnlPercent).toBeCloseTo(-1 + NET, 6);
-	});
-
-	it('stop/hedefe hiç değmeyen pozisyon azami tutma süresi dolunca kapanmalı', () => {
-		const exp = mkExperiment({ exitRule: { type: 'stop_and_target', stopPercent: 3, targetPercent: 6 } });
-		const runner = setupRunner(exp);
-		const candles = (MAX_HOLD_HOURS * 3_600_000) / CANDLE_MS;
-		const ticks = makeTicks(Array.from({ length: candles + 3 }, (_, i) => 100 + (i % 2) * 0.1));
-		feed(runner, ticks, candles); // süre henüz dolmadı
-		expect(exp.closedPositions.length, 'süre dolmadan kapandı').toBe(0);
-		feed(runner, ticks, candles + 2);
-		expect(exp.closedPositions.length, 'süre dolduğu hâlde pozisyon kotayı tutmaya devam etti').toBe(1);
-		expect(exp.closedPositions[0].exitReason).toBe('fixed_exit');
 	});
 });

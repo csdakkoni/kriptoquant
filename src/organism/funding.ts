@@ -23,7 +23,7 @@ const KEEP_MS = 45 * 24 * 60 * 60 * 1000; // 45 gün geçmiş yeter
 /** Veri yokken 8 saat başına varsayılan funding maliyeti (%) */
 export const DEFAULT_FUNDING_PCT_PER_8H = 0.01;
 
-interface FundingRecord {
+export interface FundingRecord {
 	time: number;
 	rate: number; // ondalık (0.0001 = %0.01)
 }
@@ -101,6 +101,11 @@ export class FundingTracker {
 		}
 		this.save();
 		if (ok < coins.length) log(`[FUNDING] ${ok}/${coins.length} coinin funding verisi güncellendi.`);
+	}
+
+	/** Coinin bilinen en son funding kaydı (yoksa undefined) */
+	latest(coin: string): FundingRecord | undefined {
+		return this.rates.get(coin)?.at(-1);
 	}
 
 	/**

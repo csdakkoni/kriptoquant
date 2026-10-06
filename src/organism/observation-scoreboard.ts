@@ -6,6 +6,11 @@
 // yaptığını otomatik ölçer. Böylece hangi gözlemcinin gözü keskin, hangisi
 // gürültü üretiyor — veriyle sıralanır. Güçlü çıkan tip, yeni deneylerin
 // giriş sinyali adayıdır (ters çalışan tip de tersine sinyal adayı!).
+//
+// 7 Eki: Getiri artık PİYASAYA GÖRE ölçülüyor (coinin getirisi eksi aynı
+// aralıkta tüm coinlerin ortalama getirisi). Ham getiride piyasa düşünce her
+// gözlem "short kanıtı", yükselince "long kanıtı" gibi görünüyordu; ölçülen
+// şey gözlem değil piyasanın yönüydü.
 // ============================================================================
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
@@ -20,6 +25,11 @@ const SCOREBOARD_FILE = join(STATE_DIR, 'observation-scoreboard.json');
 const CANDLE_MS = 900_000; // 15m
 // Ölçüm ufukları (mum cinsinden): 4 = 1 saat, 16 = 4 saat, 48 = 12 saat, 96 = 24 saat, 192 = 48 saat
 export const HORIZONS = [4, 16, 48, 96, 192] as const;
+
+/** Karne formatı: 2 = piyasaya göre getiri. Eski (ham) karne yüklenince arşivlenip sıfırlanır. */
+const SCOREBOARD_VERSION = 2;
+/** Piyasa ortalaması için en az bu kadar coinin verisi gerekir */
+const MIN_MARKET_COINS = 5;
 
 const COOLDOWN_CANDLES = 4; // Aynı tip+coin için 1 saat içinde tekrar kayıt alma
 const MAX_PENDING = 500;
@@ -39,6 +49,7 @@ interface ScoreCell {
 }
 
 interface ScoreboardState {
+	version?: number;
 	pending: PendingEntry[];
 	// scores[type][horizon] = ScoreCell — ana karar mekanizması
 	scores: Record<string, Record<string, ScoreCell>>;
@@ -48,7 +59,7 @@ interface ScoreboardState {
 }
 
 export class ObservationScoreboard {
-	private state: ScoreboardState = { pending: [], scores: {}, coinBreakdown: {} };
+	private state: ScoreboardState = { version: SCOREBOARD_VERSION, pending: [], scores: {}, coinBreakdown: {} };
 	private dirty = false;
 
 	constructor() {
@@ -104,7 +115,10 @@ export class ObservationScoreboard {
 				const target = candles.find((c) => c.timestamp >= targetTs);
 				if (!target) continue; // buffer'dan düşmüş — ölçemeyiz, sonraki update'te de bulunamaz ama zararsız
 
-				const retPct = ((target.close - p.price) / p.price) * 100;
+				// Piyasaya göre getiri: coinin getirisi − tüm coinlerin aynı aralıktaki ortalaması
+				const market = marketReturnPct(ticks, p.ts, targetTs);
+				if (market === undefined) continue;
+				const retPct = ((target.close - p.price) / p.price) * 100 - market;
 				const typeScores = (this.state.scores[p.type] ??= {});
 				const cell = (typeScores[String(h)] ??= { n: 0, sumRet: 0, pos: 0 });
 				cell.n++;
@@ -186,7 +200,16 @@ export class ObservationScoreboard {
 	private load(): void {
 		if (existsSync(SCOREBOARD_FILE)) {
 			try {
-				this.state = JSON.parse(readFileSync(SCOREBOARD_FILE, 'utf-8'));
+				const loaded = JSON.parse(readFileSync(SCOREBOARD_FILE, 'utf-8')) as ScoreboardState;
+				if ((loaded.version ?? 1) < SCOREBOARD_VERSION) {
+					// Ham getiriyle ölçülmüş eski karne yeni ölçüyle karışmasın: arşivle, sıfırdan başla.
+					// Bekleyen ölçümler korunur (fiyatları kayıtlı, yeni yöntemle ölçülürler).
+					writeFileSync(join(STATE_DIR, `observation-scoreboard-ham-yedek-${Date.now()}.json`), JSON.stringify(loaded));
+					this.state = { version: SCOREBOARD_VERSION, pending: loaded.pending || [], scores: {}, coinBreakdown: {} };
+					this.save();
+					return;
+				}
+				this.state = loaded;
 				return;
 			} catch {}
 		}
@@ -196,4 +219,22 @@ export class ObservationScoreboard {
 		if (!existsSync(STATE_DIR)) mkdirSync(STATE_DIR, { recursive: true });
 		writeFileSync(SCOREBOARD_FILE, JSON.stringify(this.state, null, 2));
 	}
+}
+
+/**
+ * (fromTs → toTs) aralığında tüm coinlerin ortalama getirisi (%).
+ * fromTs anındaki mumun kapanışından, toTs'ye eşit/sonraki ilk mumun kapanışına.
+ * Yeterli coin yoksa undefined.
+ */
+export function marketReturnPct(ticks: Map<string, MarketTick[]>, fromTs: number, toTs: number): number | undefined {
+	let sum = 0;
+	let n = 0;
+	for (const candles of ticks.values()) {
+		const start = candles.find((c) => c.timestamp === fromTs);
+		const end = candles.find((c) => c.timestamp >= toTs);
+		if (!start || !end || !(start.close > 0)) continue;
+		sum += ((end.close - start.close) / start.close) * 100;
+		n++;
+	}
+	return n >= MIN_MARKET_COINS ? sum / n : undefined;
 }

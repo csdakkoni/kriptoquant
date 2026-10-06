@@ -16,7 +16,7 @@
 import { WebSocket } from 'ws';
 import { log, logError } from '../core/utils.js';
 import type { MarketTick, Observer, Observation } from './types.js';
-import { DivergenceObserver, SilenceObserver, HerdObserver, SurpriseObserver, LiquidityWickObserver, BollingerSqueezeObserver } from './observers.js';
+import { DivergenceObserver, SilenceObserver, HerdObserver, SurpriseObserver, LiquidityWickObserver, BollingerSqueezeObserver, FundingExtremeObserver } from './observers.js';
 import { KnowledgeGraph } from './knowledge-graph.js';
 import { ObservationScoreboard } from './observation-scoreboard.js';
 import { ExperimentRunner } from './experiment-runner.js';
@@ -26,6 +26,7 @@ import { RegimeDetector } from './regime.js';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fundingTracker } from './funding.js';
+import { dailyCandles } from './daily-candles.js';
 import { config } from '../core/config.js';
 
 // Fiyat verisi FUTURES piyasasından alınır: işlemler de orada yapılacağı için
@@ -90,6 +91,7 @@ export class AssumptionKiller {
 			new SurpriseObserver(),
 			new LiquidityWickObserver(),
 			new BollingerSqueezeObserver(),
+			new FundingExtremeObserver((coin) => fundingTracker.latest(coin)),
 		];
 
 	}
@@ -115,6 +117,8 @@ export class AssumptionKiller {
 
 		// Funding geçmişini yükle (paper maliyetleri gerçek oranlarla hesaplanır)
 		await fundingTracker.refresh(COINS);
+		// Günlük mumlar (günlük trend deneyi için)
+		await dailyCandles.refresh(COINS, true);
 
 		// Borsa ile pozisyon mutabakatı (Reconciliation)
 		await this.experimentRunner.reconcile();
@@ -359,6 +363,8 @@ export class AssumptionKiller {
 
 			// Yeni funding kayıtlarını çek (API anahtarı gerekmez)
 			fundingTracker.refresh(COINS).catch(err => logError(String(err)));
+			// Günlük mumlar (saatte bir tazelenir, arada çağrılar atlanır)
+			dailyCandles.refresh(COINS).catch(err => logError(String(err)));
 		}
 
 		// Rejim dedektörünü canlı tut (bayatsa arka planda tazelenir)

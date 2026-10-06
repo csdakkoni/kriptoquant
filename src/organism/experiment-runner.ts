@@ -19,6 +19,7 @@ import { KnowledgeGraph } from './knowledge-graph.js';
 import { LiveBroker } from './live-broker.js';
 import { roundTripCostPct } from './costs.js';
 import { fundingTracker } from './funding.js';
+import { dailyCandles } from './daily-candles.js';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -26,14 +27,6 @@ import { randomUUID } from 'node:crypto';
 // Testlerin gerçek durumu ezmemesi için dizin ORGANISM_DATA_DIR ile değiştirilebilir
 const STATE_DIR = process.env.ORGANISM_DATA_DIR || join(process.cwd(), 'organism-data');
 const EXPERIMENTS_FILE = join(STATE_DIR, 'experiments.json');
-
-/**
- * Stop/hedef kurallı pozisyonlar için azami tutma süresi (saat).
- * Sakin piyasada %3/%6 gibi geniş eşiklere günlerce değilmeyebilir; süre sınırı
- * olmazsa pozisyonlar 3'lük kotayı doldurup deneyi (kontroller dahil) dondurur.
- * Kontroller ve deneyler aynı kurala tabidir, kıyas adil kalır. .env: MAX_HOLD_HOURS
- */
-export const MAX_HOLD_HOURS = Number(process.env.MAX_HOLD_HOURS) || 48;
 
 // İşlem maliyetleri (komisyon + kayma + funding) costs.ts ve funding.ts'te.
 
@@ -90,6 +83,7 @@ export type EntryRule =
 	| { type: 'rally_from_low'; lookback: number; rallyPercent: number } // Dipten %X yükseliş ANINDA gir (kesişim — rally fade short)
 	| { type: 'anti_breakout'; thresholdPercent: number } // Büyük yeşil mumlarda (hacimli kırılım) TERSİNE gir (Tuzak avcısı)
 	| { type: 'random_in_hours'; probability: number; startHourUtc: number; endHourUtc: number } // Sadece belirli UTC saat aralığında rastgele gir
+	| { type: 'daily_breakout'; lookbackDays: number } // Fiyat son N günün en yüksek fiyatını aşınca gir (günlük trend takibi)
 	| { type: 'always_long' };                         // Always be in position
 
 export type ExitRule =
@@ -283,6 +277,27 @@ export function createDefaultExperiments(): Experiment[] {
 			exitRule: { type: 'stop_and_target', stopPercent: 3.0, targetPercent: 6.0 },
 			coins,
 		},
+		{
+			...base(),
+			id: randomUUID(),
+			name: 'Funding Kalabalık Long → SHORT (3%/6%)',
+			hypothesis: 'Funding normalin 3 katını aşınca kalabalık kaldıraçla long\'a yığılmıştır; küçük bir düşüş zorunlu satışlarla büyür',
+			sourceAssumption: 'entry-signal-matters',
+			entryRule: { type: 'on_observation', observationType: 'funding_crowded_long' },
+			exitRule: { type: 'stop_and_target', stopPercent: 3.0, targetPercent: 6.0 },
+			side: 'short' as const,
+			coins,
+		},
+		{
+			...base(),
+			id: randomUUID(),
+			name: 'Günlük Trend Kırılımı (20 gün zirvesi, %10 iz süren stop)',
+			hypothesis: 'Son 20 günün zirvesini kıran coin trendini sürdürür; günlük ölçekte maliyet önemsizdir, kazanç az sayıda büyük trendden gelir',
+			sourceAssumption: 'trend-exists',
+			entryRule: { type: 'daily_breakout', lookbackDays: 20 },
+			exitRule: { type: 'trailing_stop', percent: 10 },
+			coins,
+		},
 		// ── KONTROL GRUPLARI (yazı-tura) ──
 		// Strateji değil, ölçü çubuğu: girişi tamamen rastgele, çıkışı yukarıdaki
 		// deneylerle AYNI. Bir deney aynı dönemde bunları net olarak yenemiyorsa
@@ -336,6 +351,7 @@ export class ExperimentRunner {
 	private regimeProvider: () => MarketRegime = () => 'UNKNOWN';
 
 	private liveBroker: LiveBroker;
+	private benchmarkRecorded = false;
 
 	constructor(graph: KnowledgeGraph) {
 		this.graph = graph;
@@ -369,6 +385,7 @@ export class ExperimentRunner {
 
 	processTick(ticks: Map<string, MarketTick[]>, observations: Observation[]): void {
 		this.tickCount++;
+		this.recordBenchmarkStart(ticks);
 
 		for (const exp of this.experiments) {
 			if (exp.status !== 'running') continue;
@@ -512,6 +529,14 @@ export class ExperimentRunner {
 				return observations.some(o =>
 					o.type === rule.observationType && o.coins.includes(coin)
 				);
+
+			case 'daily_breakout': {
+				// Kesişim: önceki 15dk kapanışı seviyenin altında/eşit, şimdiki üstünde.
+				// Kırılımdan sonra her mumda yeniden alım yapılmaz.
+				const level = dailyCandles.highestHigh(coin, rule.lookbackDays);
+				if (level === undefined || candles.length < 2) return false;
+				return candles[candles.length - 2].close <= level && candles[candles.length - 1].close > level;
+			}
 
 			case 'price_cross_sma': {
 				if (candles.length < rule.period + 1) return false;
@@ -700,6 +725,9 @@ export class ExperimentRunner {
 			case 'on_observation':
 				return `"${rule.observationType}" gözlemi bekliyor — gözlemciler bu sinyali üretmedi`;
 
+			case 'daily_breakout':
+				return `Hiçbir coin son ${rule.lookbackDays} günün zirvesini aşmadı — kırılım bekleniyor`;
+
 			case 'random_in_hours': {
 				const anyCandles = [...ticks.values()].find(c => c.length > 0);
 				if (!anyCandles) return undefined;
@@ -820,11 +848,7 @@ export class ExperimentRunner {
 			// Aksi halde entry tamamlanmadan çıkış tetiklenir ve borsada pozisyon asılı kalır.
 			if (pos.livePending) continue;
 
-			const exit =
-				this.checkExit(exp.exitRule, pos, tick) ??
-				(exp.exitRule.type !== 'fixed_candles' && tick.timestamp - pos.entryTime >= MAX_HOLD_HOURS * 3_600_000
-					? { reason: 'fixed_exit', price: tick.close }
-					: null);
+			const exit = this.checkExit(exp.exitRule, pos, tick);
 			if (exit) {
 				this.closePosition(exp, pos, tick, exit.reason, exit.price);
 				continue;
@@ -1122,6 +1146,25 @@ export class ExperimentRunner {
 			log(`[EXPERIMENT] Popülasyon tabanı korundu: ${spawned} deney yeniden doğdu.`);
 			this.save();
 		}
+	}
+
+	/**
+	 * "BTC al ve bekle" kıyası: ilk görülen BTC fiyatını bir kez kaydeder.
+	 * Rapor, deneylerin bu basit yoldan iyi olup olmadığını buradan hesaplar.
+	 */
+	private recordBenchmarkStart(ticks: Map<string, MarketTick[]>): void {
+		if (this.benchmarkRecorded) return;
+		const file = join(STATE_DIR, 'benchmark.json');
+		if (existsSync(file)) {
+			this.benchmarkRecorded = true;
+			return;
+		}
+		const btc = ticks.get('BTCUSDT');
+		const last = btc?.[btc.length - 1];
+		if (!last) return;
+		if (!existsSync(STATE_DIR)) mkdirSync(STATE_DIR, { recursive: true });
+		writeFileSync(file, JSON.stringify({ coin: 'BTCUSDT', startTime: last.timestamp, startPrice: last.close }, null, 2));
+		this.benchmarkRecorded = true;
 	}
 
 	// ─── Persistence ──────────────────────────────────────────────────

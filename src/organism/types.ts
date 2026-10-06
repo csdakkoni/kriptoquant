@@ -26,6 +26,8 @@ export type ObservationType =
 	| 'liquidity_sweep_high' // Hızlıca yukarı iğne atıp kapanışı düşük yapma
 	| 'liquidity_sweep_low'  // Hızlıca aşağı iğne atıp kapanışı yüksek yapma
 	| 'silence'       // Extreme lack of activity
+	| 'funding_crowded_long'  // Funding oranı aşırı pozitif: kalabalık kaldıraçlı long'da
+	| 'funding_crowded_short' // Funding oranı negatif: kalabalık short'ta
 	| 'anomaly';      // Something that doesn't fit any category
 
 export interface KnowledgeNode {

@@ -152,9 +152,11 @@ function buildInsights(ctx: {
 	trades: Trade[];
 	sb: any;
 	regime: any;
+	benchmark?: { coin: string; startTime: number; startPrice: number } | null;
+	prices?: Record<string, number>;
 }): string[] {
 	const out: string[] = [];
-	const { experiments, trades, sb, regime } = ctx;
+	const { experiments, trades, sb, regime, benchmark, prices } = ctx;
 
 	// 1) Rejim durumu
 	if (regime?.state) {
@@ -235,6 +237,19 @@ function buildInsights(ctx: {
 		);
 	}
 
+	// 5b) "BTC al ve bekle" kıyası — hiçbir şey yapmamanın getirisi
+	const nowBtc = benchmark ? prices?.[benchmark.coin] : undefined;
+	if (benchmark?.startPrice && nowBtc) {
+		const ret = ((nowBtc - benchmark.startPrice) / benchmark.startPrice) * 100;
+		const net = ret - paperRoundTripCostPct();
+		const since = new Date(benchmark.startTime).toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul' });
+		const later = trades.filter((t) => (t.entryTime || 0) >= benchmark.startTime);
+		const sumLater = later.reduce((s, t) => s + (t.pnlPercent || 0), 0);
+		out.push(
+			`<b>BTC al ve bekle kıyası:</b> ${since}'den beri BTC ${pct(ret)} (maliyet sonrası <b style="color:${col(net)}">${pct(net)}</b>). Aynı dönemde açılıp kapanan ${later.length} işlemin toplamı ${pct(sumLater)}. Bir deney uzun vadede bunu geçemiyorsa, BTC alıp beklemek daha iyidir.`,
+		);
+	}
+
 	// 6) Karne bulguları
 	if (sb?.scores) {
 		const baselineScores = sb.scores['baseline_drift'] || {};
@@ -305,8 +320,9 @@ export function buildReportHtml(data: {
 	scoreboard: any;
 	regime: any;
 	prices?: Record<string, number>;
+	benchmark?: { coin: string; startTime: number; startPrice: number } | null;
 }): string {
-	const { experiments, scoreboard: sb, regime, prices } = data;
+	const { experiments, scoreboard: sb, regime, prices, benchmark } = data;
 	const now = new Date().toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' });
 
 	// Tüm kapanan işlemler (deney adı ve yönüyle zenginleştirilmiş)
@@ -324,7 +340,7 @@ export function buildReportHtml(data: {
 	dayStart.setHours(0, 0, 0, 0);
 	const today = summarize(trades.filter((t) => (t.exitTime || 0) >= dayStart.getTime()));
 
-	const insights = buildInsights({ experiments, trades, sb, regime });
+	const insights = buildInsights({ experiments, trades, sb, regime, benchmark, prices });
 
 	// ── Varsayımlar (durum grupları halinde) ──
 	const statusOrder = ['alive', 'killed', 'testing', 'queued'];
@@ -518,7 +534,7 @@ ${finishedRows ? `<h3>Tamamlananlar / Öldürülenler</h3><table><thead><tr><th>
 
 <h2>📊 Gözlem Karnesi</h2>
 <table><thead><tr><th>Tip</th>${SB_HORIZONS.map(([, label]) => `<th style="text-align:center">${label} sonra</th>`).join('')}<th>Değerlendirme</th></tr></thead><tbody>${sbRows || `<tr><td colspan="${SB_HORIZONS.length + 2}" style="color:#888">Henüz skor yok</td></tr>`}</tbody></table>
-<p class="note">Verdikt en kârlı zaman ufkuna göre verilir ve en az 20 ölçüm gerektirir. Referans: %0.20 gidiş-dönüş işlem maliyeti (komisyon + kayma).</p>
+<p class="note">Getiriler <b>piyasaya göre</b> ölçülür: coinin getirisi eksi aynı saatlerde tüm coinlerin ortalama getirisi. Böylece piyasanın genel yükselişi/düşüşü sinyal sanılmaz. Verdikt en kârlı zaman ufkuna göre verilir ve en az 20 ölçüm gerektirir. Referans: %0.20 gidiş-dönüş işlem maliyeti (komisyon + kayma).</p>
 
 <h2>⏳ Rapor Anındaki Açık İşlemler (${openTrades.length} pozisyon)</h2>
 <table><thead><tr><th>Coin</th><th style="text-align:center">Yön</th><th style="text-align:right">Giriş Fiyatı</th><th style="text-align:right">Şu Anki Fiyat</th><th style="text-align:center">Anlık PnL</th><th>Açık Kalma Süresi</th><th>Deney</th><th>Giriş Tarihi</th></tr></thead><tbody>${openRows || '<tr><td colspan="8" style="color:#888;text-align:center;padding:12px">Şu anda açık pozisyon bulunmuyor.</td></tr>'}</tbody></table>
