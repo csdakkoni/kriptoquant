@@ -27,6 +27,14 @@ import { randomUUID } from 'node:crypto';
 const STATE_DIR = process.env.ORGANISM_DATA_DIR || join(process.cwd(), 'organism-data');
 const EXPERIMENTS_FILE = join(STATE_DIR, 'experiments.json');
 
+/**
+ * Stop/hedef kurallı pozisyonlar için azami tutma süresi (saat).
+ * Sakin piyasada %3/%6 gibi geniş eşiklere günlerce değilmeyebilir; süre sınırı
+ * olmazsa pozisyonlar 3'lük kotayı doldurup deneyi (kontroller dahil) dondurur.
+ * Kontroller ve deneyler aynı kurala tabidir, kıyas adil kalır. .env: MAX_HOLD_HOURS
+ */
+export const MAX_HOLD_HOURS = Number(process.env.MAX_HOLD_HOURS) || 48;
+
 // İşlem maliyetleri (komisyon + kayma + funding) costs.ts ve funding.ts'te.
 
 /**
@@ -807,7 +815,11 @@ export class ExperimentRunner {
 			// Aksi halde entry tamamlanmadan çıkış tetiklenir ve borsada pozisyon asılı kalır.
 			if (pos.livePending) continue;
 
-			const exit = this.checkExit(exp.exitRule, pos, tick);
+			const exit =
+				this.checkExit(exp.exitRule, pos, tick) ??
+				(exp.exitRule.type !== 'fixed_candles' && tick.timestamp - pos.entryTime >= MAX_HOLD_HOURS * 3_600_000
+					? { reason: 'fixed_exit', price: tick.close }
+					: null);
 			if (exit) {
 				this.closePosition(exp, pos, tick, exit.reason, exit.price);
 				continue;
