@@ -33,4 +33,7 @@ export const config = {
 	},
 	isLiveTradingEnabled: process.env.LIVE_TRADING_ENABLED === 'true',
 	liveAllExperiments: process.env.LIVE_ALL_EXPERIMENTS === 'true',
+	// Evolver (gözlem karnesinden kendi kendine deney üretme). Kullanıcı kararıyla
+	// varsayılan KAPALI; açıkken ürettiği [KANIT]/[CROSS] deneyleri de korunur.
+	evolverEnabled: process.env.EVOLVER_ENABLED === 'true',
 };

@@ -155,7 +155,12 @@ function scoreboardWith(type: string, horizon: number, retPct: number, n: number
 			const close = h === horizon ? 100 * (1 + retPct / 100) : 100;
 			after.push({ coin, timestamp: at + h * CANDLE, open: 100, high: 100, low: 100, close, volume: 1, interval: '15m' });
 		}
-		sb.update(new Map([[coin, after]]));
+		// Karne getiriyi piyasaya göre ölçer: yanında yerinde sayan 5 coin olsun
+		// (piyasa ortalaması ≈ getiri/6, ölçülen göreli getiri ≈ getirinin 5/6'sı)
+		const flat = (c: string) => after.map((t) => ({ ...t, coin: c, close: 100 }));
+		const market = new Map<string, MarketTick[]>([[coin, after]]);
+		for (const c of ['F1', 'F2', 'F3', 'F4', 'F5']) market.set(c, flat(c));
+		sb.update(market);
 	}
 	return sb;
 }

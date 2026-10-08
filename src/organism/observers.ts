@@ -7,6 +7,7 @@
 
 import type { Observer, Observation, MarketTick } from './types.js';
 import { randomUUID } from 'node:crypto';
+import type { FundingRecord } from './funding.js';
 
 // ─── Utility ─────────────────────────────────────────────────────────────────
 
@@ -395,5 +396,63 @@ export class BollingerSqueezeObserver implements Observer {
 		}
 
 		return observations;
+	}
+}
+
+// ─── Funding Extreme Observer ───────────────────────────────────────────────
+// Futures'ta funding oranı, long ve short tarafın birbirine ödediği ücrettir.
+// Normalde 8 saatte %0.01'dir. Çok yükseldiğinde kalabalık kaldıraçla long'a
+// yığılmış demektir: fiyat biraz düşünce zorunlu satışlar (likidasyon) düşüşü
+// büyütür. Negatifse tersi — kalabalık short'tadır.
+// Her funding anında (8 saatte bir) coin başına EN FAZLA bir kez gözlem üretir
+// (oranlar 15 dakikada bir çekilir, gözlem en geç ~30 dk içinde düşer);
+// aynı oran tekrar tekrar sayılırsa karne aynı olayı defalarca ölçmüş olur.
+
+/** Bu oranın üstü "kalabalık long" sayılır (8 saat başına, ondalık: 0.0003 = %0.03 — normalin 3 katı) */
+export const FUNDING_HIGH = 0.0003;
+/** Bu oranın altı "kalabalık short" sayılır (%-0.01) */
+export const FUNDING_LOW = -0.0001;
+
+export class FundingExtremeObserver implements Observer {
+	readonly name = 'FundingExtremeObserver';
+	readonly description = 'Funding oranı aşırıya kaçtığında (kalabalık tek tarafa yığıldığında) gözlem üretir';
+	private lastSeen = new Map<string, number>();
+
+	constructor(private getLatest: (coin: string) => FundingRecord | undefined) {}
+
+	observe(ticks: Map<string, MarketTick[]>): Observation[] {
+		const out: Observation[] = [];
+		for (const [coin, candles] of ticks) {
+			const rec = this.getLatest(coin);
+			if (!rec || candles.length === 0 || this.lastSeen.get(coin) === rec.time) continue;
+			this.lastSeen.set(coin, rec.time);
+			// Yalnızca TAZE kayıt (son 1 saat) — yeniden başlatmada eski oran tekrar sayılmasın
+			const now = candles[candles.length - 1].timestamp + 900_000;
+			if (now - rec.time > 60 * 60 * 1000) continue;
+
+			const pct = (rec.rate * 100).toFixed(3);
+			if (rec.rate >= FUNDING_HIGH) {
+				out.push({
+					id: randomUUID(),
+					timestamp: Date.now(),
+					type: 'funding_crowded_long',
+					description: `${coin}: funding %${pct} (normalin ${(rec.rate / 0.0001).toFixed(1)} katı) — kalabalık kaldıraçlı long'da`,
+					confidence: Math.min(rec.rate / (FUNDING_HIGH * 3), 1),
+					coins: [coin],
+					relatedData: { fundingRate: rec.rate, fundingTime: rec.time },
+				});
+			} else if (rec.rate <= FUNDING_LOW) {
+				out.push({
+					id: randomUUID(),
+					timestamp: Date.now(),
+					type: 'funding_crowded_short',
+					description: `${coin}: funding %${pct} — kalabalık short'ta`,
+					confidence: Math.min(Math.abs(rec.rate) / 0.0005, 1),
+					coins: [coin],
+					relatedData: { fundingRate: rec.rate, fundingTime: rec.time },
+				});
+			}
+		}
+		return out;
 	}
 }

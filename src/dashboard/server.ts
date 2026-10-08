@@ -150,6 +150,7 @@ export function startDashboardServer(port: number = 3000): any {
 						experiments: readJ('experiments.json') || [],
 						scoreboard: readJ('observation-scoreboard.json'),
 						regime: readJ('regime.json'),
+						benchmark: readJ('benchmark.json'),
 						prices,
 					});
 					res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -171,6 +172,7 @@ export function startDashboardServer(port: number = 3000): any {
 						experiments: readJ('experiments.json') || [],
 						scoreboard: readJ('observation-scoreboard.json'),
 						regime: readJ('regime.json'),
+						benchmark: readJ('benchmark.json'),
 						prices: {},
 					});
 					res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });

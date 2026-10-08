@@ -19,6 +19,7 @@ import { KnowledgeGraph } from './knowledge-graph.js';
 import { LiveBroker } from './live-broker.js';
 import { roundTripCostPct } from './costs.js';
 import { fundingTracker } from './funding.js';
+import { dailyCandles } from './daily-candles.js';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -62,6 +63,11 @@ export function isControlExperiment(name: string): boolean {
 	return (name || '').startsWith('Random ');
 }
 
+/** Evolver'ın kendi ürettiği deneyler */
+export function isEvolvedExperiment(name: string): boolean {
+	return /^\[(KANIT|CROSS|SYNTH)\]/.test(name || '');
+}
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type ExperimentStatus = 'running' | 'completed' | 'failed';
@@ -77,6 +83,7 @@ export type EntryRule =
 	| { type: 'rally_from_low'; lookback: number; rallyPercent: number } // Dipten %X yükseliş ANINDA gir (kesişim — rally fade short)
 	| { type: 'anti_breakout'; thresholdPercent: number } // Büyük yeşil mumlarda (hacimli kırılım) TERSİNE gir (Tuzak avcısı)
 	| { type: 'random_in_hours'; probability: number; startHourUtc: number; endHourUtc: number } // Sadece belirli UTC saat aralığında rastgele gir
+	| { type: 'daily_breakout'; lookbackDays: number } // Fiyat son N günün en yüksek fiyatını aşınca gir (günlük trend takibi)
 	| { type: 'always_long' };                         // Always be in position
 
 export type ExitRule =
@@ -270,6 +277,27 @@ export function createDefaultExperiments(): Experiment[] {
 			exitRule: { type: 'stop_and_target', stopPercent: 3.0, targetPercent: 6.0 },
 			coins,
 		},
+		{
+			...base(),
+			id: randomUUID(),
+			name: 'Funding Kalabalık Long → SHORT (3%/6%)',
+			hypothesis: 'Funding normalin 3 katını aşınca kalabalık kaldıraçla long\'a yığılmıştır; küçük bir düşüş zorunlu satışlarla büyür',
+			sourceAssumption: 'entry-signal-matters',
+			entryRule: { type: 'on_observation', observationType: 'funding_crowded_long' },
+			exitRule: { type: 'stop_and_target', stopPercent: 3.0, targetPercent: 6.0 },
+			side: 'short' as const,
+			coins,
+		},
+		{
+			...base(),
+			id: randomUUID(),
+			name: 'Günlük Trend Kırılımı (20 gün zirvesi, %10 iz süren stop)',
+			hypothesis: 'Son 20 günün zirvesini kıran coin trendini sürdürür; günlük ölçekte maliyet önemsizdir, kazanç az sayıda büyük trendden gelir',
+			sourceAssumption: 'trend-exists',
+			entryRule: { type: 'daily_breakout', lookbackDays: 20 },
+			exitRule: { type: 'trailing_stop', percent: 10 },
+			coins,
+		},
 		// ── KONTROL GRUPLARI (yazı-tura) ──
 		// Strateji değil, ölçü çubuğu: girişi tamamen rastgele, çıkışı yukarıdaki
 		// deneylerle AYNI. Bir deney aynı dönemde bunları net olarak yenemiyorsa
@@ -323,6 +351,7 @@ export class ExperimentRunner {
 	private regimeProvider: () => MarketRegime = () => 'UNKNOWN';
 
 	private liveBroker: LiveBroker;
+	private benchmarkRecorded = false;
 
 	constructor(graph: KnowledgeGraph) {
 		this.graph = graph;
@@ -356,6 +385,7 @@ export class ExperimentRunner {
 
 	processTick(ticks: Map<string, MarketTick[]>, observations: Observation[]): void {
 		this.tickCount++;
+		this.recordBenchmarkStart(ticks);
 
 		for (const exp of this.experiments) {
 			if (exp.status !== 'running') continue;
@@ -499,6 +529,14 @@ export class ExperimentRunner {
 				return observations.some(o =>
 					o.type === rule.observationType && o.coins.includes(coin)
 				);
+
+			case 'daily_breakout': {
+				// Kesişim: önceki 15dk kapanışı seviyenin altında/eşit, şimdiki üstünde.
+				// Kırılımdan sonra her mumda yeniden alım yapılmaz.
+				const level = dailyCandles.highestHigh(coin, rule.lookbackDays);
+				if (level === undefined || candles.length < 2) return false;
+				return candles[candles.length - 2].close <= level && candles[candles.length - 1].close > level;
+			}
 
 			case 'price_cross_sma': {
 				if (candles.length < rule.period + 1) return false;
@@ -686,6 +724,9 @@ export class ExperimentRunner {
 
 			case 'on_observation':
 				return `"${rule.observationType}" gözlemi bekliyor — gözlemciler bu sinyali üretmedi`;
+
+			case 'daily_breakout':
+				return `Hiçbir coin son ${rule.lookbackDays} günün zirvesini aşmadı — kırılım bekleniyor`;
 
 			case 'random_in_hours': {
 				const anyCandles = [...ticks.values()].find(c => c.length > 0);
@@ -1107,6 +1148,25 @@ export class ExperimentRunner {
 		}
 	}
 
+	/**
+	 * "BTC al ve bekle" kıyası: ilk görülen BTC fiyatını bir kez kaydeder.
+	 * Rapor, deneylerin bu basit yoldan iyi olup olmadığını buradan hesaplar.
+	 */
+	private recordBenchmarkStart(ticks: Map<string, MarketTick[]>): void {
+		if (this.benchmarkRecorded) return;
+		const file = join(STATE_DIR, 'benchmark.json');
+		if (existsSync(file)) {
+			this.benchmarkRecorded = true;
+			return;
+		}
+		const btc = ticks.get('BTCUSDT');
+		const last = btc?.[btc.length - 1];
+		if (!last) return;
+		if (!existsSync(STATE_DIR)) mkdirSync(STATE_DIR, { recursive: true });
+		writeFileSync(file, JSON.stringify({ coin: 'BTCUSDT', startTime: last.timestamp, startPrice: last.close }, null, 2));
+		this.benchmarkRecorded = true;
+	}
+
 	// ─── Persistence ──────────────────────────────────────────────────
 
 	private load(): void {
@@ -1143,6 +1203,20 @@ export class ExperimentRunner {
 			}
 		}
 		if (changed) this.experiments = [...byKey.values()];
+
+		// Evolver kapalıyken onun ürettiği deneyler (ve işlemleri) kaldırılır.
+		// Silmeden önce ayrı bir dosyaya yedeklenir; kullanıcının kendi deneyleri
+		// ve kontroller olduğu gibi kalır.
+		if (!config.evolverEnabled) {
+			const evolved = this.experiments.filter((e) => isEvolvedExperiment(e.name));
+			if (evolved.length > 0) {
+				const backup = join(STATE_DIR, `evolver-deneyleri-yedek-${Date.now()}.json`);
+				writeFileSync(backup, JSON.stringify(evolved, null, 2));
+				this.experiments = this.experiments.filter((e) => !isEvolvedExperiment(e.name));
+				log(`[EXPERIMENT] 🧹 Evolver kapalı: ${evolved.length} otomatik deney kaldırıldı (yedek: ${backup})`);
+				changed = true;
+			}
+		}
 
 		// MATIC, Binance'te POL olarak yeniden adlandırıldı
 		for (const e of this.experiments) {
